@@ -24,8 +24,8 @@ const GameProperties k_properties {
     .developer_ = "铁蛋",
     .description_ = "在由六边形组成的棋盘上轮流落子，联通两侧底盘来获胜",
 };
-uint64_t MaxPlayerNum(const MyGameOptions& options) { return 2; } // 0 indicates no max-player limits
-uint32_t Multiple(const MyGameOptions& options) {
+uint64_t MaxPlayerNum(const CustomOptions& options) { return 2; } // 0 indicates no max-player limits
+uint32_t Multiple(const CustomOptions& options) {
     if (GET_OPTION_VALUE(options, 边长) <= 11) return 1;
     if (GET_OPTION_VALUE(options, 边长) <= 14) return 2;
     if (GET_OPTION_VALUE(options, 边长) <= 17) return 3;
@@ -34,7 +34,7 @@ uint32_t Multiple(const MyGameOptions& options) {
 const MutableGenericOptions k_default_generic_options;
 const std::vector<RuleCommand> k_rule_commands = {};
 
-bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
+bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
 {
     if (generic_options_readonly.PlayerNum() != 2) {
         reply() << "该游戏为双人游戏，必须为2人参加，当前玩家数为 " << generic_options_readonly.PlayerNum();
@@ -45,14 +45,14 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
     InitOptionsCommand("独自一人开始游戏",
-            [] (MyGameOptions& game_options, MutableGenericOptions& generic_options)
+            [] (CustomOptions& game_options, MutableGenericOptions& generic_options)
             {
                 generic_options.bench_computers_to_player_num_ = 2;
                 return NewGameMode::SINGLE_USER;
             },
             VoidChecker("单机")),
     InitOptionsCommand("设置游戏边长",
-            [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const int& size)
+            [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const int& size)
             {
                 GET_OPTION_VALUE(game_options, 边长) = size;
                 return NewGameMode::MULTIPLE_USERS;

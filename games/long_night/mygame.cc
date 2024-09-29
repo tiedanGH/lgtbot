@@ -32,14 +32,14 @@ const GameProperties k_properties {
     .description_ = "在漆黑的迷宫中探索，根据有限的线索展开追击与逃生",
     .shuffled_player_id_ = true,
 };
-uint64_t MaxPlayerNum(const MyGameOptions& options) { return 8; }
-uint32_t Multiple(const MyGameOptions& options) { return 1; }
+uint64_t MaxPlayerNum(const CustomOptions& options) { return 8; }
+uint32_t Multiple(const CustomOptions& options) { return 1; }
 const MutableGenericOptions k_default_generic_options{
     .is_formal_{false},
 };
 const std::vector<RuleCommand> k_rule_commands = {};
 
-bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
+bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
 {
     if (GET_OPTION_VALUE(game_options, 特殊事件) == -1) {
         GET_OPTION_VALUE(game_options, 特殊事件) = rand() % 3 + 1;
@@ -53,7 +53,7 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
     InitOptionsCommand("设定特殊事件或游戏模式",
-            [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const int32_t mode)
+            [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const int32_t mode)
             {
                 switch (mode) {
                     case -1:
