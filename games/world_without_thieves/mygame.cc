@@ -25,6 +25,7 @@ const GameProperties k_properties {
     .name_ = "天下无贼", // the game name which should be unique among all the games
     .developer_ = "睦月",
     .description_ = "通过在民/警/贼身份中切换，尽可能活到最后的游戏",
+    .shuffled_player_id_ = true,
 };
 uint64_t MaxPlayerNum(const MyGameOptions& options) { return 0; } // 0 indicates no max-player limits
 uint32_t Multiple(const MyGameOptions& options) { return 2; } // the default score multiple for the game, 0 for a testing game, 1 for a formal game, 2 or 3 for a long formal game

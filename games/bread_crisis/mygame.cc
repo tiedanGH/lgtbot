@@ -20,6 +20,7 @@ const GameProperties k_properties {
     .name_ = "面包危机",                   // the game name which should be unique among all the games
     .developer_ = "dva",
     .description_ = "保存体力，尽可能活到最后的游戏",
+    .shuffled_player_id_ = true,
 };
 uint64_t MaxPlayerNum(const MyGameOptions& options) { return 0; }  // 0 indicates no max-player limits
 uint32_t Multiple(const MyGameOptions& options) { return 2; }
@@ -28,8 +29,8 @@ const MutableGenericOptions k_default_generic_options;
 const std::vector<RuleCommand> k_rule_commands = {};
 
 bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options) {
-  if (generic_options_readonly.PlayerNum() < 3) {
-    reply() << "该游戏至少 3 人参加，当前玩家数为 " << generic_options_readonly.PlayerNum();
+  if (generic_options_readonly.PlayerNum() < 2) {
+    reply() << "该游戏至少 2 人参加，当前玩家数为 " << generic_options_readonly.PlayerNum();
     return false;
   }
   return true;
