@@ -105,6 +105,9 @@ class MainStage : public MainGameStage<>
 
     virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply)
     {
+        if (Global().IsReady(pid)) {
+            return StageErrCode::OK;
+        }
         const Coor coor = [&]() -> Coor
             {
                 while (true) {
