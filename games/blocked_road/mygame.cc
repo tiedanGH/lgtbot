@@ -223,6 +223,10 @@ class RoundStage : public SubGameStage<>
    private:
     AtomReqErrCode MoveChess_(const PlayerID pid, const bool is_public, MsgSenderBase& reply, const string str1, const string str2)
     {
+        if (Global().IsReady(pid)) {
+            reply() << "[错误] 本回合您已经完成行动";
+            return StageErrCode::FAILED;
+        }
         if (pid != Main().currentPlayer) {
             reply() << "[错误] 本回合您为猜测者，无法移动棋子";
             return StageErrCode::FAILED;
@@ -242,6 +246,10 @@ class RoundStage : public SubGameStage<>
 
     AtomReqErrCode GuessMove_(const PlayerID pid, const bool is_public, MsgSenderBase& reply, const int guess)
     {
+        if (Global().IsReady(pid)) {
+            reply() << "[错误] 本回合您已经完成行动";
+            return StageErrCode::FAILED;
+        }
         if (pid == Main().currentPlayer) {
             reply() << "[错误] 本回合您为移动者，无法进行猜测";
             return StageErrCode::FAILED;
