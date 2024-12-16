@@ -28,7 +28,11 @@ const GameProperties k_properties {
 uint64_t MaxPlayerNum(const MyGameOptions& options) { return 2; } // 0 indicates no max-player limits
 uint32_t Multiple(const MyGameOptions& options)
 {
-    return GET_OPTION_VALUE(options, 飞机) >= 3 ? std::min(3U, GET_OPTION_VALUE(options, 飞机) - 2) : 1;
+    if (GET_OPTION_VALUE(options, 形状).size() != 1) {
+        return 0;
+    } else {
+        return GET_OPTION_VALUE(options, 飞机) >= 3 ? std::min(3U, GET_OPTION_VALUE(options, 飞机) - 2) : 1;
+    }
 }
 const MutableGenericOptions k_default_generic_options;
 const std::vector<RuleCommand> k_rule_commands = {};
@@ -40,8 +44,36 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
         return false;
     }
 
+    auto shape = GET_OPTION_VALUE(game_options, 形状);
+    if (shape.empty()) {
+        reply() << "[错误] 形状参数不能为空：必须包含5个长度为5的数字串，且只能包含数字012，数字2（机头）有且仅有一个。形如：00000 00200 11111 00100 01110";
+        return false;
+    }
+    if (shape[0] != "默认") {
+        if (shape.size() != 5) {
+            reply() << "[错误] 形状参数数量必须为5个：必须包含5个长度为5的数字串，且只能包含数字012，数字2（机头）有且仅有一个。形如：00000 00200 11111 00100 01110";
+            return false;
+        }
+        int countOf2 = 0;
+        for (const auto& row : shape) {
+            if (row.size() != 5) {
+                reply() << "[错误] 形状参数每一行都必须为5个数字：必须包含5个长度为5的数字串，且只能包含数字012，数字2（机头）有且仅有一个。形如：00000 00200 11111 00100 01110";
+                return false;
+            }
+            if (!std::all_of(row.begin(), row.end(), [](char c) { return c == '0' || c == '1' || c == '2'; })) {
+                reply() << "[错误] 形状参数中只能包含数字012：必须包含5个长度为5的数字串。形如：00000 00200 11111 00100 01110";
+                return false;
+            }
+            countOf2 += std::count(row.begin(), row.end(), '2');
+        }
+        if (countOf2 != 1) {
+            reply() << "[错误] 形状参数中数字2（机头）必须有且仅有一个";
+            return false;
+        }
+    }
+
     const int planeLimit[8] = {3, 3, 4, 5, 6, 6, 7, 8};
-    if (GET_OPTION_VALUE(game_options, 飞机) > planeLimit[GET_OPTION_VALUE(game_options, 边长) - 8] && !GET_OPTION_VALUE(game_options, 重叠)) {
+    if (GET_OPTION_VALUE(game_options, 飞机) > planeLimit[GET_OPTION_VALUE(game_options, 边长) - 8] && !GET_OPTION_VALUE(game_options, 重叠) && shape[0] == "默认") {
         GET_OPTION_VALUE(game_options, 飞机) = planeLimit[GET_OPTION_VALUE(game_options, 边长) - 8];
         reply() << "[警告] 边长为 " + to_string(GET_OPTION_VALUE(game_options, 边长)) + " 的地图最多可设置 " + to_string(planeLimit[GET_OPTION_VALUE(game_options, 边长) - 8]) + " 架不重叠的飞机，飞机数已自动调整为 " + to_string(planeLimit[GET_OPTION_VALUE(game_options, 边长) - 8]) + "！";
     }
@@ -137,6 +169,11 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
 
     virtual void FirstStageFsm(SubStageFsmSetter setter) override
     {
+        // 自定义形状初始化
+        if (GAME_OPTION(形状).size() != 1) {
+            board[0].CustomizeShape(GAME_OPTION(形状));
+            board[1].CustomizeShape(GAME_OPTION(形状));
+        }
         // 初始化玩家配置参数
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             board[pid].sizeX = board[pid].sizeY = GAME_OPTION(边长);
@@ -194,8 +231,8 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
                 board[1].planeNum = 6;
             }
         }
-        board[0].InitializeMap();
-        board[1].InitializeMap();
+        board[0].InitializeMap(GAME_OPTION(形状).size() == 1);
+        board[1].InitializeMap(GAME_OPTION(形状).size() == 1);
         
         // 随机生成侦察点
         srand((unsigned int)time(NULL));
@@ -317,6 +354,11 @@ class PrepareStage : public SubGameStage<>
         }
         if (GAME_OPTION(要害) == 2) {
             Global().Boardcast() << "[特殊规则] 本局仅首“要害”公开：每个玩家命中过1次机头以后，之后再次命中其他机头时，仅告知命中，不提示命中要害，且不具有额外一回合。";
+        }
+
+        // 游戏开始时展示飞机形状
+        if (GAME_OPTION(形状).size() != 1) {
+            Global().Boardcast() << "本局游戏使用的飞机形状如下图所示\n" << Markdown(Board::GetAllDirectionTable(GAME_OPTION(形状)), 350);
         }
 
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
