@@ -242,7 +242,7 @@ static std::string DoraHtml(const std::string& image_path, const std::span<const
     const auto append_empty_doras = [&]()
         {
             constexpr int32_t k_max_dora_num = 5;
-            assert(doras.size() < k_max_dora_num);
+            assert(doras.size() <= k_max_dora_num);
             for (auto i = doras.size(); i < k_max_dora_num; ++i) {
                 s += "<img src=\"file:///" + image_path + "/empty_dora.png\"/>";
             }
