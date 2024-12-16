@@ -8,3 +8,5 @@ EXTEND_OPTION("连发次数", 连发, (ArithChecker<uint32_t>(1, 10, "次数")),
 EXTEND_OPTION("初始随机侦察区域大小（默认为随机）", 侦察, (ArithChecker<uint32_t>(0, 30, "面积")), 100)
 EXTEND_OPTION("BOSS挑战类型：【快捷配置已不再此处支持】<br/>"
               "如需使用快捷配置请使用「#规则 大海战」查看帮助", BOSS挑战, (ArithChecker<uint32_t>(0, 3, "类型")), 100)
+EXTEND_OPTION("自定义飞机形状：需包含5*5图形内的所有格子信息，参数分为5段（视为5行），一行5个格子。其中2为机头（有且只有一个），1为机身，0为空地", 形状,
+            (RepeatableChecker<BasicChecker<std::string>>("形状参数", "00000 00200 11111 00100 01110")), (std::vector<std::string>{"默认"}))

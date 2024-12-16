@@ -18,13 +18,13 @@ public:
 
     // BOSS0 临时类型&万能核心
     int tempBossType{};
-    const int UniversalCore_position[4][2] = {{-1,0}, {1,0}, {0,-1}, {0,1}};
-    const int UniversalCoreRandom_position[4][2] = {{-1,-1}, {-1,1}, {1,-1}, {1,1}};
+    const vector<pair<int, int>> UniversalCore_position = {{-1,0}, {1,0}, {0,-1}, {0,1}};
+    const vector<pair<int, int>> UniversalCoreRandom_position = {{-1,-1}, {-1,1}, {1,-1}, {1,1}};
 
     // BOSS2 核弹研发中心
     bool nuclear_hitted = false;
     bool RD_is_hit = false;
-    const int RDcenter_position[8][2] = {{-2,0}, {-1,0}, {1,0}, {2,0}, {0,-2}, {0,-1}, {0,1}, {0,2}};
+    const vector<pair<int, int>> RDcenter_position = {{-2,0}, {-1,0}, {1,0}, {2,0}, {0,-2}, {0,-1}, {0,1}, {0,2}};
 
     // BOSS3 电磁干扰
     bool EMI = false;
@@ -43,32 +43,18 @@ public:
     // BOSS技能介绍
     string BossIntro() const
     {
-        const string empty = "<td style=\"background-color:#ECECEC;width:25px;\">　</td>";
-        const string body = "<td style=\"background-color:#E0FFE0;width:25px;\">+</td>";
-        const string head = "<td style=\"background-color:#000000;width:25px;\"><font color=\"FF0000\">★</font></td>";
-        const string S_head = "<td style=\"background-color:#5A5A5A;width:25px;\"><font color=\"FFE119\">⚛</font></td>";
-        const string unknown = "<td style=\"background-color:#E0FFE0;width:25px;\">�</td>";
-        const string num1 = "<td style=\"background-color:#E0FFE0;width:25px;\">①</td>";
-        const string num2 = "<td style=\"background-color:#E0FFE0;width:25px;\">②</td>";
-        const string num3 = "<td style=\"background-color:#E0FFE0;width:25px;\">③</td>";
-        const string num4 = "<td style=\"background-color:#E0FFE0;width:25px;\">④</td>";
-
         string BOSS_SkillIntro = "<table>";
         if (BossType == 0) {
             BOSS_SkillIntro += "<tr><th style=\"text-align:center;\">？？？BOSS战</th></tr>";
             BOSS_SkillIntro += "<tr><td>【特殊飞机】万能核心：形状不固定，要害在其中心，随机在某个编号对应的位置上安置4个机身。被打击要害时视为所有BOSS形态的特殊要害被击中（此要害不计算在总要害数中）</td></tr>";
-            BOSS_SkillIntro += "<tr><td><table style=\"text-align:center;margin:auto\">";
-            BOSS_SkillIntro += "<tr>" + num1  + num2 + empty  + num2 + num1  + "</tr>";
-            BOSS_SkillIntro += "<tr>" + num3  + num4 + body   + num4 + num3  + "</tr>";
-            BOSS_SkillIntro += "<tr>" + empty + body + S_head + body + empty + "</tr>";
-            BOSS_SkillIntro += "<tr>" + num3  + num4 + body   + num4 + num3  + "</tr>";
-            BOSS_SkillIntro += "<tr>" + num1  + num2 + empty  + num2 + num1  + "</tr>";
-            BOSS_SkillIntro += "</table></td></tr>";
+            BOSS_SkillIntro += "<tr><td>";
+            BOSS_SkillIntro += Board::GetPlaneTable({"45054", "67176", "01310", "67176", "45054"}, 1);
+            BOSS_SkillIntro += "</td></tr>";
             BOSS_SkillIntro += "<tr><td>【变换技能】每回合会从所有BOSS中随机一个并改变形态，根据变换对应的BOSS发动普通打击和主动技能。被动技能仅在切换至对应的BOSS时才有可能触发。</td></tr>";
         }
         if (BossType == 1) {
             BOSS_SkillIntro += "<tr><th style=\"text-align:center;\">无限火力BOSS战</th></tr>";
-            BOSS_SkillIntro += "<tr><td>BOSS每回合最多发动一个技能，且都会进行普通打击：随机向地图上发射 3-6 枚导弹。当达到 20 回合时，BOSS将增强普攻至最多 8 枚导弹</td></tr>";
+            BOSS_SkillIntro += "<tr><td>BOSS每回合最多发动一个技能，且都会进行普通打击：随机向地图上发射 1-4 枚导弹。当达到 20 回合时，BOSS将增强普攻至 4-6 枚导弹</td></tr>";
             BOSS_SkillIntro += "<tr><td>【主动技能1】15% 概率发动 [空军指挥]——随机移动所有未被击落的飞机至其他位置，并尽可能避开已侦察区域</td></tr>";
             BOSS_SkillIntro += "<tr><td>【主动技能3】15% 概率发动 [连环轰炸]——随机打击地图上某个坐标的整个十字区域</td></tr>";
             BOSS_SkillIntro += "<tr><td>【主动技能2】15% 概率发动 [雷达扫描]——随机扫描地图上 5*5 的区域，其中的所有飞机（飞机头+机身）会被直接击落</td></tr>";
@@ -79,15 +65,11 @@ public:
             BOSS_SkillIntro += "<tr><th style=\"text-align:center;\">核平铀好BOSS战</th></tr>";
 
             BOSS_SkillIntro += "<tr><td>【特殊飞机】核弹研发中心：呈十字形，要害在其中心，形状见下图。被打击要害时使核弹发射基础概率减少 10%（此要害不计算在总要害数中）</td></tr>";
-            BOSS_SkillIntro += "<tr><td><table style=\"text-align:center;margin:auto\">";
-            BOSS_SkillIntro += "<tr>" + empty + empty + body   + empty + empty + "</tr>";
-            BOSS_SkillIntro += "<tr>" + empty + empty + body   + empty + empty + "</tr>";
-            BOSS_SkillIntro += "<tr>" + body  + body  + S_head + body  + body  + "</tr>";
-            BOSS_SkillIntro += "<tr>" + empty + empty + body   + empty + empty + "</tr>";
-            BOSS_SkillIntro += "<tr>" + empty + empty + body   + empty + empty + "</tr>";
-            BOSS_SkillIntro += "</table></td></tr>";
+            BOSS_SkillIntro += "<tr><td>";
+            BOSS_SkillIntro += Board::GetPlaneTable({"00100", "00100", "11311", "00100", "00100"}, 1);
+            BOSS_SkillIntro += "</td></tr>";
 
-            BOSS_SkillIntro += "<tr><td>BOSS每回合最多发动一个主动技能，且都会进行普通打击：随机向地图上发射 3-6 枚导弹。当达到 18 回合时，BOSS将增强普攻至最多 8 枚导弹</td></tr>";
+            BOSS_SkillIntro += "<tr><td>BOSS每回合最多发动一个主动技能，且都会进行普通打击：随机向地图上发射 3-6 枚导弹。当达到 18 回合时，BOSS将增强普攻至 6-8 枚导弹</td></tr>";
             BOSS_SkillIntro += "<tr><td>【主动技能1】[核弹]——摧毁整个地图，但如果概率低于 6% 时引爆威力会下降。基础概率为0，每回合概率提升 0.5%；BOSS每有一个机身被打击，概率提升 0.1%；每有一个要害被打击，概率提升 0.5%；可通过打击研发中心来延缓进展</td></tr>";
             BOSS_SkillIntro += "<tr><td>【主动技能2】5% 概率发动 [空军支援]——将一架已被击落的飞机更换为新飞机，并转移位置。如果BOSS没有被击落的飞机，会额外起飞一架（最多不超过 6 架）</td></tr>";
             BOSS_SkillIntro += "<tr><td>【主动技能3】15% 概率发动 [石墨炸弹]——发动技能的回合，玩家仅有 1 枚导弹</td></tr>";
@@ -107,13 +89,9 @@ public:
             BOSS_SkillIntro += "<tr><th style=\"text-align:center;\">【？】BOSS战</th></tr>";
 
             BOSS_SkillIntro += "<tr><td>【特殊飞机】？？？：（此要害不计算在总要害数中）</td></tr>";
-            BOSS_SkillIntro += "<tr><td><table style=\"text-align:center;margin:auto\">";
-            BOSS_SkillIntro += "<tr>" + empty + body  + empty  + body  + empty + "</tr>";
-            BOSS_SkillIntro += "<tr>" + body  + head  + empty  + head  + body  + "</tr>";
-            BOSS_SkillIntro += "<tr>" + empty + empty + S_head + empty + empty + "</tr>";
-            BOSS_SkillIntro += "<tr>" + body  + head  + empty  + head  + body  + "</tr>";
-            BOSS_SkillIntro += "<tr>" + empty + body  + empty  + body  + empty + "</tr>";
-            BOSS_SkillIntro += "</table></td></tr>";
+            BOSS_SkillIntro += "<tr><td>";
+            BOSS_SkillIntro += Board::GetPlaneTable({"01010", "12021", "00300", "12021", "01010"}, 1);
+            BOSS_SkillIntro += "</td></tr>";
 
             BOSS_SkillIntro += "<tr><td>【】</td></tr>";
         }
@@ -155,18 +133,18 @@ public:
                 // BOSS0 放置万能核心
                 board[1].map[X][Y][1] = 3;
                 for (auto position : UniversalCore_position) {
-                    board[1].map[X + position[0]][Y + position[1]][1] = board[1].body[X + position[0]][Y + position[1]] = 1;
+                    board[1].map[X + position.first][Y + position.second][1] = board[1].body[X + position.first][Y + position.second] = 1;
                 }
                 const int a = rand() % 2 + 1, b = rand() % 2 + 1;
                 for (auto position : UniversalCoreRandom_position) {
-                    board[1].map[X + a * position[0]][Y + b * position[1]][1] = board[1].body[X + a * position[0]][Y + b * position[1]] = 1;
+                    board[1].map[X + a * position.first][Y + b * position.second][1] = board[1].body[X + a * position.first][Y + b * position.second] = 1;
                 }
                 SpecialPlane_success = true;
             } else if (BossType == 2) {
                 // BOSS2 放置核弹研发中心
                 board[1].map[X][Y][1] = 3;
                 for (auto position : RDcenter_position) {
-                    board[1].map[X + position[0]][Y + position[1]][1] = board[1].body[X + position[0]][Y + position[1]] = 1;
+                    board[1].map[X + position.first][Y + position.second][1] = board[1].body[X + position.first][Y + position.second] = 1;
                 }
                 SpecialPlane_success = true;
             } else {
@@ -182,7 +160,7 @@ public:
     {
         if (BossType == 0) tempBossType = rand() % 3 + 1;
         string normalInfo = (BossType == 0 ? "[BOSS " + to_string(tempBossType) + " 形态]\n" : "");
-        if (BossType == 1 || tempBossType == 1) normalInfo += BossNormalAttack(board, round, attack_count, 3, 6, 20, 2);
+        if (BossType == 1 || tempBossType == 1) normalInfo += BossNormalAttack(board, round, attack_count, 1, 4, 20, 2);
         if (BossType == 2 || tempBossType == 2) normalInfo += BossNormalAttack(board, round, attack_count, 3, 6, 18, 2);
         if (BossType == 3 || tempBossType == 3) normalInfo += BossNormalAttack(board, round, attack_count, 3, 5, 99, 0);
 
@@ -247,13 +225,13 @@ public:
                 Y = rand() % board[1].sizeY + 1;
                 direction = rand() % 4 + 1;
                 int found_count = 0;
-                for (int i = 0; i < 9; i++) {
-                    if (board[1].map[X + board[1].position[direction][i][0]][Y + board[1].position[direction][i][1]][0] > 0) {
+                for (auto position : board[1].positions[direction]) {
+                    if (board[1].map[X + position.first][Y + position.second][0] > 0) {
                         found_count++;
                     }
                 }
                 bool hide = false;
-                for (int i = 0; i <= 9; i++) {
+                for (int i = 0; i <= board[1].positions[1].size(); i++) {
                     if ((found_count <= i && try_count >= i * 300) || (found_count <= 1 && rand() % 50 == 0)) {
                         hide = true; break;
                     }
@@ -264,7 +242,7 @@ public:
                 if (try_count > 3000) {
                     timeout[1] = 1;
                     board[1].alive = 0;
-                    return "[系统错误] BOSS技能阶段——空军指挥：移动 " + to_string(alive_count) + " 架飞机时发生错误，随机放置飞机次数到达上限，已强制中断游戏进程！";
+                    return "[漏洞监测] BOSS技能阶段——空军指挥：移动 " + to_string(alive_count) + " 架飞机时发生错误，随机放置飞机次数到达上限，已强制中断游戏进程！";
                 }
             }
             return "【WARNING】BOSS发动技能 [空军指挥]！已指挥 " + to_string(alive_count) + " 架飞机飞行至地图的其他位置";
@@ -419,13 +397,13 @@ public:
                 Y = rand() % board[1].sizeY + 1;
                 direction = rand() % 4 + 1;
                 int found_count = 0;
-                for (int i = 0; i < 9; i++) {
-                    if (board[1].map[X + board[1].position[direction][i][0]][Y + board[1].position[direction][i][1]][0] > 0) {
+                for (auto position : board[1].positions[direction]) {
+                    if (board[1].map[X + position.first][Y + position.second][0] > 0) {
                         found_count++;
                     }
                 }
                 bool hide = false;
-                for (int i = 0; i <= 9; i++) {
+                for (int i = 0; i <= board[1].positions[1].size(); i++) {
                     if (found_count <= i && try_count >= i * 300) {
                         hide = true;
                     }
@@ -436,7 +414,7 @@ public:
                 if (try_count++ > 3000) {
                     timeout[1] = 1;
                     board[1].alive = 0;
-                    return "[系统错误] BOSS技能阶段——空军支援：随机放置飞机次数到达上限，已强制中断游戏进程！";
+                    return "[漏洞监测] BOSS技能阶段——空军支援：随机放置飞机次数到达上限，已强制中断游戏进程！";
                 }
             }
             if (found) {
@@ -567,7 +545,7 @@ public:
                 // 十字形同BOSS2研发中心
                 board[0].Attack(X, Y);
                 for (auto position : RDcenter_position) {
-                    board[0].Attack(X + position[0], Y + position[1]);
+                    board[0].Attack(X + position.first, Y + position.second);
                 }
                 success++;
                 areas += (string(1, 'A' + X - 1) + to_string(Y)) + " ";
@@ -678,7 +656,7 @@ public:
                 Y = (str[1] - '0') * 10 + str[2] - '0';
             }
             for (auto position : RDcenter_position) {
-                board[1].mark[X + position[0]][Y + position[1]] = 300;
+                board[1].mark[X + position.first][Y + position.second] = 300;
             }
             return "核弹研发中心被击中！研发成功概率已大幅下降。\n" + info;
         }
