@@ -24,6 +24,7 @@ const GameProperties k_properties {
     .name_ = "爆金币", // the game name which should be unique among all the games
     .developer_ = "铁蛋",
     .description_ = "选择行动，与他人博弈抢夺金币的游戏",
+    .shuffled_player_id_ = true,
 };
 uint64_t MaxPlayerNum(const MyGameOptions& options) { return 0; } // 0 indicates no max-player limits
 uint32_t Multiple(const MyGameOptions& options) { return 1; } // the default score multiple for the game, 0 for a testing game, 1 for a formal game, 2 or 3 for a long formal game
@@ -38,7 +39,7 @@ const char* const settlement_details[7] = {
 
     R"EOF(「撤离」最先判定
  - 在当轮[无敌]，本轮其他玩家对撤离玩家的任何操作都会[无效化]（也不会花费金币）
- - 在玩家撤离当轮，会返还曾对此玩家夺血条的一半金币)EOF",
+ - 在玩家撤离当轮，会返还曾对此玩家夺血条的一半金币（向下取整）)EOF",
 
     R"EOF(「捡金币」在「撤离」后判定
  - 某一数值金币不够发放时，大于等于此数值都会判定[失败])EOF",
@@ -118,6 +119,11 @@ class MainStage : public MainGameStage<RoundStage>
     
     vector<int64_t> player_scores_;
     int round_;
+
+    // 部分行动的金币数限制（撒币模式发生变化）
+    int Pick_Up_limit[2] = {0, 5};
+    int Snatch_limit[2] = {1, 5};
+    int Guard_limit[2] = {1, 5};
     
     vector<int64_t> player_hp_;   // 生命值
     vector<int64_t> player_coins_;   // 金币数
@@ -171,13 +177,13 @@ class RoundStage : public SubGameStage<>
     RoundStage(MainStage& main_stage, const uint64_t round)
         : StageFsm(main_stage, "第 " + std::to_string(round) + " 回合",
                 MakeStageCommand(*this, "捡金币", &RoundStage::Pick_Up_Coins_,
-                                VoidChecker("捡"), ArithChecker<int64_t>(0, 5, "金币数")),
+                                VoidChecker("捡"), ArithChecker<int64_t>(main_stage.Pick_Up_limit[0], main_stage.Pick_Up_limit[1], "金币数")),
                 MakeStageCommand(*this, "抢金币", &RoundStage::Snatch_Coins_,
-                                VoidChecker("抢"), ArithChecker<int64_t>(1, main_stage.Global().PlayerNum(), "对象号码"), ArithChecker<int64_t>(1, 5, "金币数")),
+                                VoidChecker("抢"), ArithChecker<int64_t>(1, main_stage.Global().PlayerNum(), "目标"), ArithChecker<int64_t>(main_stage.Snatch_limit[0], main_stage.Snatch_limit[1], "金币数")),
                 MakeStageCommand(*this, "守金币", &RoundStage::Guard_Coins_,
-                                VoidChecker("守"), ArithChecker<int64_t>(1, main_stage.Global().PlayerNum(), "对象号码"), ArithChecker<int64_t>(1, 5, "金币数")),
+                                VoidChecker("守"), ArithChecker<int64_t>(1, main_stage.Global().PlayerNum(), "目标"), ArithChecker<int64_t>(main_stage.Guard_limit[0], main_stage.Guard_limit[1], "金币数")),
                 MakeStageCommand(*this, "夺血条", &RoundStage::Take_HP_,
-                                VoidChecker("夺"), ArithChecker<int64_t>(1, main_stage.Global().PlayerNum(), "对象号码"), ArithChecker<int64_t>(1, 5, "金币数")),
+                                VoidChecker("夺"), ArithChecker<int64_t>(1, main_stage.Global().PlayerNum(), "目标"), ArithChecker<int64_t>(1, 5, "金币数")),
                 MakeStageCommand(*this, "撤离", &RoundStage::Leave_,
                                 VoidChecker("撤离"))) {}
 
@@ -330,14 +336,15 @@ class RoundStage : public SubGameStage<>
         if (Global().IsReady(pid)) {
             return StageErrCode::OK;
         }
-        if ((Main().player_coins_[pid] >= 25 && rand() % 3 < 2) || (Main().player_hp_[pid] <= 5 && rand() % 10 == 0)) {
+        if (((Main().player_coins_[pid] >= 25 && rand() % 3 < 2) || (Main().player_hp_[pid] <= 5 && rand() % 10 == 0)) &&
+            (GAME_OPTION(特殊规则) != 3 || (Main().player_coins_[pid] >= 60 && rand() % 3 < 2))) {
             Selected_(pid, reply, 'L', pid + 1, 0);
         } else if (Main().alive_ == 1) {
             Selected_(pid, reply, 'P', pid + 1, Main().round_coin);
         } else {
             int rd = rand() % 100;
             int target;
-            int coinselect = rand() % 5 + 1;
+            int coinselect = 0;
             char action;
             do {
                 target = rand() % Global().PlayerNum() + 1;
@@ -354,8 +361,23 @@ class RoundStage : public SubGameStage<>
                 if (rd < 60) { action = 'P'; }
                 else if (rd < 100) { action = 'S'; }
             }
-            if (action == 'P' && rand() % 10 == 0) {
-                coinselect = 0;
+            // 随机金币数
+            if (action == 'P') {
+                if (GAME_OPTION(特殊规则) == 3) {
+                    coinselect = rand() % (Main().round_coin / 3) + 1;
+                } else {
+                    coinselect = rand() % 5 + 1;
+                }
+                if (rand() % 10 == 0) coinselect = 0;
+            }
+            if (action == 'S') {
+                coinselect = rand() % (Main().Snatch_limit[1] - Main().Snatch_limit[0] + 1) + Main().Snatch_limit[0];
+            }
+            if (action == 'G') {
+                coinselect = rand() % (Main().Guard_limit[1] - Main().Guard_limit[0] + 1) + Main().Guard_limit[0];
+            }
+            if (action == 'T') {
+                coinselect = rand() % 5 + 1;
             }
             Selected_(pid, reply, action, target, coinselect);
         }
@@ -412,7 +434,6 @@ class RoundStage : public SubGameStage<>
         vector<bool> takehp_success(Global().PlayerNum(), false);           // 玩家执行夺血条是否显示成功
         
         string round_details = "<font size=2>";             // 展示回合判定细节 + 下回合金币数
-        vector<int> pickCount = {0, 0, 0, 0, 0, 0};
         const vector<char> action = Main().player_action_;
         const vector<int64_t> target = Main().player_target_;
         const vector<int64_t> coinselect = Main().player_coinselect_;
@@ -420,7 +441,19 @@ class RoundStage : public SubGameStage<>
         // 毒雾模式回合扣血
         if (GAME_OPTION(特殊规则) == 2) {
             for (int i = 0; i < Global().PlayerNum(); i++) {
-                Main().player_hp_[i] -= 2;
+                if (Main().player_out_[i] == 0) {
+                    Main().player_hp_[i] -= 2;
+                }
+            }
+        }
+        // 撒币模式回合扣金币
+        int vault_coins = 0;
+        if (GAME_OPTION(特殊规则) == 3) {
+            for (int i = 0; i < Global().PlayerNum(); i++) {
+                if (Main().player_out_[i] == 0) {
+                    vault_coins += Main().player_coins_[i] / 4;
+                    Main().player_coins_[i] -= Main().player_coins_[i] / 4;
+                }
             }
         }
 
@@ -442,15 +475,19 @@ class RoundStage : public SubGameStage<>
 
         // 捡金币【P】
         int coins, pickStop;
+        vector<int> pickCount;
         coins = Main().round_coin;
-        pickStop = 6;
+        pickStop = Main().Pick_Up_limit[1] + 1;
+        for (int i = 0; i < pickStop; i++) {
+            pickCount.push_back(0);
+        }
         for (int i = 0; i < Global().PlayerNum(); i++) {
             if (action[i] == 'P' && Main().player_out_[i] == 0) {
                 pickCount[coinselect[i]]++;
             }
         }
-        for (int i = 1; i <= 5; i++) {
-			if(coins >= pickCount[i] * i) {
+        for (int i = 1; i <= Main().Pick_Up_limit[1]; i++) {
+			if (coins >= pickCount[i] * i) {
 				coins -= pickCount[i] * i;
 			} else {
                 pickStop = i;
@@ -463,6 +500,10 @@ class RoundStage : public SubGameStage<>
                 player_gaincoins_num[i] = coinselect[i];
                 pickcoins_success[i] = true;
             }
+        }
+        // 剩余金币进入撒币模式金库
+        if (GAME_OPTION(特殊规则) == 3) {
+            vault_coins += coins;
         }
 
         // 夺血条【T】（每个玩家依次判定）
@@ -481,7 +522,7 @@ class RoundStage : public SubGameStage<>
             // 找到守护最大值
             for (int j = 0; j < Global().PlayerNum(); j++) {
                 if (action[j] == 'G' && target[j] == i && Main().player_out_[j] == 0) {
-                    max_guard = max<int>(max_guard, coinselect[i]);
+                    max_guard = max<int>(max_guard, coinselect[j]);
                     // 毒雾模式守护奖励
                     if (GAME_OPTION(特殊规则) == 2 && is_takenhp) {
                         Main().player_hp_[j] += coinselect[j];
@@ -673,7 +714,12 @@ class RoundStage : public SubGameStage<>
 
         if (Main().alive_ > 0 && Main().round_ < GAME_OPTION(回合数)) {
             Main().round_coin = rand() % (Main().alive_ + 1) + Main().alive_ * 2;
-            round_details += "<font size=5>· 本轮金币数：" + to_string(Main().round_coin) + "</font><br/>";
+            if (GAME_OPTION(特殊规则) == 3) {
+                Main().round_coin += vault_coins;
+                round_details += "<font size=5>· 金库金币数：" + to_string(Main().round_coin) + "</font><br/>";
+            } else {
+                round_details += "<font size=5>· 本轮金币数：" + to_string(Main().round_coin) + "</font><br/>";
+            }
         }
 
         round_details += "</font>";
@@ -755,8 +801,13 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
     for (int i = 0; i < Global().PlayerNum(); i++) {
         player_hp_[i] = 10;
         player_last_hp_[i] = 10;
-        player_coins_[i] = (GAME_OPTION(特殊规则) == 1) ? 0 : GAME_OPTION(金币);
-        player_last_coins_[i] = (GAME_OPTION(特殊规则) == 1) ? 0 : GAME_OPTION(金币);
+        if (GAME_OPTION(特殊规则) == 1) {
+            player_coins_[i] = player_last_coins_[i] = 0;
+        } else if (GAME_OPTION(特殊规则) == 3) {
+            player_coins_[i] = player_last_coins_[i] = 40;
+        } else {
+            player_coins_[i] = player_last_coins_[i] = GAME_OPTION(金币);
+        }
         player_total_damage_[i].resize(Global().PlayerNum());
     }
 
@@ -792,9 +843,8 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
     PreBoard += "本局玩家序号如下：\n";
     for (int i = 0; i < Global().PlayerNum(); i++) {
         PreBoard += to_string(i + 1) + " 号：" + Global().PlayerName(i);
-
         if (i != (int)Global().PlayerNum() - 1) {
-        PreBoard += "\n";
+            PreBoard += "\n";
         }
     }
 
@@ -805,6 +855,14 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
         Global().Boardcast() << "特殊规则——[狂热模式]\n取消所有【限制】，初始金币为0";
     } else if (GAME_OPTION(特殊规则) == 2) {
         Global().Boardcast() << "特殊规则——[毒雾模式]\n所有玩家每轮减少2血。如果选择守，且对方当轮被夺血条，回复你花费金币数量的血量。本局分数结算改为：金币数 + 存活轮数";
+    } else if (GAME_OPTION(特殊规则) == 3) {
+        Pick_Up_limit[1] = 1000;
+        Snatch_limit[1] = 20;
+        Guard_limit[0] = 10;
+        Guard_limit[1] = 25;
+        Global().Boardcast() << "特殊规则——[撒币模式]\n每轮每人减少1/4当前持有金币（向上取整），进入下轮金库。初始金币40，捡金币范围改为0-1000，抢金币改为1-20，守金币花费改为10-25，上轮金库没发放完全会进入下一轮金库";
+    } else if (GAME_OPTION(特殊规则) == 4) {
+        Global().Boardcast() << "特殊规则——[HP杀模式]\n？？？";
     }
 
     setter.Emplace<RoundStage>(*this, ++round_);
