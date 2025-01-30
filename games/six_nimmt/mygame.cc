@@ -108,6 +108,8 @@ class MainStage : public MainGameStage<RoundStage>
     vector<Player> players;
     // 等待放置卡牌玩家临时列表
     vector<Player> current_players;
+    // 广播游戏结束提示
+    bool boardcast = false;
     
     
   private:
@@ -144,13 +146,13 @@ class MainStage : public MainGameStage<RoundStage>
                         (GAME_OPTION(模式) == 3 && table.CheckPlayerHead(66, players)) ||
                         (GAME_OPTION(模式) == 4 && round_ == GAME_OPTION(手牌));
         if (!players[0].hand.empty() || !game_end) {
-            
             if (players[0].hand.empty()) {
                 Global().Boardcast() << "[提示] 手牌用尽但未到达游戏结束条件，将重新洗牌继续游戏！";
                 table.tableStatus.clear();
                 table.tableStatus.resize(GAME_OPTION(行数));
                 table.ShuffleCards(players, GAME_OPTION(卡牌));
-            } else if (game_end) {
+            } else if (game_end && !boardcast) {
+                boardcast = true;
                 Global().Boardcast() << "[提示] 已经有玩家达到目标分数！游戏将在本轮结束时结算分数";
             }
             setter.Emplace<RoundStage>(*this, ++round_);
