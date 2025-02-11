@@ -128,7 +128,8 @@ class RoundStage : public SubGameStage<>
     RoundStage(MainStage& main_stage, const uint64_t round)
             : StageFsm(main_stage, "第 " + std::to_string(round) + " 回合" ,
                 MakeStageCommand(*this, "落子", &RoundStage::PlaceChess_, ArithChecker<uint32_t>(1, 361, "位置")),
-                MakeStageCommand(*this, "在第 4 回合，后手玩家可以选择是否交换", &RoundStage::SwapColor_, VoidChecker("交换")))
+                MakeStageCommand(*this, "在第 4 回合，后手玩家可以选择是否交换", &RoundStage::SwapColor_, VoidChecker("交换")),
+                MakeStageCommand(*this, "认输", &RoundStage::Concede_, AlterChecker<uint32_t>({{"认输", 0}, {"投降", 0}})))
     {}
 
     bool swap = false;
@@ -183,6 +184,12 @@ class RoundStage : public SubGameStage<>
         Global().Boardcast() << "[提示] 后手选择交换，双方玩家颜色互换！";
         swap = true;
         return StageErrCode::READY;
+    }
+
+    AtomReqErrCode Concede_(const PlayerID pid, const bool is_public, MsgSenderBase& reply, const uint32_t null) {
+        Main().player_scores_[pid] = -1;
+        Global().Boardcast() << color_ch[Main().board.player_color[pid]] << "方" << At(PlayerID(pid)) << "认输，游戏结束。";
+        return StageErrCode::CHECKOUT;
     }
 
     virtual CheckoutErrCode OnStageTimeout() override
