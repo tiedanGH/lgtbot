@@ -83,18 +83,7 @@ const int32_t maps[k_map_size][k_total_block] = {
         1, 0, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1,
     },
-    // {   // 测试地图
-    //     1, 0, 1, 1, 1, 1, 1,
-    //     1, 1, 0, 1, 1, 1, 1, 1,
-    //     1, 1, 1, 0, 2, 1, 2, 1, 1,
-    //     1, 1, 1, 0, 1, 1, 1, 1,
-    //     1, 1, 1, 1, 0, 1, 2, 1, 1,
-    //     1, 1, 1, 1, 0, 1, 1, 1,
-    //     1, 1, 2, 1, 1, 0, 1, 1, 1,
-    //     1, 1, 1, 1, 1, 0, 1, 1,
-    //     1, 1, 1, 1, 1, 0, 1,
-    // },
-    {   // 2#环巢（格数：23）
+    {   // 2#环巢（格数：23，作者：铁蛋）
         1, 1, 1, 1, 1, 1, 1,
         1, 1, 0, 0, 0, 0, 1, 1,
         1, 1, 0, 0, 1, 0, 0, 1, 1,
@@ -105,7 +94,7 @@ const int32_t maps[k_map_size][k_total_block] = {
         1, 1, 0, 0, 0, 0, 1, 1,
         1, 1, 1, 1, 1, 1, 1,
     },
-    {   // 3#漩涡（格数：21）
+    {   // 3#漩涡（格数：21，作者：纤光）
         1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 0, 0, 1, 1, 1,
         1, 1, 1, 0, 1, 1, 1, 1, 1,
@@ -116,7 +105,7 @@ const int32_t maps[k_map_size][k_total_block] = {
         1, 1, 1, 0, 0, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1,
     },
-    {   // 4#飞机（格数：21）
+    {   // 4#飞机（格数：21，作者：纤光）
         1, 1, 1, 0, 1, 1, 1,
         1, 1, 1, 0, 0, 1, 1, 1,
         1, 1, 1, 1, 0, 1, 1, 0, 1,
@@ -127,7 +116,7 @@ const int32_t maps[k_map_size][k_total_block] = {
         1, 1, 1, 0, 0, 1, 1, 1,
         1, 1, 1, 0, 1, 1, 1,
     },
-    {   // 5#面具（格数：23）
+    {   // 5#面具（格数：23，作者：纤光）
         1, 1, 1, 1, 1, 1, 1,
         1, 0, 0, 0, 1, 1, 1, 1,
         1, 1, 0, 1, 0, 1, 1, 1, 1,
@@ -138,7 +127,7 @@ const int32_t maps[k_map_size][k_total_block] = {
         1, 0, 0, 0, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 1,
     },
-    {   // 6#塔楼（格数：23）
+    {   // 6#塔楼（格数：23，作者：纤光）
         1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 1, 1, 0, 1,
         1, 1, 1, 1, 0, 0, 0, 1, 1,
@@ -149,7 +138,7 @@ const int32_t maps[k_map_size][k_total_block] = {
         1, 1, 1, 1, 1, 1, 0, 1,
         1, 1, 1, 1, 1, 1, 1,
     },
-    {   // 7#三叶草（格数：22）
+    {   // 7#三叶草（格数：22，作者：九九归一）
         1, 1, 1, 1, 1, 1, 1,
         1, 1, 1, 1, 0, 0, 1, 1,
         1, 1, 1, 1, 0, 0, 0, 1, 1,
@@ -373,8 +362,8 @@ class OpenComb
         }
         auto& area = areas_[numToid[num]];
         if (card.Type() == "erase") {
-            area.card_ = std::nullopt;
             area.is_wall_ = 0;
+            area.card_ = std::nullopt;
             area.box_->SetContent(EmptyAreaHtml_(0, area.can_replace_, num));
         } else if (card.Type() == "wall") {
             area.is_wall_ = 1;
@@ -400,10 +389,12 @@ class OpenComb
         if (area_from.is_wall_) {   // 墙块移动
             area_to.is_wall_ = area_from.is_wall_;
             area_from.is_wall_ = 0;
-            area_from.box_->SetContent(EmptyAreaHtml_(0, area_from.can_replace_, from));
+            area_to.card_ = std::nullopt;
             area_to.box_->SetContent(EmptyAreaHtml_(area_to.is_wall_ ,area_to.can_replace_, to));
+            area_from.box_->SetContent(EmptyAreaHtml_(0, area_from.can_replace_, from));
         } else {   // 普通砖块移动
             area_to.card_ = area_from.card_;
+            area_to.is_wall_ = 0;
             const auto img_str = area_to.card_->ToHtml(image_path_, area_to.can_replace_);
             area_to.box_->SetContent(img_str);
             area_from.card_ = std::nullopt;
@@ -453,7 +444,7 @@ class OpenComb
     
     std::string ToHtml() const { return table_.ToString(); }
 
-    std::string GetInitTable_() const { return "<style>body{margin:5px;}</style>" + GetStyle(image_path_) + initial_table_; }
+    std::string GetInitTable_() const { return initial_table_; }
 
     std::string Image_(std::string name) const { return "![](file:///" + image_path_ + std::move(name) + ".png)"; }
 
@@ -508,6 +499,7 @@ class OpenComb
                             if (*point == 0 || areas_[id].card_->Point<direct>() == 0) air_allline_ = false;
                         }
                     }
+                    if (*point == 0 && connect == false) air_allline_ = false;
                 } else if (areas_[id].is_wall_) {   // 墙块（结算当前分数）
                     LineConnect(connect, point, count, score, extra_score);
                     connect = true;
