@@ -173,7 +173,7 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
             cards_.emplace_back(0, 0, 0);
         }
 
-        if (GAME_OPTION(模式) == 1) cards2_ = cards_;
+        std::vector<AreaCard> tmp_cards = cards_;
 
         for (uint32_t i = 0; i < 2; ++i) cards_.emplace_back(10, 10, 10);
 
@@ -206,7 +206,10 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
             }
             dRate_ = std::pow(M_E, Global().PlayerNum() / 6.0) / M_E;
             iRate_ = dRate_;
-            std::shuffle(cards2_.begin(), cards2_.end(), g);
+            std::shuffle(tmp_cards.begin(), tmp_cards.end(), g);
+            cards2_.insert(cards2_.end(), tmp_cards.begin(), tmp_cards.end());
+            std::shuffle(tmp_cards.begin(), tmp_cards.end(), g);
+            cards2_.insert(cards2_.end(), tmp_cards.begin(), tmp_cards.end());
         }
 
         it_ = cards_.begin();
@@ -698,7 +701,6 @@ class SelectStage : public SubGameStage<>
         }
         for (int i = 0; i < current_players.size() + 1; i++) {
             if (it2_ == Main().cards2_.end()) {
-                std::shuffle(Main().cards2_.begin(), Main().cards2_.end(), Main().g);
                 it2_ = Main().cards2_.begin();
             }
             const auto& card = *(it2_++);
