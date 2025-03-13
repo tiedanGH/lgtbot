@@ -100,7 +100,7 @@ public:
     }
 
     // BOSS放置阶段（放置阶段调用）
-    void BossPrepare(Board (&board)[2])
+    void BossPrepare(Board (&board)[2], int (&timeout)[2])
     {
         // 特殊飞机放置
         BossSpecialPlanesPrepare(board);
@@ -108,12 +108,17 @@ public:
         int X, Y, direction;
         RD_is_hit = false;
         int try_count = 0;
-        while (board[1].alive < board[1].planeNum) {
+        int clear_count = 0;
+        while (board[1].alive < board[1].planeNum * board[1].crucial_num) {
             X = rand() % board[1].sizeX + 1;
             Y = rand() % board[1].sizeY + 1;
             direction = rand() % 4 + 1;
             if (board[1].AddPlane(X, Y, direction, overlap) == "OK") try_count = 0;
             if (try_count++ > 5000) {
+                if (clear_count++ > 10) {
+                    timeout[1] = 1;
+                    return;
+                }
                 board[1].RemoveAllPlanes();
                 try_count = 0;
                 BossSpecialPlanesPrepare(board);
@@ -204,7 +209,7 @@ public:
         int X, Y;
 
         int skill = rand() % 100 + 1;
-        if (board[1].alive <= board[1].planeNum - 3) add_p = 5;
+        if (board[1].alive <= (board[1].planeNum - 3) * board[1].crucial_num) add_p = 5;
 
         if (skill > 100 - skill_probability[0] - add_p * 1)
         {
@@ -212,7 +217,7 @@ public:
             int alive_count = 0;
             for(int j = 1; j <= board[1].sizeY; j++) {
                 for(int i = 1; i <= board[1].sizeX; i++) {
-                    if (board[1].map[i][j][1] == 2 && board[1].map[i][j][0] == 0) {
+                    if (board[1].map[i][j][1] == 2 && board[1].map[i][j][0] == 0 && board[1].body[i][j] > 0) {
                         board[1].RemovePlane(i, j);
                         alive_count++;
                     }
@@ -220,7 +225,7 @@ public:
             }
             int try_count = 0;
             int direction;
-            while (board[1].alive < alive_count) {
+            while (board[1].alive < alive_count * board[1].crucial_num) {
                 X = rand() % board[1].sizeX + 1;
                 Y = rand() % board[1].sizeY + 1;
                 direction = rand() % 4 + 1;
@@ -241,7 +246,6 @@ public:
                 }
                 if (try_count > 3000) {
                     timeout[1] = 1;
-                    board[1].alive = 0;
                     return "[漏洞监测] BOSS技能阶段——空军指挥：移动 " + to_string(alive_count) + " 架飞机时发生错误，随机放置飞机次数到达上限，已强制中断游戏进程！";
                 }
             }
@@ -378,11 +382,13 @@ public:
         {
             // 5%概率发动空军支援，复活或支援新飞机
             bool found = false;
-            for(int j = 1; j <= board[1].sizeY; j++) {
-                for(int i = 1; i <= board[1].sizeX; i++) {
-                    if (board[1].map[i][j][1] == 2 && board[1].map[i][j][0] == 1 && !found) {
-                        board[1].RemovePlane(i, j);
-                        found = true;
+            if (board[1].crucial_num == 1) {    // 仅单要害模式移除飞机
+                for(int j = 1; j <= board[1].sizeY; j++) {
+                    for(int i = 1; i <= board[1].sizeX; i++) {
+                        if (board[1].map[i][j][1] == 2 && board[1].map[i][j][0] == 1 && !found) {
+                            board[1].RemovePlane(i, j);
+                            found = true;
+                        }
                     }
                 }
             }
@@ -411,14 +417,12 @@ public:
                 if (board[1].map[X][Y][0] == 0 && hide) {
                     if (board[1].AddPlane(X, Y, direction, overlap) == "OK") success = true;
                 }
-                if (try_count++ > 3000) {
-                    timeout[1] = 1;
-                    board[1].alive = 0;
-                    return "[漏洞监测] BOSS技能阶段——空军支援：随机放置飞机次数到达上限，已强制中断游戏进程！";
+                if (try_count++ > 3000 && !success) {
+                    return "【WARNING】BOSS发动技能 [空军支援]！随机放置飞机次数到达上限，技能发动失败！";
                 }
             }
             if (found) {
-                board[1].alive++;
+                board[1].alive += board[1].crucial_num;
                 return "【WARNING】BOSS发动技能 [空军支援]！已成功将一架已被击落的飞机更换为新飞机，并转移位置" + N_warning;
             } else {
                 board[1].planeNum++;
@@ -444,7 +448,7 @@ public:
         EMI = false;
 
         int skill = rand() % 100 + 1;
-        if (board[1].alive <= board[1].planeNum - 3) add_p = 5;
+        if (board[1].alive <= board[1].planeNum * board[1].crucial_num - 3 * board[1].crucial_num) add_p = 5;
 
         if (skill > 100 - skill_probability[0] - add_p * 1)
         {
@@ -534,7 +538,7 @@ public:
         {
             // 15%概率发动自爆无人机，随机打击3个十字区域
             int success = 0;
-            const int num = board[1].alive <= board[1].planeNum - 3 ? 2 : 3;
+            const int num = board[1].alive <= board[1].planeNum * board[1].crucial_num - 3 * board[1].crucial_num ? 2 : 3;
             string str[3], areas;
             while (success < num) {
                 X = rand() % (board[0].sizeX - 4) + 3;
@@ -581,7 +585,7 @@ public:
             }
             return "【WARNING】BOSS发动技能 [分导弹头]！在导弹落点 " + areas + "附近的5*5区域内进行分散打击，总计额外打击了 " + to_string(count) + " 个位置";
         }
-        else if (skill > 100 - skill_probability[4] && board[1].alive > board[1].planeNum - 3)
+        else if (skill > 100 - skill_probability[4] && board[1].alive > board[1].planeNum * board[1].crucial_num - 3 * board[1].crucial_num)
         {
             // 15%概率发动电磁干扰，玩家导弹在5*5区域偏移
             EMI = true;
@@ -594,36 +598,34 @@ public:
     // BOSS 被动技能
     pair<string, string> BOSS_PassiveSkills(Board (&board)[2], string str) const
     {
-        if (is_boss) {
-            // BOSS2 [导弹拦截]
-            if (BossType == 2 || tempBossType == 2) {
-                if (rand() % 100 < 8) {
-                    string ret = board[0].PlayerAttack(str);
-                    if (ret == "0" || ret == "1" || ret == "2") {
-                        return make_pair(ret, "【WARNING】BOSS触发技能 [导弹拦截]，当前导弹被拦截并打击到了玩家的地图上");
-                    }
+        // BOSS2 [导弹拦截]
+        if (BossType == 2 || tempBossType == 2) {
+            if (rand() % 100 < 8) {
+                string ret = board[0].PlayerAttack(str);
+                if (ret == "0" || ret == "1" || ret == "2") {
+                    return make_pair(ret, "【WARNING】BOSS触发技能 [导弹拦截]，当前导弹被拦截并打击到了玩家的地图上");
                 }
             }
-            // BOSS3 [电磁干扰]
-            if (BossType == 3 || tempBossType == 3) {
-                if (EMI) {
-                    if (Board::CheckCoordinate(str) != "OK") return make_pair("Failed", "Empty");
-                    int X = str[0] - 'A' + 1, Y = str[1] - '0';
-                    if (str.length() == 3) Y = (str[1] - '0') * 10 + str[2] - '0';
-                    if (board[1].map[X][Y][0] > 0) return make_pair("Failed", "Empty");
+        }
+        // BOSS3 [电磁干扰]
+        if (BossType == 3 || tempBossType == 3) {
+            if (EMI) {
+                if (Board::CheckCoordinate(str) != "OK") return make_pair("Failed", "Empty");
+                int X = str[0] - 'A' + 1, Y = str[1] - '0';
+                if (str.length() == 3) Y = (str[1] - '0') * 10 + str[2] - '0';
+                if (board[1].map[X][Y][0] > 0) return make_pair("Failed", "Empty");
 
-                    int try_count = 0;
-                    while (try_count++ < 1000) {
-                        int actual_X = X + rand() % 5 - 2;
-                        int actual_Y = Y + rand() % 5 - 2;
-                        string actual_str = string(1, 'A' + actual_X - 1) + to_string(actual_Y);
-                        string ret = board[1].PlayerAttack(actual_str);
-                        if (ret == "0" || ret == "1" || ret == "2") {
-                            if (actual_str == str) {
-                                return make_pair(ret, "虽然受到了强烈的电磁干扰，但导弹还是成功击中了 " + actual_str + "。\n令人振奋的消息...也许？");
-                            } else {
-                                return make_pair(ret, "受强烈电磁干扰的影响，导弹无法准确锁定位置，导弹击中了 " + actual_str);
-                            }
+                int try_count = 0;
+                while (try_count++ < 1000) {
+                    int actual_X = X + rand() % 5 - 2;
+                    int actual_Y = Y + rand() % 5 - 2;
+                    string actual_str = string(1, 'A' + actual_X - 1) + to_string(actual_Y);
+                    string ret = board[1].PlayerAttack(actual_str);
+                    if (ret == "0" || ret == "1" || ret == "2" || ret == "3") {
+                        if (actual_str == str) {
+                            return make_pair(ret, "虽然受到了强烈的电磁干扰，但导弹还是成功击中了 " + actual_str + "。\n令人振奋的消息...也许？");
+                        } else {
+                            return make_pair(ret, "受强烈电磁干扰的影响，导弹无法准确锁定位置，导弹击中了 " + actual_str);
                         }
                     }
                 }

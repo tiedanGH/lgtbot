@@ -66,8 +66,8 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
             }
             countOf2 += std::count(row.begin(), row.end(), '2');
         }
-        if (countOf2 != 1) {
-            reply() << "[错误] 形状参数中数字2（机头）必须有且仅有一个";
+        if (countOf2 == 0) {
+            reply() << "[错误] 形状参数中必须包含数字2（机头）";
             return false;
         }
     }
@@ -99,6 +99,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
                        "[第4项] 连发次数：范围 [1-10]，其他输入均为默认3</br>"
                        "[第5项] 侦察区域大小：范围 [0-30]，其他输入均为默认随机</br>"
                        "[第6项] 进攻时限：范围 [30-3600]，其他输入均为默认120</br>"
+                       "[第7项] 自定义形状：包含5个长度5的字符串，具体见配置帮助</br>"
                        "【多人游戏快捷配置】</br>"
                        "[第1项] 地图边长：仅支持 [8-15]，其他输入均为默认10</br>"
                        "[第2项] 飞机数：仅支持 [1-8]，其他输入均为默认3</br>"
@@ -113,6 +114,18 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
                     if (options.size() >= 4) GET_OPTION_VALUE(game_options, 连发) = options[3] >= 1 && options[3] <= 10 ? options[3] : GET_OPTION_VALUE(game_options, 连发);
                     if (options.size() >= 5) GET_OPTION_VALUE(game_options, 侦察) = options[4] >= 0 && options[4] <= 30 ? options[4] : GET_OPTION_VALUE(game_options, 侦察);
                     if (options.size() >= 6) GET_OPTION_VALUE(game_options, 进攻时限) = options[5] >= 30 && options[5] <= 3600 ? options[5] : GET_OPTION_VALUE(game_options, 进攻时限);
+                    if (options.size() == 11) {
+                        vector<int32_t> sub_vector(options.begin() + 6, options.begin() + 11);
+                        vector<string> shape;
+                        transform(sub_vector.begin(), sub_vector.end(),
+                                    back_inserter(shape),
+                                    [](int32_t value) {
+                                        ostringstream oss;
+                                        oss << setw(5) << setfill('0') << value;
+                                        return oss.str();
+                                    });
+                        GET_OPTION_VALUE(game_options, 形状) = shape;
+                    }
                     generic_options.bench_computers_to_player_num_ = 2;
                     return NewGameMode::SINGLE_USER;
                 } else {
@@ -137,7 +150,8 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
 {
   public:
     MainStage(StageUtility&& utility)
-        : StageFsm(std::move(utility))
+        : StageFsm(std::move(utility),
+                MakeStageCommand(*this, "查看本局对战的飞机形状", &MainStage::ShapeInfo_, VoidChecker("形状")))
         , round_(0)
         , player_scores_(Global().PlayerNum(), 0)
     {
@@ -158,6 +172,12 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
     // BOSS挑战
     Boss boss;
 
+    CompReqErrCode ShapeInfo_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        ShowPlaneShape(reply);
+        return StageErrCode::OK;
+    }
+
 	string GetAllMap(const int show_0, const int show_1, const int crucial_mode)
 	{
 		string allmap = "<table style=\"text-align:center;margin:auto;\"><tr>";
@@ -166,6 +186,21 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
 		allmap += "</tr></table>";
         return allmap;
 	}
+
+    void ShowPlaneShape(MsgSenderBase& msgSender)
+    {
+        auto sender = msgSender();
+        if (GAME_OPTION(形状).size() != 1) {
+            if (board[0].crucial_num == 1) {
+                sender << "本局游戏使用的飞机形状如下图所示\n";
+            } else {
+                sender << "本局为多要害模式，打击全部飞机头才能获胜。\n在放置、移除、标记时，需输入主飞机头的坐标（已在图中用红框标记）\n";
+            }
+            sender << Markdown(board[0].GetAllDirectionTable(GAME_OPTION(形状)), 360);
+        } else {
+            sender << "本局游戏使用的飞机为默认形状\n" << Markdown(board[0].GetAllDirectionTable({"00000", "00200", "11111", "00100", "01110"}), 360);
+        }
+    }
 
     virtual void FirstStageFsm(SubStageFsmSetter setter) override
     {
@@ -358,7 +393,7 @@ class PrepareStage : public SubGameStage<>
 
         // 游戏开始时展示飞机形状
         if (GAME_OPTION(形状).size() != 1) {
-            Global().Boardcast() << "本局游戏使用的飞机形状如下图所示\n" << Markdown(Board::GetAllDirectionTable(GAME_OPTION(形状)), 350);
+            Main().ShowPlaneShape(Global().BoardcastMsgSender());
         }
 
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
@@ -376,10 +411,10 @@ class PrepareStage : public SubGameStage<>
             return StageErrCode::FAILED;
         }
 		if (Global().IsReady(pid)) {
-            reply() << "[错误] 放置失败：您已经确认过了，请等待对手行动";
+            reply() << "[错误] 您已经确认过了，请等待对手行动";
             return StageErrCode::FAILED;
         }
-		if (Main().board[pid].alive == Main().board[pid].planeNum) {
+		if (Main().board[pid].alive / Main().board[pid].crucial_num == Main().board[pid].planeNum) {
 			reply() << "[错误] 放置失败：飞机数量已达本局上限，请先使用「移除 坐标」命令移除飞机，或使用「清空」命令清除全部飞机";
 			return StageErrCode::FAILED;
 		}
@@ -391,8 +426,8 @@ class PrepareStage : public SubGameStage<>
         }
 
         reply() << Markdown(Main().board[pid].Getmap(1, GAME_OPTION(要害)));
-		if (Main().board[pid].alive < Main().board[pid].planeNum) {
-			reply() << "放置成功！您还有 " + to_string(Main().board[pid].planeNum - Main().board[pid].alive) + " 架飞机等待放置，请继续行动";
+		if (Main().board[pid].alive / Main().board[pid].crucial_num < Main().board[pid].planeNum) {
+			reply() << "放置成功！您还有 " + to_string(Main().board[pid].planeNum - Main().board[pid].alive / Main().board[pid].crucial_num) + " 架飞机等待放置，请继续行动";
 		} else {
 			reply() << "放置成功！若您已准备完成，请使用「确认」命令结束行动";
 		}
@@ -445,8 +480,8 @@ class PrepareStage : public SubGameStage<>
             reply() << "[错误] 您已经确认过了，请等待对手确认行动";
             return StageErrCode::FAILED;
         }
-		if (Main().board[pid].alive < Main().board[pid].planeNum) {
-			reply() << "[错误] 您还有 " + to_string(Main().board[pid].planeNum - Main().board[pid].alive) + " 架飞机等待放置";
+		if (Main().board[pid].alive / Main().board[pid].crucial_num < Main().board[pid].planeNum) {
+			reply() << "[错误] 您还有 " + to_string(Main().board[pid].planeNum - Main().board[pid].alive / Main().board[pid].crucial_num) + " 架飞机等待放置";
             return StageErrCode::FAILED;
         }
         reply() << "确认成功！";
@@ -491,7 +526,13 @@ class PrepareStage : public SubGameStage<>
             return StageErrCode::OK;
         }
 
-        Main().boss.BossPrepare(Main().board);
+        Main().boss.BossPrepare(Main().board, Main().timeout);
+
+        if (Main().timeout[1] == 1) {
+            Global().SetReady(0);
+            Global().Boardcast() << "[漏洞监测] BOSS准备阶段——普通飞机放置：随机放置飞机和清空次数到达上限，已强制中断游戏进程！";
+            return StageErrCode::READY;
+        }
 
         Global().Boardcast() << "BOSS已抵达战场，请根据BOSS技能选择合适的部署和战术！\n" << Markdown(Main().boss.BossIntro(), 680);
         return StageErrCode::READY;
@@ -551,14 +592,19 @@ class AttackStage : public SubGameStage<>
             return StageErrCode::FAILED;
         }
 
-        // BOSS被动技能
-        pair<string, string> pair_paf = Main().boss.BOSS_PassiveSkills(Main().board, str);
-        string result = pair_paf.first;
-        if (pair_paf.second != "Empty") {
-            reply() << pair_paf.second;
-        }
-        // 正常攻击
-        if (result == "Failed") {
+        string result = "";
+        if (Main().boss.is_boss) {
+            // BOSS被动技能
+            pair<string, string> pair_paf = Main().boss.BOSS_PassiveSkills(Main().board, str);
+            result = pair_paf.first;
+            if (pair_paf.second != "Empty") {
+                reply() << pair_paf.second;
+            }
+            if (result == "Failed") {
+                result = Main().board[!pid].PlayerAttack(str);
+            }
+        } else {
+            // 正常攻击
             result = Main().board[!pid].PlayerAttack(str);
         }
 

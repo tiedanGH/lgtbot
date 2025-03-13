@@ -28,6 +28,10 @@ public:
 		{{1,2}, {1,1}, {1,0}, {1,-1}, {1,-2}, {2,0}, {3,1}, {3,0}, {3,-1}},
  		{{-1,2}, {-1,1}, {-1,0}, {-1,-1}, {-1,-2}, {-2,0}, {-3,1}, {-3,0}, {-3,-1}},
 	};
+	// 多要害模式其他飞机头相对主飞机头位置偏差
+	vector<vector<pair<int, int>>> positions2 = {{}, {}, {}, {}, {}};
+	int crucial_num = 1;
+	pair<int, int> main_crucial{-1, -1};
 	// 飞机边界相对飞机头的最大偏差
 	int boundary[5] = {-1, 0, 3, 2, 2};
 
@@ -87,29 +91,32 @@ public:
 		for (int i = 1; i <= 4; i++) {
 			boundary[i] = 0;
 		}
+		// 形状为空，返回空结果
+		if (shape.size() == 0) {
+			return;
+		}
+		pair<int, int> mainPos{-1, -1};
 		int rows = shape.size();
 		int cols = shape[0].size();
-		pair<int, int> twoPos{-1, -1};
-		// 查找 2
+		// 查找靠近中间上方的 2 作为主飞机头
 		for (int r = 0; r < rows; ++r) {
-			for (int c = 0; c < cols; ++c) {
-				if (shape[r][c] == '2') {
-					twoPos = {r, c};
-					break;
-				}
-			}
-			if (twoPos.first != -1) break;
+			if (shape[r][2] == '2') { mainPos = {r, 2}; break; }
+			if (shape[r][1] == '2') { mainPos = {r, 1}; break; }
+			if (shape[r][3] == '2') { mainPos = {r, 3}; break; }
+			if (shape[r][0] == '2') { mainPos = {r, 0}; break; }
+			if (shape[r][4] == '2') { mainPos = {r, 4}; break; }
 		}
 		// 如果没有找到 2，返回空结果
-		if (twoPos.first == -1) {
+		if (mainPos.first == -1) {
 			return;
 		}
 		// 计算相对坐标差
+		crucial_num = 0;
 		for (int r = 0; r < rows; ++r) {
 			for (int c = 0; c < cols; ++c) {
+				int dy = r - mainPos.first;
+				int dx = c - mainPos.second;
 				if (shape[r][c] == '1') {
-					int dy = r - twoPos.first;
-					int dx = c - twoPos.second;
 					positions[1].push_back({dx, dy});	// 上1
 					positions[2].push_back({-dx, -dy});	// 下2
 					positions[3].push_back({dy, -dx});	// 左3
@@ -119,8 +126,20 @@ public:
 					if (-dx > boundary[3]) boundary[3] = -dx;	// 左3
 					if (dx > boundary[4]) boundary[4] = dx;		// 右4
 				}
+				if (shape[r][c] == '2' && (dx != 0 || dy != 0)) {
+					positions2[1].push_back({dx, dy});		// 上1
+					positions2[2].push_back({-dx, -dy});	// 下2
+					positions2[3].push_back({dy, -dx});		// 左3
+					positions2[4].push_back({-dy, dx});		// 右4
+					if (-dy > boundary[1]) boundary[1] = -dy;	// 上1
+					if (dy > boundary[2]) boundary[2] = dy;		// 下2
+					if (-dx > boundary[3]) boundary[3] = -dx;	// 左3
+					if (dx > boundary[4]) boundary[4] = dx;		// 右4
+				}
 			}
+			crucial_num += std::count(shape[r].begin(), shape[r].end(), '2');
 		}
+		if (crucial_num > 1) main_crucial = mainPos;
 	}
 
 	// 初始化地图
@@ -192,7 +211,7 @@ public:
 		{
 	 		for(int i = 1; i <= sizeX; i++)
 	 		{
-			 	grid[i][j] += "<td bgcolor=\"";
+			 	grid[i][j] += "<td style=\"background-color:#";
 			 	
 			 	// 背景色
 				if (show_planes || map[i][j][0] > 0) {
@@ -205,7 +224,11 @@ public:
 					grid[i][j] += color[0][0];
 				}
 
-				grid[i][j] += "\">";
+				if (map[i][j][1] == 2 && body[i][j] > 0 && positions2[1].size() > 0 && show_planes) {
+					grid[i][j] += "; border: 1px solid red";
+				}
+
+				grid[i][j] += ";\">";
 			 	
 			 	// 地图符号
 			 	string m;
@@ -271,10 +294,10 @@ public:
 		// 要害数量显示 
 		mapString += "<table style=\"text-align:center;margin:auto;\"><tbody>";
 		if (prepare) {
-			mapString += "<tr><td><font size=7>剩余飞机数：" + to_string(planeNum - alive) + "</font></td></tr>";
+			mapString += "<tr><td><font size=7>剩余飞机数：" + to_string(planeNum - alive / crucial_num) + "</font></td></tr>";
 		} else {
 			if (crucial_mode == 0) {
-				mapString += "<tr><td><font size=7>命中要害：" + to_string(planeNum - alive) + "</font></td></tr>";
+				mapString += "<tr><td><font size=7>命中要害：" + to_string(planeNum * crucial_num - alive) + "</font></td></tr>";
 			} else {
 				mapString += "<tr><td><font size=7>命中要害：？？？</font></td></tr>";
 			}
@@ -363,11 +386,21 @@ public:
 		}
 		// 检查飞机是否重叠
 		for (auto position : positions[direction]) {
+			string position_str = string(1, 'A' + X + position.first - 1) + to_string(Y + position.second);
 			if (map[X + position.first][Y + position.second][1] >= 2) {
-				return "[错误] 无法放置于此位置：机身不能与其他飞机头重叠";
+				return "[错误] 无法放置于此位置：机身不能与其他飞机头重叠。重叠位置：" + position_str;
 			}
 			if (map[X + position.first][Y + position.second][1] == 1 && !overlap) {
-				return "[错误] 无法放置于此位置：当前规则飞机机身之间不允许重叠";
+				return "[错误] 无法放置于此位置：当前规则飞机机身之间不允许重叠。重叠位置：" + position_str;
+			}
+		}
+		for (auto position2 : positions2[direction]) {
+			string position_str = string(1, 'A' + X + position2.first - 1) + to_string(Y + position2.second);
+			if (map[X + position2.first][Y + position2.second][1] != 0) {
+				return "[错误] 多要害模式下，附属飞机头不能与机身或其他飞机头重叠。重叠位置：" + position_str;
+			}
+			if (map[X + position2.first][Y + position2.second][0] == 2) {
+				return "[错误] 多要害模式下，附属飞机头不能放置于侦察点。侦察点位置：" + position_str;
 			}
 		}
 		// 放置飞机
@@ -377,7 +410,10 @@ public:
 			map[X + position.first][Y + position.second][1] = 1;
 			body[X + position.first][Y + position.second] += 1;
 		}
-		alive++;
+		for (auto position2 : positions2[direction]) {
+			map[X + position2.first][Y + position2.second][1] = 2;
+		}
+		alive += crucial_num;
 		return "OK";
 	}
 
@@ -398,6 +434,9 @@ public:
 			return "[错误] 移除失败：此处不存在飞机头，请输入飞机头坐标";
 		}
 		int direction = body[X][Y];
+		if (direction == 0) {
+			return "[错误] 移除失败：此位置的飞机头并非主飞机头，请输入主飞机头坐标来移除飞机（已用红框标记）";
+		}
 		map[X][Y][1] = body[X][Y] = 0;
 		for (auto position : positions[direction]) {
 			body[X + position.first][Y + position.second] -= 1;
@@ -406,7 +445,10 @@ public:
 				map[X + position.first][Y + position.second][1] = 0;
 			}
 		}
-		alive--;
+		for (auto position2 : positions2[direction]) {
+			map[X + position2.first][Y + position2.second][1] = 0;
+		}
+		alive -= crucial_num;
 		return "OK";
 	}
 
@@ -479,6 +521,11 @@ public:
 				mark[X + position.first][Y + position.second] += 1;
 			}
 		}
+		for (auto position2 : positions2[direction]) {
+			if (mark[X + position2.first][Y + position2.second] != 300) {
+				mark[X + position2.first][Y + position2.second] = 200;
+			}
+		}
 		return "OK";
 	}
 
@@ -499,6 +546,11 @@ public:
 				mark[X + position.first][Y + position.second] -= 1;
 			}
 		}
+		for (auto position2 : positions2[direction]) {
+			if (mark[X + position2.first][Y + position2.second] != 300) {
+				mark[X + position2.first][Y + position2.second] = 0;
+			}
+		}
 		return "OK";
 	}
 
@@ -514,7 +566,7 @@ public:
 		}
 	}
 
-	static string GetPlaneTable(const vector<string> shape, const int direction) {
+	static string GetPlaneTable(const vector<string> shape, const int direction, const pair<int, int> pos = {-1, -1}) {
 		const vector<string> components = {
 			"<td style=\"background-color:#ECECEC; width:25px;\">　</td>",
 			"<td style=\"background-color:#E0FFE0; width:25px;\">+</td>",
@@ -533,10 +585,28 @@ public:
 		for (int r = 0; r < rows; ++r) {
 			table += "<tr>";
 			for (int c = 0; c < cols; ++c) {
-				if (direction == 1) table += components[shape[r][c] - '0'];
-				if (direction == 2) table += components[shape[rows - r - 1][cols - c - 1] - '0'];
-				if (direction == 3) table += components[shape[c][rows - r - 1] - '0'];
-				if (direction == 4) table += components[shape[cols - c - 1][r] - '0'];
+				int trans_r, trans_c;
+				if (direction == 1) {
+					trans_r = r;
+					trans_c = c;
+				}
+				if (direction == 2) {
+					trans_r = rows - r - 1;
+					trans_c = cols - c - 1;
+				}
+				if (direction == 3) {
+					trans_r = c;
+					trans_c = rows - r - 1;
+				}
+				if (direction == 4) {
+					trans_r = cols - c - 1;
+					trans_c = r;
+				}
+				if (trans_r == pos.first && trans_c == pos.second) {
+					table += "<td style=\"background-color:#000000; width:25px; border: 1px solid red;\"><font color=\"FF0000\">★</font></td>";
+				} else {
+					table += components[shape[trans_r][trans_c] - '0'];
+				}
 			}
 			table += "</tr>";
 		}
@@ -545,21 +615,21 @@ public:
 		return table;
 	}
 
-	static string GetAllDirectionTable(const vector<string> shape) {
+	string GetAllDirectionTable(const vector<string> shape) {
 		string table = "<table style=\"text-align:center; margin:auto\">";
 		table += "<tr>";
-		table += "<td>" + GetPlaneTable(shape, 1) + "</td>";
-		table += "<td>" + GetPlaneTable(shape, 2) + "</td>";
+		table += "<td>" + GetPlaneTable(shape, 1, main_crucial) + "</td><td><font size=4>　</font></td>";
+		table += "<td>" + GetPlaneTable(shape, 2, main_crucial) + "</td>";
 		table += "</tr><tr>";
-		table += "<td><font size=5>上</font></td>";
+		table += "<td><font size=5>上</font></td><td/>";
 		table += "<td><font size=5>下</font></td>";
 		table += "</tr>";
 
 		table += "<tr>";
-		table += "<td>" + GetPlaneTable(shape, 3) + "</td>";
-		table += "<td>" + GetPlaneTable(shape, 4) + "</td>";
+		table += "<td>" + GetPlaneTable(shape, 3, main_crucial) + "</td><td><font size=4>　</font></td>";
+		table += "<td>" + GetPlaneTable(shape, 4, main_crucial) + "</td>";
 		table += "</tr><tr>";
-		table += "<td><font size=5>左</font></td>";
+		table += "<td><font size=5>左</font></td><td/>";
 		table += "<td><font size=5>右</font></td>";
 		table += "</tr>";
 		table += "</table>";
