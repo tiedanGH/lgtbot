@@ -494,9 +494,10 @@ class OpenComb
                                 point = areas_[id].card_->Point<direct>();
                                 wild_all10_ = false;
                             }
+                            if (*point != 10 && areas_[id].card_->Point<direct>() == 10) wild_all10_ = false;   // 普通线出现癞子（成就失败）
                         } else {
                             connect = false;
-                            if (*point == 0 || areas_[id].card_->Point<direct>() == 0) air_allline_ = false;
+                            if (*point == 0 || areas_[id].card_->Point<direct>() == 0) air_allline_ = false;    // 0线被其他数字阻断（成就失败）
                         }
                     }
                     if (*point == 0 && connect == false) air_allline_ = false;
@@ -507,7 +508,10 @@ class OpenComb
                     count = 0;
                 } else {   // 空区域
                     connect = false;
-                    if (point.has_value() && *point == 0) air_allline_ = false;
+                    if (point.has_value()) {
+                        if (*point == 0) air_allline_ = false;
+                        if (*point == 10) wild_all10_ = false;
+                    }
                 }
                 if (j == 8) {   // 地图最长边
                     LineConnect(connect, point, count, score, extra_score);
