@@ -316,7 +316,7 @@ GAME_TEST(3, yunding_SelectStage_leave_test4)
     ASSERT_PUB_MSG(CHECKOUT, 2, "pass");
     ASSERT_LEAVE(CONTINUE, 1);          // SelectStage
     ASSERT_PUB_MSG(CONTINUE, 0, "4 7");
-    ASSERT_PUB_MSG(CHECKOUT, 2, "3 7");
+    ASSERT_PUB_MSG(CHECKOUT, 2, "2 7");
     ASSERT_PUB_MSG(OK, 0, "8");
     ASSERT_PUB_MSG(CHECKOUT, 2, "8");
     ASSERT_LEAVE(CONTINUE, 2);
