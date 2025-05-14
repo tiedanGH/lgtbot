@@ -266,6 +266,7 @@ class RoundStage : public SubGameStage<>
     virtual CheckoutErrCode OnStageTimeout() override
     {
         if (!Global().IsReady(0) && !Global().IsReady(1)) {
+            Main().player_scores_[0] = Main().player_scores_[1] = -1;
             Global().Boardcast() << "双方均超时，游戏平局";
         } else if (!Global().IsReady(0)) {
             Main().player_scores_[0] = -1;
