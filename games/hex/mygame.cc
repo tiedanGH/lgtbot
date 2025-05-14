@@ -194,12 +194,10 @@ class RoundStage : public SubGameStage<>
 
     virtual CheckoutErrCode OnStageTimeout() override
     {
-        if (!Global().IsReady(0) && !Global().IsReady(1)) {
-            Global().Boardcast() << "双方均超时，游戏平局";
-        } else if (!Global().IsReady(0)) {
+        if (!Global().IsReady(0)) {
             Main().player_scores_[0] = -1;
             Global().Boardcast() << "玩家 " << At(PlayerID(0)) << " 超时判负";
-        } else {
+        } else if (!Global().IsReady(1)) {
             Main().player_scores_[1] = -1;
             Global().Boardcast() << "玩家 " << At(PlayerID(1)) << " 超时判负";
         }
