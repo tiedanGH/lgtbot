@@ -188,7 +188,7 @@ static ErrCode show_gamelist(BotCtx& bot, const UserID uid, const std::optional<
             table.Get(table.Row() - 2, 4).SetContent("<img src=\"file:///" +
                     (std::filesystem::absolute(bot.game_path()) / game_handle.Info().module_name_ / "icon.png").string() +
                     "\" style=\"width:70px; height:70px; vertical-align: middle;\">");
-            table.Get(table.Row() - 1, 1).SetContent(std::string("<font size=\"3\"> ") + game_handle.Info().description_ + "</font>");
+            table.Get(table.Row() - 1, 1).SetStyle("style=\"width:470px;\"").SetContent(std::string("<font size=\"3\"> ") + game_handle.Info().description_ + "</font>");
         }
         send_image();
     }
@@ -666,7 +666,7 @@ static ErrCode show_profile(BotCtx& bot, const UserID uid, const std::optional<G
             } else {
                 for (const auto& [name, description] : it->second.Info().achievements_) {
                     if (name == info.achievement_name_) {
-                        recent_honors_table.GetLastRow(3).SetContent(description);
+                        recent_honors_table.GetLastRow(3).SetStyle("style=\"width:440px;\"").SetContent(description);
                         break;
                     }
                 }
