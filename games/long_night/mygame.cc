@@ -105,7 +105,7 @@ class MainStage : public MainGameStage<RoundStage>
                 VoidChecker("预览"), RepeatableChecker<BasicChecker<string>>("序号", "2 3 0 11 E1 0 E2 7 9")))
         , round_(0)
         , player_scores_(Global().PlayerNum(), 0)
-        , board(GAME_OPTION(模式))
+        , board(Global().ResourceDir(), GAME_OPTION(模式))
     {}
 
     virtual int64_t PlayerScore(const PlayerID pid) const override { return player_scores_[pid]; }
@@ -153,7 +153,7 @@ class MainStage : public MainGameStage<RoundStage>
 
         auto sender = Global().Boardcast();
         if (!GAME_OPTION(捉捕目标)) {
-            sender << "[提示] 本局玩家的捉捕顺位为相反顺序，捉捕目标变更为上家\n\n";
+            sender << "【捉捕顺位】本局玩家的捉捕顺位为相反顺序，捉捕目标变更为上家\n\n";
         }
         if (GAME_OPTION(特殊事件) > 0) {    // 特殊事件
             switch (GAME_OPTION(特殊事件)) {
@@ -166,16 +166,16 @@ class MainStage : public MainGameStage<RoundStage>
         if (GAME_OPTION(边长) == 10) {      // 边长10
             bool found = board.unitMaps.RandomizeBlockPosition(GAME_OPTION(边长));
             if (found) {
-                sender << "[提示] 本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。9个区块在大地图随机排列，区块不会重叠。没有区块覆盖的地图空隙将变成普通道路。\n";
+                sender << "【10*10】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。9个区块在大地图随机排列，区块不会重叠。没有区块覆盖的地图空隙将变成普通道路。\n";
             } else {
-                sender << "[错误] 生成地图时发生错误：未能成功随机布局！";
+                sender << "[错误] 生成10*10地图时发生错误：未能成功随机布局！";
                 return;
             }
         }
         if (GAME_OPTION(边长) == 12) {      // 边长12
             board.unitMaps.SetMapPosition12();
             board.exit_num = 4;
-            sender << "[提示] 本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。使用 16 个区块铺满地图，逃生舱固定为 4 个。\n";
+            sender << "【12*12】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。使用 16 个区块铺满地图，逃生舱固定为 4 个。\n";
         }
         if (GAME_OPTION(点杀)) {    // 点杀
             sender << "【点杀模式】捕捉改为仅在回合结束时触发，路过不会触发捕捉\n";
@@ -216,7 +216,7 @@ class MainStage : public MainGameStage<RoundStage>
         board.Initialize(GAME_OPTION(BOSS));
 
         if (GAME_OPTION(BOSS)) {
-            board.boss.all_record = "<br>【开局】初始锁定玩家为 [" + to_string(board.boss.target) + "号]";
+            board.boss.all_record = "<br>【开局】初始锁定玩家为 [" + to_string(board.boss.target) + "号]（巨响）";
             sender << "【BOSS】米诺陶斯现身于地图中，会在回合结束时追击最近的玩家。BOSS发出震耳欲聋的巨响！请所有玩家留意BOSS开局所在的方位！\n";
             sender << "当前BOSS锁定的玩家为 " << At(board.boss.target) << "\n";
         }
@@ -704,7 +704,7 @@ class RoundStage : public SubGameStage<>
         active_stop = true;
         if (step == 0) {
             Main().board.players[currentPlayer].hook_status = true;
-            Global().Boardcast() << "玩家 " << At(PlayerID(currentPlayer)) << " 超时未行动，已进入挂机状态";
+            Global().Boardcast() << "玩家 " << At(PlayerID(currentPlayer)) << " 超时未行动，已进入挂机状态，再次行动前仅有30秒等待时间";
         } else {
             Global().Boardcast() << "玩家 " << At(PlayerID(currentPlayer)) << " 行动超时，切换下一个玩家";
         }
@@ -817,6 +817,7 @@ class RoundStage : public SubGameStage<>
                 }
                 // BOSS移动后发出巨响
                 if (Main().Alive_() > 1 || (Global().PlayerNum() == 1 && Main().board.players[0].out == 0)) {
+                    boss_record += "（巨响）";
                     sender << "\n\nBOSS发出震耳欲聋的巨响！请所有玩家留意私信声响信息！";
                     SendSoundMessage(boss.x, boss.y, Sound::BOSS, true);
                 }

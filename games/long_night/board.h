@@ -2,7 +2,10 @@
 class Board
 {
   public:
-    Board(const int32_t mode) : unitMaps(mode) {}
+    Board(string image_path, const int32_t mode) : image_path_(std::move(image_path)), unitMaps(mode) {}
+
+    // 图片资源文件夹
+    const string image_path_;
 
 	// 玩家
     uint32_t playerNum;
@@ -61,7 +64,7 @@ class Board
                 int gridX = (x+1)/2-1;
                 int gridY = (y+1)/2-1;
                 if (size >= 3) {
-                    map.Get(x, y).SetStyle("class=\"grid\" " + GetBgStyle(grid_map[gridX][gridY].Type(), false));
+                    map.Get(x, y).SetStyle("class=\"grid\" " + GetGridStyle(grid_map[gridX][gridY].Type(), true));
                 } else {
                     map.Get(x, y).SetStyle("class=\"grid\"");
                 }
@@ -85,24 +88,16 @@ class Board
         // 纵向围墙
         for (int x = 1; x < size * 2; x = x + 2) {
             for (int y = 0; y < size * 2 - 1; y = y + 2) {
-                if (grid_map[(x+1)/2-1][y/2].Wall<Direct::LEFT>()) {
-                    map.Get(x, y).SetStyle("class=\"wall-col\"").SetColor("black");
-                }
+                map.Get(x, y).SetStyle("class=\"wall-col\"").SetColor(GetWallColor(grid_map[(x+1)/2-1][y/2].GetWall<Direct::LEFT>()));
             }
-            if (grid_map[(x+1)/2-1][size-1].Wall<Direct::RIGHT>()) {
-                map.Get(x, size*2).SetStyle("class=\"wall-col\"").SetColor("black");
-            }
+            map.Get(x, size*2).SetStyle("class=\"wall-col\"").SetColor(GetWallColor(grid_map[(x+1)/2-1][size-1].GetWall<Direct::RIGHT>()));
         }
         // 横向围墙
         for (int y = 1; y < size * 2; y = y + 2) {
             for (int x = 0; x < size * 2 - 1; x = x + 2) {
-                if (grid_map[x/2][(y+1)/2-1].Wall<Direct::UP>()) {
-                    map.Get(x, y).SetStyle("class=\"wall-row\"").SetColor("black");
-                }
+                map.Get(x, y).SetStyle("class=\"wall-row\"").SetColor(GetWallColor(grid_map[x/2][(y+1)/2-1].GetWall<Direct::UP>()));
             }
-            if (grid_map[size-1][(y+1)/2-1].Wall<Direct::DOWN>()) {
-                map.Get(size*2, y).SetStyle("class=\"wall-row\"").SetColor("black");
-            }
+            map.Get(size*2, y).SetStyle("class=\"wall-row\"").SetColor(GetWallColor(grid_map[size-1][(y+1)/2-1].GetWall<Direct::DOWN>()));
         }
         // 角落方块
         for (int x = 0; x < size * 2 + 1; x = x + 2) {
@@ -206,39 +201,43 @@ class Board
                 if ((i + 1) % 4 == 0 || i == special_maps.size() - 1) row += 2;
             }
         }
-        auto generateSVG = [](const std::string& style) -> std::string {
-            return "<svg width=\"50\" height=\"50\">"
-                   "<rect width=\"50\" height=\"50\" " + style + "/>"
-                   "</svg>";
-        };
         const string wall_svg = "<svg width=\"50\" height=\"70\">"
                 "<rect x=\"0\" y=\"0\" width=\"50\" height=\"10\" fill=\"black\"/>"
                 "<rect x=\"0\" y=\"10\" width=\"50\" height=\"50\" fill=\"white\" stroke=\"black\"/>"
                 "<rect x=\"0\" y=\"60\" width=\"50\" height=\"10\" fill=\"black\"/>"
                 "</svg>";
-        html::Table legend(9, 2);
+        const vector<pair<GridType, string>> all_grids_info = {
+            { GridType::GRASS, "【树丛】玩家进入时会发出让其他人听见的沙沙声。（出生不算）" },
+            { GridType::WATER, "【水洼】玩家进入时会发出让其他人听见的啪啪声。（出生不算）" },
+            { GridType::PORTAL, "【传送门】玩家进入时会发出其他人听见的啪啪声。（出生不算）<br>进入后，再任意2次移动后就会传送至同区块另1个传送门。<br>进入后，玩家视作进入亚空间，上述2次移动都在亚空间内。" },
+            { GridType::ONEWAYPORTAL, "【传送门出口】玩家进入时会发出其他人听见的啪啪声。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br><b>玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置</b>" },
+            { GridType::TRAP, "【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的沙沙声（出生不算）<br>被偶数次进入时，不发出声响，并强制玩家停止（出生不算）" },
+            { GridType::HEAT, "【热源】进入热源周围8格时，将私信受到热浪提示。（出生不算）<br>当进入热源时，将私信收到高温烫伤提示（不会出生在热源内）<br><b>在整局游戏中，如果第二次进入热源，则直接出局并-150分</b>" },
+            { GridType::BOX, "【箱子】玩家相邻箱子且向箱子移动时，箱子可被推动。（不会出生在箱子内）<br>箱子不可移动到本区块外。若箱子不可推动，则撞墙，箱子本身不会显示为墙。" },
+            { GridType::EXIT, "【逃生舱】逃生者使用后，会消失。默认逃生舱数=人数的一半" },
+        };
+        vector<UnitMaps::Map> all_maps_in_game;
+        all_maps_in_game.insert(all_maps_in_game.end(), maps.begin(), maps.end());
+        all_maps_in_game.insert(all_maps_in_game.end(), exits.begin(), exits.end());
+        if (has_special) all_maps_in_game.insert(all_maps_in_game.end(), special_maps.begin(), special_maps.end());
+
+        html::Table legend(all_grids_info.size() + 1, 2);
         legend.SetTableStyle("cellpadding=\"5\" cellspacing=\"0\" style=\"font-size: 22px;\"");
-        for (int i = 0; i < 9; i++) {
+        for (int i = 0; i < all_grids_info.size() + 1; i++) {
             legend.Get(i, 1).SetStyle("style=\"text-align: left;\"");
         }
         legend.Get(0, 0).SetContent(wall_svg);
         legend.Get(0, 1).SetContent("【墙壁】黑色为墙壁，如图例，玩家不可从上下通过，可以从左右通过");
-        legend.Get(1, 0).SetContent(generateSVG(GetBgStyle(GridType::GRASS, true)));
-        legend.Get(1, 1).SetContent("【树丛】玩家进入时会发出让其他人听见的沙沙声。（出生不算）");
-        legend.Get(2, 0).SetContent(generateSVG(GetBgStyle(GridType::WATER, true)));
-        legend.Get(2, 1).SetContent("【水洼】玩家进入时会发出让其他人听见的啪啪声。（出生不算）");
-        legend.Get(3, 0).SetContent(generateSVG(GetBgStyle(GridType::PORTAL, true)));
-        legend.Get(3, 1).SetContent("【传送门】玩家进入时会发出其他人听见的啪啪声。（出生不算）<br>进入后，再任意2次移动后就会传送至同区块另1个传送门。<br>进入后，玩家视作进入亚空间，上述2次移动都在亚空间内。");
-        legend.Get(4, 0).SetContent(generateSVG(GetBgStyle(GridType::ONEWAYPORTAL, true)));
-        legend.Get(4, 1).SetContent("【传送门出口】玩家进入时会发出其他人听见的啪啪声。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br><b>玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置</b>");
-        legend.Get(5, 0).SetContent(generateSVG(GetBgStyle(GridType::TRAP, true)));
-        legend.Get(5, 1).SetContent("【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的沙沙声（出生不算）<br>被偶数次进入时，不发出声响，并强制玩家停止（出生不算）");
-        legend.Get(6, 0).SetContent(generateSVG(GetBgStyle(GridType::HEAT, true)));
-        legend.Get(6, 1).SetContent("【热源】进入热源周围8格时，将私信受到热浪提示。（出生不算）<br>当进入热源时，将私信收到高温烫伤提示（不会出生在热源内）<br><b>在整局游戏中，如果第二次进入热源，则直接出局并-150分</b>");
-        legend.Get(7, 0).SetContent(generateSVG(GetBgStyle(GridType::BOX, true)));
-        legend.Get(7, 1).SetContent("【箱子】玩家相邻箱子且向箱子移动时，箱子可被推动。（不会出生在箱子内）<br>箱子不可移动到本区块外。若箱子不可推动，则撞墙，箱子本身不会显示为墙。");
-        legend.Get(8, 0).SetContent(generateSVG(GetBgStyle(GridType::EXIT, true)));
-        legend.Get(8, 1).SetContent("【逃生舱】逃生者使用后，会消失。默认逃生舱数=人数的一半");
+        row = 1;
+        for (const auto& grid_info: all_grids_info) {
+            if (UnitMaps::MapContainGridType(all_maps_in_game, grid_info.first)) {
+                if (grid_info.first == GridType::GRASS && special == 3) continue;
+                legend.Get(row, 0).SetContent(GetGridStyle(grid_info.first, false));
+                legend.Get(row, 1).SetContent(grid_info.second);
+                row++;
+            }
+        }
+        legend.ResizeRow(row);
         return title + blocks.ToString() + legend.ToString();
     }
 
@@ -292,7 +291,7 @@ class Board
             if (s.catch_score > 0) scoreTable.Get(pid + 1, 2).SetColor("#BAFFA8");
             if (s.catch_score < 0) scoreTable.Get(pid + 1, 2).SetColor("#FFA07A");
             scoreTable.Get(pid + 1, 2).SetContent(to_string(s.catch_score));
-            if (s.exit_score > 0) scoreTable.Get(pid + 1, 3).SetColor(GetBgColor(GridType::EXIT));
+            if (s.exit_score > 0) scoreTable.Get(pid + 1, 3).SetColor("#FFDB60");
             scoreTable.Get(pid + 1, 3).SetContent(to_string(s.exit_score));
             auto [c1, c2] = s.ExploreCount();
             scoreTable.Get(pid + 1, 4).SetContent(to_string(c1 + c2));
@@ -318,10 +317,10 @@ class Board
 
         bool wall = false;
         switch (direction) {
-            case Direct::UP:    wall = grid_map[cx][cy].Wall<Direct::UP>(); break;
-            case Direct::DOWN:  wall = grid_map[cx][cy].Wall<Direct::DOWN>(); break;
-            case Direct::LEFT:  wall = grid_map[cx][cy].Wall<Direct::LEFT>(); break;
-            case Direct::RIGHT: wall = grid_map[cx][cy].Wall<Direct::RIGHT>(); break;
+            case Direct::UP:    wall = grid_map[cx][cy].GetWall<Direct::UP>() != Wall::EMPTY; break;
+            case Direct::DOWN:  wall = grid_map[cx][cy].GetWall<Direct::DOWN>() != Wall::EMPTY; break;
+            case Direct::LEFT:  wall = grid_map[cx][cy].GetWall<Direct::LEFT>() != Wall::EMPTY; break;
+            case Direct::RIGHT: wall = grid_map[cx][cy].GetWall<Direct::RIGHT>() != Wall::EMPTY; break;
             default: return false;
         }
         // 非撞墙尝试移动箱子
@@ -370,10 +369,10 @@ class Board
         if (grid_map[b_nx][b_ny].Type() != GridType::EMPTY) return false;
 
         bool wall = false;
-        if (dx == -1 && dy == 0)        wall = grid_map[b_cx][b_cy].Wall<Direct::UP>();
-        else if (dx == 1 && dy == 0)    wall = grid_map[b_cx][b_cy].Wall<Direct::DOWN>();
-        else if (dx == 0 && dy == -1)   wall = grid_map[b_cx][b_cy].Wall<Direct::LEFT>();
-        else if (dx == 0 && dy == 1)    wall = grid_map[b_cx][b_cy].Wall<Direct::RIGHT>();
+        if (dx == -1 && dy == 0)        wall = grid_map[b_cx][b_cy].GetWall<Direct::UP>() != Wall::EMPTY;
+        else if (dx == 1 && dy == 0)    wall = grid_map[b_cx][b_cy].GetWall<Direct::DOWN>() != Wall::EMPTY;
+        else if (dx == 0 && dy == -1)   wall = grid_map[b_cx][b_cy].GetWall<Direct::LEFT>() != Wall::EMPTY;
+        else if (dx == 0 && dy == 1)    wall = grid_map[b_cx][b_cy].GetWall<Direct::RIGHT>() != Wall::EMPTY;
         if (wall) return false;
 
         bool sameBlock = false;
@@ -498,13 +497,13 @@ class Board
     {
         Grid grid = grid_map[players[pid].x][players[pid].y];
         if (players[pid].subspace > 0) {
-            grid.SetWall(false, false, false, false);
+            grid.SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
         }
         string info;
-        if (grid.Wall<Direct::UP>()) info += "墙"; else info += "空";
-        if (grid.Wall<Direct::DOWN>()) info += "墙"; else info += "空";
-        if (grid.Wall<Direct::LEFT>()) info += "墙"; else info += "空";
-        if (grid.Wall<Direct::RIGHT>()) info += "墙"; else info += "空";
+        if (grid.GetWall<Direct::UP>() != Wall::EMPTY) info += "墙"; else info += "空";
+        if (grid.GetWall<Direct::DOWN>() != Wall::EMPTY) info += "墙"; else info += "空";
+        if (grid.GetWall<Direct::LEFT>() != Wall::EMPTY) info += "墙"; else info += "空";
+        if (grid.GetWall<Direct::RIGHT>() != Wall::EMPTY) info += "墙"; else info += "空";
         return make_pair(info, GetBoard({{grid}}, false));
     }
 
@@ -761,17 +760,17 @@ class Board
     {
         for (int x = 0; x < size; x++) {
             for (int y = 0; y < size; y++) {
-                if (grid_map[x][y].Wall<Direct::LEFT>()) {
-                    grid_map[x][(y - 1 + size) % size].SetWall<Direct::RIGHT>(true);
+                if (grid_map[x][y].GetWall<Direct::LEFT>() != Wall::EMPTY) {
+                    grid_map[x][(y - 1 + size) % size].SetWall<Direct::RIGHT>(grid_map[x][y].GetWall<Direct::LEFT>());
                 }
-                if (grid_map[x][y].Wall<Direct::RIGHT>()) {
-                    grid_map[x][(y + 1 + size) % size].SetWall<Direct::LEFT>(true);
+                if (grid_map[x][y].GetWall<Direct::RIGHT>() != Wall::EMPTY) {
+                    grid_map[x][(y + 1 + size) % size].SetWall<Direct::LEFT>(grid_map[x][y].GetWall<Direct::RIGHT>());
                 }
-                if (grid_map[x][y].Wall<Direct::UP>()) {
-                    grid_map[(x - 1 + size) % size][y].SetWall<Direct::DOWN>(true);
+                if (grid_map[x][y].GetWall<Direct::UP>() != Wall::EMPTY) {
+                    grid_map[(x - 1 + size) % size][y].SetWall<Direct::DOWN>(grid_map[x][y].GetWall<Direct::UP>());
                 }
-                if (grid_map[x][y].Wall<Direct::DOWN>()) {
-                    grid_map[(x + 1 + size) % size][y].SetWall<Direct::UP>(true);
+                if (grid_map[x][y].GetWall<Direct::DOWN>() != Wall::EMPTY) {
+                    grid_map[(x + 1 + size) % size][y].SetWall<Direct::UP>(grid_map[x][y].GetWall<Direct::DOWN>());
                 }
             }
         }
@@ -802,13 +801,13 @@ class Board
             return false;
         }
         if (dx == -1 && dy == 0)
-            return !grid_map[x][y].Wall<Direct::UP>() && !grid_map[nx][ny].Wall<Direct::DOWN>();
+            return grid_map[x][y].GetWall<Direct::UP>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::DOWN>() == Wall::EMPTY;
         else if (dx == 1 && dy == 0)
-            return !grid_map[x][y].Wall<Direct::DOWN>() && !grid_map[nx][ny].Wall<Direct::UP>();
+            return grid_map[x][y].GetWall<Direct::DOWN>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::UP>() == Wall::EMPTY;
         else if (dx == 0 && dy == -1)
-            return !grid_map[x][y].Wall<Direct::LEFT>() && !grid_map[nx][ny].Wall<Direct::RIGHT>();
+            return grid_map[x][y].GetWall<Direct::LEFT>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::RIGHT>() == Wall::EMPTY;
         else if (dx == 0 && dy == 1)
-            return !grid_map[x][y].Wall<Direct::RIGHT>() && !grid_map[nx][ny].Wall<Direct::LEFT>();
+            return grid_map[x][y].GetWall<Direct::RIGHT>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::LEFT>() == Wall::EMPTY;
         return false;
     }
 
@@ -1080,29 +1079,36 @@ class Board
         return dx + dy;
     }
 
-    string GetBgStyle(const GridType type, const bool is_fill) const
+    string GetGridStyle(const GridType type, const bool is_bg) const
     {
-        string style;
-        if (is_fill) {
-            style += "fill: " + GetBgColor(type) + "; ";
+        if (is_bg) {
+            return "style=\"background-image: url('file:///" + image_path_ + GetGridImage(type) + "');\"";
         } else {
-            style += "background-color: " + GetBgColor(type) + "; ";
+            return "<img src='file:///" + image_path_ + GetGridImage(type) + "'>";
         }
-        return "style=\"" + style + "\"";
     }
 
-    string GetBgColor(const GridType type) const
+    string GetGridImage(const GridType type) const
     {
         switch (type) {
-            case GridType::GRASS:   return "#00AF50";
-            case GridType::WATER:   return "#01B0F1";
-            case GridType::ONEWAYPORTAL: return "#8563FF";
-            case GridType::PORTAL:  return "#73309A";
-            case GridType::EXIT:    return "#FFDB60";
-            case GridType::TRAP:    return "#808080";
-            case GridType::HEAT:    return "#FF0000";
-            case GridType::BOX:     return "#C55C10";
-            default:                return "#FFFFFF";
+            case GridType::GRASS:   return "grass.png";
+            case GridType::WATER:   return "water.png";
+            case GridType::ONEWAYPORTAL: return "oneway_portal.png";
+            case GridType::PORTAL:  return "portal.png";
+            case GridType::EXIT:    return "exit.png";
+            case GridType::TRAP:    return "trap.png";
+            case GridType::HEAT:    return "heat.png";
+            case GridType::BOX:     return "box.png";
+            default:                return "empty.png";
+        }
+    }
+
+    string GetWallColor(const Wall wall) const
+    {
+        switch (wall) {
+            case Wall::NORMAL:  return "#000000";
+            // case Wall::DOOR:    return "#C55C10";
+            default:            return "#FFFFFF";
         }
     }
 
