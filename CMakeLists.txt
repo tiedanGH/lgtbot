@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 project(BotCore LANGUAGES CXX C)
 
 set(CMAKE_SYSTEM_VERSION 1)
