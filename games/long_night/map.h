@@ -297,6 +297,18 @@ class UnitMaps {
         return InitializeMapTemplate();
     }
 
+    static bool MapContainGridType(const vector<Map> maps, const GridType& type)
+    {
+        for (const auto& map: maps) {
+            for (int k = 0; k < 9; ++k) {
+                if (map.block[k / 3][k % 3].Type() == type) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // 特殊事件详情
     static string ShowSpecialEvent(const int type)
     {
@@ -314,16 +326,16 @@ class UnitMaps {
     // 特殊事件1——怠惰的园丁：草丛将在其区块内随机位置生成
     void SpecialEvent1()
     {
-        for (auto& grid: maps) {
+        for (auto& map: maps) {
             for (int k = 0; k < 9; ++k) {
                 int i = k / 3, j = k % 3;
-                if (grid.block[i][j].Type() == GridType::GRASS) {
-                    grid.block[i][j].SetType(GridType::EMPTY);
+                if (map.block[i][j].Type() == GridType::GRASS) {
+                    map.block[i][j].SetType(GridType::EMPTY);
                     int m;
                     do {
                         m = rand() % 9;
-                    } while (grid.block[m / 3][m % 3].Type() != GridType::EMPTY);
-                    grid.block[m / 3][m % 3].SetType(GridType::GRASS);
+                    } while (map.block[m / 3][m % 3].Type() != GridType::EMPTY);
+                    map.block[m / 3][m % 3].SetType(GridType::GRASS);
                     break;
                 }
             }
@@ -333,15 +345,15 @@ class UnitMaps {
     // 特殊事件2——营养过剩：树丛将额外向随机1个方向再次生成1个
     void SpecialEvent2()
     {
-        for (auto& grid: maps) {
+        for (auto& map: maps) {
             for (int k = 0; k < 9; ++k) {
                 int i = k / 3, j = k % 3;
-                if (grid.block[i][j].Type() == GridType::GRASS && grid.type != GridType::SPECIAL) {
+                if (map.block[i][j].Type() == GridType::GRASS && map.type != GridType::SPECIAL) {
                     int m;
                     do {
                         m = rand() % 9;
-                    } while (!grid.block[m / 3][m % 3].CanGrow());
-                    grid.block[m / 3][m % 3].SetType(GridType::GRASS);
+                    } while (!map.block[m / 3][m % 3].CanGrow());
+                    map.block[m / 3][m % 3].SetType(GridType::GRASS);
                     break;
                 }
             }
@@ -351,11 +363,11 @@ class UnitMaps {
     // 特殊事件3——雨天小故事：地图中所有树丛变成水洼
     void SpecialEvent3()
     {
-        for (auto& grid: maps) {
+        for (auto& map: maps) {
             for (int k = 0; k < 9; ++k) {
                 int i = k / 3, j = k % 3;
-                if (grid.block[i][j].Type() == GridType::GRASS) {
-                    grid.block[i][j].SetType(GridType::WATER);
+                if (map.block[i][j].Type() == GridType::GRASS) {
+                    map.block[i][j].SetType(GridType::WATER);
                 }
             }
         }
@@ -463,17 +475,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, true, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, true);
-        map[1][1].SetWall(true, true, true, true);
-        map[1][2].SetWall(false, false, true, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(true, true, false, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -485,17 +497,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(false, true, false, false).SetGrowable(true);
-        map[0][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[0][2].SetWall(true, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, true, true, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, true, false, true);
-        map[2][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[2][2].SetWall(true, false, false, false).SetGrowable(true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -505,17 +517,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(false, true, true, false).SetGrowable(true);
-        map[0][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[0][2].SetWall(true, false, true, false).SetGrowable(true);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(true, false, false, false).SetGrowable(true);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, true, false, false).SetGrowable(true);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(false, true, false, true).SetGrowable(true);
-        map[2][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[2][2].SetWall(true, false, false, true).SetGrowable(true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
 
         return map;
     }
@@ -525,17 +537,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(false, false, false, true);
-        map[0][1].SetWall(true, false, true, false).SetGrowable(true);
-        map[0][2].SetWall(false, false, false, true).SetGrowable(true);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, true, false).SetGrowable(true);
-        map[2][1].SetWall(false, true, false, true).SetGrowable(true);
-        map[2][2].SetWall(false, false, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -548,17 +560,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, true, false, true);
-        map[0][1].SetWall(false, false, true, true);
-        map[0][2].SetWall(false, true, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, true, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(true, true, false, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, true);
-        map[2][1].SetWall(false, false, true, true);
-        map[2][2].SetWall(true, false, true, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -570,17 +582,17 @@ class UnitMaps {
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(true, false, false, true);
-        map[0][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[0][2].SetWall(false, true, false, false).SetGrowable(true);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(false, true, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(true, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, false).SetGrowable(true);
-        map[2][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[2][2].SetWall(false, true, true, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -590,17 +602,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(true, false, false, true).SetGrowable(true);
-        map[0][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[0][2].SetWall(false, true, false, true).SetGrowable(true);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
 
-        map[1][0].SetWall(false, true, false, false).SetGrowable(true);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(true, false, false, false).SetGrowable(true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(true, false, true, false).SetGrowable(true);
-        map[2][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[2][2].SetWall(false, true, true, false).SetGrowable(true);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -610,17 +622,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(false, false, true, false).SetGrowable(true);
-        map[0][1].SetWall(true, false, false, true).SetGrowable(true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(false, true, true, false).SetGrowable(true);
-        map[2][2].SetWall(false, false, false, true).SetGrowable(true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
 
         return map;
     }
@@ -629,17 +641,17 @@ class UnitMaps {
     {
         auto map = InitializeMapTemplate();
 
-        map[0][0].SetWall(false, false, false, true);
-        map[0][1].SetWall(true, true, true, false);
-        map[0][2].SetWall(false, false, false, true);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
 
-        map[1][0].SetWall(false, false, false, false);
-        map[1][1].SetWall(true, true, false, false);
-        map[1][2].SetWall(false, false, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, true, false);
-        map[2][1].SetWall(true, true, false, true);
-        map[2][2].SetWall(false, false, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -648,17 +660,17 @@ class UnitMaps {
     {
         auto map = InitializeMapTemplate();
 
-        map[0][0].SetWall(false, false, true, false);
-        map[0][1].SetWall(true, true, false, true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, false);
-        map[1][1].SetWall(true, true, false, false);
-        map[1][2].SetWall(false, false, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(true, true, true, false);
-        map[2][2].SetWall(false, false, false, true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
 
         return map;
     }
@@ -668,17 +680,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(true, true, false, false).SetGrowable(true);
-        map[0][1].SetWall(false, false, false, false).SetGrowable(true);
-        map[0][2].SetWall(true, true, false, false).SetGrowable(true);
+        map[0][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(true, true, false, false).SetGrowable(true);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(true, true, false, false).SetGrowable(true);
+        map[1][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(true, true, false, false).SetGrowable(true);
-        map[2][1].SetWall(false, false, false, false).SetGrowable(true);
-        map[2][2].SetWall(true, true, false, false).SetGrowable(true);
+        map[2][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -688,17 +700,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(false, false, true, true).SetGrowable(true);
-        map[0][1].SetWall(false, false, true, true).SetGrowable(true);
-        map[0][2].SetWall(false, false, true, true).SetGrowable(true);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL).SetGrowable(true);
 
-        map[1][0].SetWall(false, false, false, false).SetGrowable(true);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, false, false, false).SetGrowable(true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(false, false, true, true).SetGrowable(true);
-        map[2][1].SetWall(false, false, true, true).SetGrowable(true);
-        map[2][2].SetWall(false, false, true, true).SetGrowable(true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL).SetGrowable(true);
 
         return map;
     }
@@ -711,17 +723,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(false, true, false, true);
-        map[0][2].SetWall(true, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(true, true, true, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, true, false, true);
-        map[2][1].SetWall(true, false, true, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -734,17 +746,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(true, false, false, true);
-        map[0][1].SetWall(false, true, true, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(true, true, true, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(true, false, false, true);
-        map[2][2].SetWall(false, true, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -757,17 +769,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(true, false, false, true);
-        map[0][1].SetWall(false, false, true, true);
-        map[0][2].SetWall(true, false, true, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, true, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, true, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, false);
-        map[2][1].SetWall(false, false, false, false);
-        map[2][2].SetWall(true, false, false, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -778,17 +790,17 @@ class UnitMaps {
         map[1][1].SetType(GridType::PORTAL).SetPortal(1, 0);
         map[2][1].SetType(GridType::PORTAL).SetPortal(-1, 0);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, false, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, true);
-        map[1][1].SetWall(false, true, true, true);
-        map[1][2].SetWall(false, false, true, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(false, true, false, true);
-        map[2][1].SetWall(true, false, true, true);
-        map[2][2].SetWall(false, true, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -802,17 +814,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(true, true, false, false);
-        map[0][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[0][2].SetWall(true, false, true, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, false).SetGrowable(true);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, true, false, false).SetGrowable(true);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(false, true, false, true);
-        map[2][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[2][2].SetWall(true, true, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -826,17 +838,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(true, false, false, true);
-        map[0][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[0][2].SetWall(true, true, false, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, true, false, false).SetGrowable(true);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(true, false, false, false).SetGrowable(true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(true, true, false, false);
-        map[2][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[2][2].SetWall(false, true, true, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -845,17 +857,17 @@ class UnitMaps {
     {
         auto map = InitializeMapTemplate();
 
-        map[0][0].SetWall(false, true, false, false);
-        map[0][1].SetWall(false, false, false, false);
-        map[0][2].SetWall(true, false, false, true);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
 
-        map[1][0].SetWall(true, true, true, false);
-        map[1][1].SetWall(false, false, false, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, false);
-        map[2][1].SetWall(false, false, false, false);
-        map[2][2].SetWall(false, true, false, true);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
 
         return map;
     }
@@ -864,17 +876,17 @@ class UnitMaps {
     {
         auto map = InitializeMapTemplate();
 
-        map[0][0].SetWall(true, false, true, false);
-        map[0][1].SetWall(false, false, false, false);
-        map[0][2].SetWall(false, true, false, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(false, false, true, false);
-        map[1][2].SetWall(true, true, false, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
 
-        map[2][0].SetWall(false, true, true, false);
-        map[2][1].SetWall(false, false, false, false);
-        map[2][2].SetWall(true, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -883,17 +895,17 @@ class UnitMaps {
     {
         auto map = InitializeMapTemplate();
 
-        map[0][0].SetWall(false, true, true, false);
-        map[0][1].SetWall(false, true, false, false);
-        map[0][2].SetWall(true, false, false, true);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
 
-        map[1][0].SetWall(true, false, false, false);
-        map[1][1].SetWall(true, false, false, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, false, false, true);
-        map[2][2].SetWall(false, true, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -902,17 +914,17 @@ class UnitMaps {
     {
         auto map = InitializeMapTemplate();
 
-        map[0][0].SetWall(true, false, false, true);
-        map[0][1].SetWall(false, false, true, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(false, true, true, false);
-        map[1][2].SetWall(false, true, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, true, true, false);
-        map[2][1].SetWall(true, false, false, false);
-        map[2][2].SetWall(true, false, false, true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
 
         return map;
     }
@@ -922,17 +934,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(false, true, false, true);
-        map[0][1].SetWall(false, false, true, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, false, false, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, false, false, false);
-        map[2][2].SetWall(false, true, false, true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
 
         return map;
     }
@@ -942,17 +954,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(true, false, true, false);
-        map[0][1].SetWall(false, false, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, true, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, false, false, true);
-        map[2][2].SetWall(true, false, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -989,17 +1001,17 @@ class UnitMaps {
         map[1][2].SetType(GridType::PORTAL).SetPortal(0, -2);
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(false, true, false, false);
-        map[0][1].SetWall(true, false, false, false);
-        map[0][2].SetWall(false, true, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(true, true, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(true, true, true, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, false);
-        map[2][1].SetWall(false, true, false, false);
-        map[2][2].SetWall(true, false, false, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1011,17 +1023,17 @@ class UnitMaps {
         map[1][1].SetType(GridType::WATER);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(false, false, false, true);
-        map[0][2].SetWall(false, true, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, true, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(true, false, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, true);
-        map[2][1].SetWall(false, false, true, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1033,17 +1045,17 @@ class UnitMaps {
         map[1][1].SetType(GridType::WATER);
         map[2][0].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, true, false, true);
-        map[0][1].SetWall(false, false, true, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, true, false, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, false, false, true);
-        map[2][2].SetWall(true, false, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -1055,17 +1067,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(false, true, false, false).SetGrowable(true);
-        map[0][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[0][2].SetWall(true, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, true, true, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, true, false, true);
-        map[2][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[2][2].SetWall(true, false, false, false).SetGrowable(true);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -1077,17 +1089,17 @@ class UnitMaps {
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
         map[1][1].SetType(GridType::GRASS);
 
-        map[0][0].SetWall(true, false, false, true);
-        map[0][1].SetWall(false, false, true, false).SetGrowable(true);
-        map[0][2].SetWall(false, true, false, false).SetGrowable(true);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(false, true, false, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(true, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, false).SetGrowable(true);
-        map[2][1].SetWall(false, false, false, true).SetGrowable(true);
-        map[2][2].SetWall(false, true, true, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -1097,17 +1109,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, false, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, false, true, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, true, false, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1120,17 +1132,17 @@ class UnitMaps {
     //     map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
     //     map[2][2].SetType(GridType::WATER);
 
-    //     map[0][0].SetWall();
-    //     map[0][1].SetWall();
-    //     map[0][2].SetWall();
+    //     map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+    //     map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+    //     map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-    //     map[1][0].SetWall();
-    //     map[1][1].SetWall();
-    //     map[1][2].SetWall();
+    //     map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+    //     map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+    //     map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-    //     map[2][0].SetWall();
-    //     map[2][1].SetWall();
-    //     map[2][2].SetWall();
+    //     map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+    //     map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+    //     map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
     //     return map;
     // }
@@ -1140,17 +1152,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::EXIT);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, false, false, true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, true);
-        map[1][1].SetWall(false, true, true, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(true, true, false, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1160,17 +1172,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::EXIT);
 
-        map[0][0].SetWall(false, false, false, true);
-        map[0][1].SetWall(true, false, true, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(false, true, true, true);
-        map[1][2].SetWall(false, false, true, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(true, true, false, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1180,17 +1192,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::EXIT);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, true, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, true);
-        map[1][1].SetWall(true, false, true, true);
-        map[1][2].SetWall(false, false, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, true, false, true);
-        map[2][2].SetWall(false, false, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -1200,17 +1212,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::EXIT);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, true, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, true);
-        map[1][1].SetWall(true, false, true, true);
-        map[1][2].SetWall(false, false, true, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(false, true, true, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1224,17 +1236,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::WATER);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, false, false, true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, true);
-        map[1][1].SetWall(false, false, true, true);
-        map[1][2].SetWall(false, false, true, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(false, true, true, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1248,17 +1260,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, true, false, false);
-        map[0][1].SetWall(true, true, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, true, false);
-        map[1][1].SetWall(true, true, false, false);
-        map[1][2].SetWall(false, true, false, true);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(true, true, false, false);
-        map[2][2].SetWall(true, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1272,17 +1284,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, true, false, true);
-        map[0][1].SetWall(true, false, true, false);
-        map[0][2].SetWall(false, true, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, true);
-        map[1][1].SetWall(false, true, true, true);
-        map[1][2].SetWall(true, false, true, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(true, true, false, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1296,17 +1308,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, true, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, true, false, true);
-        map[1][1].SetWall(true, false, true, true);
-        map[1][2].SetWall(false, true, true, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[1][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, false);
-        map[2][1].SetWall(false, true, false, true);
-        map[2][2].SetWall(true, false, true, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -1319,17 +1331,17 @@ class UnitMaps {
         map[1][1].SetType(GridType::TRAP);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(false, false, false, true);
-        map[0][1].SetWall(true, false, true, true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, false, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(false, true, true, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1342,17 +1354,17 @@ class UnitMaps {
         map[2][1].SetType(GridType::EXIT);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, false, false, true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, false, false, false);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(false, true, true, true);
-        map[2][2].SetWall(false, false, true, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }
@@ -1371,17 +1383,17 @@ class UnitMaps {
         map[2][1].SetType(GridType::TRAP);
         map[2][2].SetType(GridType::WATER);
 
-        map[0][0].SetWall(false, true, false, false);
-        map[0][1].SetWall(false, false, false, true);
-        map[0][2].SetWall(false, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, true, false, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, false, false, true);
-        map[2][1].SetWall(false, false, true, false);
-        map[2][2].SetWall(true, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1395,17 +1407,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(false, false, false, false);
-        map[0][1].SetWall(true, false, false, false);
-        map[0][2].SetWall(false, false, false, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(false, false, true, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, false, false, true);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
 
-        map[2][0].SetWall(false, false, false, false);
-        map[2][1].SetWall(false, true, false, false);
-        map[2][2].SetWall(false, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1419,17 +1431,17 @@ class UnitMaps {
         map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(false, true, false, false);
-        map[0][1].SetWall(false, false, false, true);
-        map[0][2].SetWall(true, false, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, false, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(false, true, false, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(false, true, false, true);
-        map[2][1].SetWall(false, false, true, false);
-        map[2][2].SetWall(true, false, false, false);
+        map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
     }
@@ -1447,17 +1459,17 @@ class UnitMaps {
         map[2][1].SetType(GridType::PORTAL).SetPortal(-2, 0);
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
-        map[0][0].SetWall(false, true, false, true);
-        map[0][1].SetWall(false, false, true, true);
-        map[0][2].SetWall(false, true, true, false);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(true, true, false, false);
-        map[1][1].SetWall(false, false, false, false);
-        map[1][2].SetWall(true, true, false, false);
+        map[1][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
-        map[2][0].SetWall(true, false, false, true);
-        map[2][1].SetWall(false, false, true, true);
-        map[2][2].SetWall(true, false, true, false);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
     }

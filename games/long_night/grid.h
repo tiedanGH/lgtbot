@@ -1,11 +1,22 @@
 
-enum class Direct { UP = 0, DOWN = 1, LEFT = 2, RIGHT = 3 };
+enum class Direct {
+    UP = 0,
+    DOWN = 1,
+    LEFT = 2,
+    RIGHT = 3
+};
 
 enum class Sound {
     NONE = 0,
     SHASHA = 1,
     PAPA = 2,
     BOSS = 3,
+};
+
+enum class Wall {
+    EMPTY = 0,
+    NORMAL = 1,
+    // DOOR = 2,
 };
 
 enum class GridType {
@@ -133,12 +144,14 @@ class Grid
 
     bool TrapStatus() const { return trap; }
 
-    bool IsFullyEnclosed() const { return wall[0] && wall[1] && wall[2] && wall[3]; }
+    bool IsFullyEnclosed() const {
+        return wall[0] == Wall::NORMAL && wall[1] == Wall::NORMAL && wall[2] == Wall::NORMAL && wall[3] == Wall::NORMAL;
+    }
 
     template <Direct direct>
-    void SetWall(const bool has_wall) { wall[static_cast<int>(direct)] = has_wall; }
+    void SetWall(const Wall new_wall) { wall[static_cast<int>(direct)] = new_wall; }
 
-	Grid& SetWall(const bool up, const bool down, const bool left, const bool right)
+	Grid& SetWall(const Wall up, const Wall down, const Wall left, const Wall right)
     {
         wall[0] = up;
         wall[1] = down;
@@ -158,7 +171,7 @@ class Grid
     void SetPortal(const int relPosX, const int relPosY) { this->portalRelPos = {relPosX, relPosY}; }
 
     template <Direct direct>
-    bool Wall() const { return wall[static_cast<int>(direct)]; }
+    Wall GetWall() const { return wall[static_cast<int>(direct)]; }
 
     GridType Type() const { return type; }
 
@@ -168,7 +181,7 @@ class Grid
 
   private:
 	// 四周墙面（上/下/左/右）
-	bool wall[4] = {false, false, false, false};
+	Wall wall[4] = { Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY };
     // 区块类型
 	GridType type = GridType::EMPTY;
     // 传送门相对位置（PORTAL）
