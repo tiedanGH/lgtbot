@@ -29,7 +29,7 @@ template <typename... SubStages> using MainGameStage = StageFsm<void, SubStages.
 const GameProperties k_properties { 
     .name_ = "漫漫长夜", // the game name which should be unique among all the games
     .developer_ = "铁蛋",
-    .description_ = "在漆黑的迷宫中探索，根据有限的线索展开追击和逃生",
+    .description_ = "在漆黑的迷宫中探索，根据有限的线索展开追击与逃生",
     .shuffled_player_id_ = true,
 };
 uint64_t MaxPlayerNum(const MyGameOptions& options) { return 8; }
@@ -164,11 +164,10 @@ class MainStage : public MainGameStage<RoundStage>
             sender << UnitMaps::ShowSpecialEvent(GAME_OPTION(特殊事件)) << "\n\n";
         }
         if (GAME_OPTION(边长) == 10) {      // 边长10
-            bool found = board.unitMaps.RandomizeBlockPosition(GAME_OPTION(边长));
-            if (found) {
+            if (board.unitMaps.RandomizeBlockPosition(GAME_OPTION(边长))) {
                 sender << "【10*10】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。9个区块在大地图随机排列，区块不会重叠。没有区块覆盖的地图空隙将变成普通道路。\n";
             } else {
-                sender << "[错误] 生成10*10地图时发生错误：未能成功随机布局！";
+                sender << "[错误] 生成10*10地图时发生错误：未能成功随机布局，游戏无法正常开始！";
                 return;
             }
         }
@@ -480,6 +479,24 @@ class RoundStage : public SubGameStage<>
             if (heat_message != "") {
                 Global().Tell(pid) << step_info << heat_message;
                 Main().board.players[pid].private_record += "\n" + step_info;
+            }
+            // 按钮
+            if (grid.Type() == GridType::BUTTON) {
+                Grid::ButtonTarget target = grid.ButtonTargetPos();
+                const int s = Main().board.size;
+                // 切换门状态
+                if (target.dir.has_value()) {
+                    int tx = player.x + target.dx;
+                    int ty = player.y + target.dy;
+                    const Direct dir = target.dir.value();
+                    Main().board.grid_map[tx][ty].switchDoor(dir);
+                    const int dx[4] = {-1, 1, 0, 0};
+                    const int dy[4] = {0, 0, -1, 1};
+                    int d = static_cast<int>(direction);
+                    int nx = (tx + dx[d] + s) % s;
+                    int ny = (ty + dy[d] + s) % s;
+                    Main().board.grid_map[nx][ny].switchDoor(opposite(dir));
+                }
             }
             // 声响
             Sound sound = Main().board.GetSound(grid, GAME_OPTION(特殊事件) == 3);
