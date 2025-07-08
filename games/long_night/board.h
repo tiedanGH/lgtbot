@@ -206,15 +206,24 @@ class Board
                 "<rect x=\"0\" y=\"10\" width=\"50\" height=\"50\" fill=\"white\" stroke=\"black\"/>"
                 "<rect x=\"0\" y=\"60\" width=\"50\" height=\"10\" fill=\"black\"/>"
                 "</svg>";
+        auto GenerateWallSvg = [](const std::string& color) -> std::string {
+            return "<svg width=\"50\" height=\"10\">"
+                "<rect x=\"0\" y=\"0\" width=\"50\" height=\"10\" fill=\"" + color + "\"/>"
+                "</svg>";
+        };
+        const vector<pair<Wall, string>> all_walls_info = {
+            { Wall::DOOR, "【门】初始为关闭状态，关闭时视为墙壁。在区块中对应的按钮被按下时会切换开关状态<br>注意：关闭状态的门在私信墙壁信息内会显示为**普通墙壁**，门在开关时**没有信息提示**" },
+        };
         const vector<pair<GridType, string>> all_grids_info = {
-            { GridType::GRASS, "【树丛】玩家进入时会发出让其他人听见的沙沙声。（出生不算）" },
-            { GridType::WATER, "【水洼】玩家进入时会发出让其他人听见的啪啪声。（出生不算）" },
-            { GridType::PORTAL, "【传送门】玩家进入时会发出其他人听见的啪啪声。（出生不算）<br>进入后，再任意2次移动后就会传送至同区块另1个传送门。<br>进入后，玩家视作进入亚空间，上述2次移动都在亚空间内。" },
-            { GridType::ONEWAYPORTAL, "【传送门出口】玩家进入时会发出其他人听见的啪啪声。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br><b>玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置</b>" },
-            { GridType::TRAP, "【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的沙沙声（出生不算）<br>被偶数次进入时，不发出声响，并强制玩家停止（出生不算）" },
-            { GridType::HEAT, "【热源】进入热源周围8格时，将私信受到热浪提示。（出生不算）<br>当进入热源时，将私信收到高温烫伤提示（不会出生在热源内）<br><b>在整局游戏中，如果第二次进入热源，则直接出局并-150分</b>" },
-            { GridType::BOX, "【箱子】玩家相邻箱子且向箱子移动时，箱子可被推动。（不会出生在箱子内）<br>箱子不可移动到本区块外。若箱子不可推动，则撞墙，箱子本身不会显示为墙。" },
-            { GridType::EXIT, "【逃生舱】逃生者使用后，会消失。默认逃生舱数=人数的一半" },
+            { GridType::BUTTON, "【按钮】玩家进入时会触发区块内按钮相关事件。（出生不算）<br>进入按钮格**没有任何信息提示**，且仅在进入时才会触发按钮" },
+            { GridType::GRASS, "【树丛】玩家进入时会发出让其他人听见的**沙沙声**。（出生不算）" },
+            { GridType::WATER, "【水洼】玩家进入时会发出让其他人听见的**啪啪声**。（出生不算）" },
+            { GridType::PORTAL, "【传送门】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>进入后，再任意2次移动后就会传送至同区块另1个传送门。<br>进入后，玩家视作进入亚空间，上述2次移动都在亚空间内。" },
+            { GridType::ONEWAYPORTAL, "【传送门出口】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br>**玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置**" },
+            { GridType::TRAP, "【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的**沙沙声**（出生不算）<br>被偶数次进入时，不发出声响，并**强制玩家停止**（出生不算）" },
+            { GridType::HEAT, "【热源】进入热源周围8格时，将**私信**受到热浪提示。（出生不算）<br>当进入热源时，将**私信**收到高温烫伤提示（不会出生在热源内）<br>**在整局游戏中，如果第二次进入热源，则直接出局并-150分**" },
+            { GridType::BOX, "【箱子】玩家相邻箱子且向箱子移动时，箱子可被推动。（不会出生在箱子内）<br>**箱子不可移动到本区块外**。若箱子不可推动，则撞墙，箱子本身不会显示为墙。" },
+            { GridType::EXIT, "【逃生舱】逃生者使用后，**会消失**。默认逃生舱数=人数的一半" },
         };
         vector<UnitMaps::Map> all_maps_in_game;
         all_maps_in_game.insert(all_maps_in_game.end(), maps.begin(), maps.end());
@@ -229,6 +238,13 @@ class Board
         legend.Get(0, 0).SetContent(wall_svg);
         legend.Get(0, 1).SetContent("【墙壁】黑色为墙壁，如图例，玩家不可从上下通过，可以从左右通过");
         row = 1;
+        for (const auto& wall_info: all_walls_info) {
+            if (UnitMaps::MapContainWallType(all_maps_in_game, wall_info.first)) {
+                legend.Get(row, 0).SetContent(GenerateWallSvg(GetWallColor(wall_info.first)));
+                legend.Get(row, 1).SetContent(wall_info.second);
+                row++;
+            }
+        }
         for (const auto& grid_info: all_grids_info) {
             if (UnitMaps::MapContainGridType(all_maps_in_game, grid_info.first)) {
                 if (grid_info.first == GridType::GRASS && special == 3) continue;
@@ -492,18 +508,20 @@ class Board
         return false;
     }
 
-    // 获取四周墙壁信息
+    // 获取四周墙壁信息（仅显示墙壁，不展示详细颜色）
     pair<string, string> GetSurroundingWalls(const PlayerID pid) const
     {
         Grid grid = grid_map[players[pid].x][players[pid].y];
         if (players[pid].subspace > 0) {
             grid.SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        } else {
+            grid.HideSpecialWalls();
         }
         string info;
-        if (grid.GetWall<Direct::UP>() != Wall::EMPTY) info += "墙"; else info += "空";
-        if (grid.GetWall<Direct::DOWN>() != Wall::EMPTY) info += "墙"; else info += "空";
-        if (grid.GetWall<Direct::LEFT>() != Wall::EMPTY) info += "墙"; else info += "空";
-        if (grid.GetWall<Direct::RIGHT>() != Wall::EMPTY) info += "墙"; else info += "空";
+        if (grid.GetWall<Direct::UP>() == Wall::EMPTY) info += "空"; else info += "墙";
+        if (grid.GetWall<Direct::DOWN>() == Wall::EMPTY) info += "空"; else info += "墙";
+        if (grid.GetWall<Direct::LEFT>() == Wall::EMPTY) info += "空"; else info += "墙";
+        if (grid.GetWall<Direct::RIGHT>() == Wall::EMPTY) info += "空"; else info += "墙";
         return make_pair(info, GetBoard({{grid}}, false));
     }
 
@@ -1091,6 +1109,7 @@ class Board
     string GetGridImage(const GridType type) const
     {
         switch (type) {
+            case GridType::EMPTY:   return "empty.png";
             case GridType::GRASS:   return "grass.png";
             case GridType::WATER:   return "water.png";
             case GridType::ONEWAYPORTAL: return "oneway_portal.png";
@@ -1099,16 +1118,18 @@ class Board
             case GridType::TRAP:    return "trap.png";
             case GridType::HEAT:    return "heat.png";
             case GridType::BOX:     return "box.png";
-            default:                return "empty.png";
+            case GridType::BUTTON:  return "button.png";
+            default:                return "unknown.png";
         }
     }
 
     string GetWallColor(const Wall wall) const
     {
         switch (wall) {
+            case Wall::EMPTY:   return "#FFFFFF";
             case Wall::NORMAL:  return "#000000";
-            // case Wall::DOOR:    return "#C55C10";
-            default:            return "#FFFFFF";
+            case Wall::DOOR:    return "#EA68A2";
+            default:            return "#D9D9D9";
         }
     }
 

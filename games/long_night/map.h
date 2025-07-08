@@ -2,7 +2,7 @@
 class UnitMaps {
   public:
     // 撞墙提示
-    static constexpr const array<string_view, 30> wall_hints = {
+    static constexpr const array<string_view, 31> wall_hints = {
         "砰！你狠狠地撞在了一堵墙上！",     // 铁蛋
         "一阵剧痛传来，你撞上了一堵墙，看来这里走不通。",
         "黑暗中，你的身体撞击了一面粗糙的墙壁。",
@@ -33,6 +33,7 @@ class UnitMaps {
         "黑暗中突然出现的墙壁，像是命运在说：换个方向试试？",   // 月影
         "你试图用脸测量墙壁的硬度，恭喜获得物理系荣誉学位！",
         "砰！你与墙壁进行了深入交流，结论是它比你想象的更固执。",
+        "砰！脑门和墙壁的亲密接触，证明了你对探索的执着！",     // 小葵
     };
     // 第一步撞墙提示
     static constexpr const array<string_view, 4> firststep_wall_hints = {
@@ -203,6 +204,7 @@ class UnitMaps {
         // {Map31(), GridType::PORTAL, "31"},
         // {Map32(), GridType::PORTAL, "32"},
         {Map33(), GridType::TRAP, "33"},
+        {Map34(), GridType::BUTTON, "34"},
     };
     const vector<Map> all_exits = {
         {Exit1(), GridType::EXIT, "1"},
@@ -224,9 +226,9 @@ class UnitMaps {
     };
 
     const vector<string> rotation_maps_id = {
-        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+        "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
         "21", "22", "23", "24", "26",
-        "29", "30", "33"
+        "29", "30", "33", "34"
     };
     const vector<string> rotation_exits_id = {"1", "2", "3", "4"};
     vector<Map> rotation_maps;
@@ -297,11 +299,23 @@ class UnitMaps {
         return InitializeMapTemplate();
     }
 
-    static bool MapContainGridType(const vector<Map> maps, const GridType& type)
+    static bool MapContainGridType(const vector<Map>& maps, const GridType& type)
     {
         for (const auto& map: maps) {
             for (int k = 0; k < 9; ++k) {
                 if (map.block[k / 3][k % 3].Type() == type) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    static bool MapContainWallType(const vector<Map>& maps, const Wall& wall)
+    {
+        for (const auto& map: maps) {
+            for (int k = 0; k < 9; ++k) {
+                if (map.block[k / 3][k % 3].ContainWallType(wall)) {
                     return true;
                 }
             }
@@ -1124,7 +1138,28 @@ class UnitMaps {
         return map;
     }
 
-    // static vector<vector<Grid>> Map34()
+    static vector<vector<Grid>> Map34()
+    {
+        auto map = InitializeMapTemplate();
+        map[0][2].SetType(GridType::BUTTON).SetButton(0, -2, Direct::DOWN);
+        map[2][0].SetType(GridType::BUTTON).SetButton(0, 2, Direct::UP);
+
+        map[0][0].SetWall(Wall::EMPTY, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+
+        map[1][0].SetWall(Wall::DOOR, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::NORMAL, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+
+        return map;
+    }
+
+    // static vector<vector<Grid>> Map35()
     // {
     //     auto map = InitializeMapTemplate();
     //     map[0][0].SetType(GridType::WATER);
