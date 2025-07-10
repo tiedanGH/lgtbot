@@ -883,11 +883,10 @@ void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason,
 
     for(int i = 0; i < Global().PlayerNum(); i++) {
         player_scores_[i] = player_coins_[i];
-        if (player_out_[i] > 0) {
-            player_scores_[i] += (GAME_OPTION(特殊规则) == 2) ? player_alive_round_[i] : -ceil(player_alive_round_[i] * 0.5);
-        } else {
-            player_scores_[i] += (GAME_OPTION(特殊规则) == 2) ? round_ - 1 : -ceil((round_ - 1) * 0.5);
+        if (player_out_[i] == 0) {
+            player_alive_round_[i] = GAME_OPTION(回合数);
         }
+        player_scores_[i] += (GAME_OPTION(特殊规则) == 2) ? player_alive_round_[i] : -ceil(player_alive_round_[i] * 0.5);
     }
     // Returning empty variant means the game will be over.
     return;
