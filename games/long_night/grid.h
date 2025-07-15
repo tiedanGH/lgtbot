@@ -1,9 +1,9 @@
 
 enum class Direct {
-    UP = 0,
-    DOWN = 1,
-    LEFT = 2,
-    RIGHT = 3,
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
 };
 
 enum class Sound {
@@ -40,6 +40,9 @@ const map<string, Direct> direction_map = {
 	{"右", Direct::RIGHT}, {"R", Direct::RIGHT}, {"y", Direct::RIGHT},
 };
 
+static constexpr int k_DX_Direct[4] = {-1, 1, 0, 0};
+static constexpr int k_DY_Direct[4] = {0, 0, -1, 1};
+
 const string num[10] = {"⓪", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"};
 
 const int hide_limit = 4;
@@ -52,7 +55,6 @@ const char* score_rule = R"(
 　【探索分】<br>
 每探索一个自己未探索的格子+1<br>
 每探索一个所有玩家未探索的格子额外+1<br>
-【热源惩罚】因热源出局-150分<br>
 【退出惩罚】强制退出-300分<br>)";
 
 Direct opposite(Direct dir)
@@ -63,7 +65,7 @@ Direct opposite(Direct dir)
         case Direct::LEFT: return Direct::RIGHT;
         case Direct::RIGHT: return Direct::LEFT;
     }
-    assert(false);  // Invalid direction
+    throw std::invalid_argument("Invalid direction");
 }
 
 
@@ -158,14 +160,11 @@ class Grid
     void switchDoor(const Direct dir)
     {
         Wall& target = wall[static_cast<int>(dir)];
-        target = (target == Wall::DOOR) ? Wall::EMPTY : Wall::DOOR;
-    }
-
-    bool TrapStatus() const { return trap; }
-
-    bool IsFullyEnclosed() const
-    {
-        return wall[0] == Wall::NORMAL && wall[1] == Wall::NORMAL && wall[2] == Wall::NORMAL && wall[3] == Wall::NORMAL;
+        switch (target) {
+            case Wall::DOOR: target = Wall::EMPTY; break;
+            case Wall::EMPTY: target = Wall::DOOR; break;
+            default:;
+        }
     }
 
     void HideSpecialWalls()
@@ -174,9 +173,19 @@ class Grid
             if (wall[i] != Wall::EMPTY) wall[i] = Wall::NORMAL;
     }
 
+
+    bool IsFullyEnclosed() const
+    {
+        return wall[0] == Wall::NORMAL && wall[1] == Wall::NORMAL && wall[2] == Wall::NORMAL && wall[3] == Wall::NORMAL;
+    }
+    bool ContainWallType(const Wall w) const
+    {
+        return wall[0] == w || wall[1] == w || wall[2] == w || wall[3] == w;
+    }
+
     template <Direct direct>
     void SetWall(const Wall new_wall) { wall[static_cast<int>(direct)] = new_wall; }
-
+    void SetWallByEnum(Direct direct, const Wall new_wall) { wall[static_cast<int>(direct)] = new_wall; }
 	Grid& SetWall(const Wall up, const Wall down, const Wall left, const Wall right)
     {
         wall[0] = up;
@@ -185,51 +194,55 @@ class Grid
         wall[3] = right;
         return *this;
     }
-
     Grid& SetType(const GridType type)
     {
         this->type = type;
         return *this;
     }
-
-    void SetGrowable(const bool growable) { this->growable = growable; }
-
-    void SetPortal(const int relPosX, const int relPosY) { this->portalRelPos = {relPosX, relPosY}; }
-
-    void SetButton(const int relPosX, const int relPosY, const optional<Direct> dir = nullopt)
+    Grid& SetPortal(const int relPosX, const int relPosY) {
+        this->portalRelPos = {relPosX, relPosY};
+        return *this;
+    }
+    Grid& SetButton(const int relPosX, const int relPosY, const optional<Direct> dir = nullopt)
     {
         this->buttonRelPos = {relPosX, relPosY, dir};
+        return *this;
     }
+    void SetGrowable(const bool growable) { this->growable = growable; }
+    void SetContent(const string& content, const string& color = "")
+    {
+        if (color.empty()) {
+            this->content.first = content;
+        } else {
+            this->content.first = "<span style=\"color:" + color + "\">" + content + "</span>";
+        }
+    }
+    void SetWallContent(const vector<string>& wall_content) { this->content.second = wall_content; }
 
     template <Direct direct>
     Wall GetWall() const { return wall[static_cast<int>(direct)]; }
-
+    Wall GetWallByEnum(Direct direct) const { return wall[static_cast<int>(direct)]; }
     GridType Type() const { return type; }
-
     pair<int, int> PortalPos() const { return portalRelPos; }
-
+    bool TrapStatus() const { return trap; }
     bool CanGrow() const { return growable; }
-
-
+    pair<string, vector<string>> GetContent() const { return content; }
     // 按钮触发位置关联
     struct ButtonTarget {
         int dx;
         int dy;
         std::optional<Direct> dir;
     };
-
     ButtonTarget ButtonTargetPos() const { return buttonRelPos; }
 
-    bool ContainWallType(const Wall w) const
-    {
-        return wall[0] == w || wall[1] == w || wall[2] == w || wall[3] == w;
-    }
-
   private:
-	// 四周墙面（上/下/左/右）
-	Wall wall[4] = { Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY };
     // 区块类型
 	GridType type = GridType::EMPTY;
+	// 四周墙面（上/下/左/右）
+	Wall wall[4] = { Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY };
+
+    // 预览用提示文本
+    pair<string, vector<string>> content = {"", {}};
     // 特殊规则2草丛是否可生长
     bool growable = false;
 
@@ -237,6 +250,7 @@ class Grid
     pair<int, int> portalRelPos = {0, 0};
     // 按钮触发位置（BUTTON）
     ButtonTarget buttonRelPos = {0, 0, nullopt};
+
     // 陷阱状态（TRAP）
     bool trap = true;
 };
