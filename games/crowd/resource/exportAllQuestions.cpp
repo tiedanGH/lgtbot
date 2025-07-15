@@ -5,13 +5,16 @@
 #include <numeric>
 
 #include "../problems.h"
+#include "../problems_t.h"
 
 using namespace std;
 
 // formal questions
-constexpr static uint32_t k_question_num = 72;
-// with test questions
-constexpr static uint32_t all_question_num = 113;
+constexpr static uint32_t k_question_num = 78;
+// with test1 questions
+constexpr static uint32_t all_question_num = 132;
+// test2 questions
+constexpr static uint32_t t_question_num = 24;
 
 
 static const std::array<Question*(*)(), all_question_num> create_question{
@@ -87,13 +90,13 @@ static const std::array<Question*(*)(), all_question_num> create_question{
     []() -> Question* { return new Q70(); },
     []() -> Question* { return new Q71(); },
     []() -> Question* { return new Q72(); },
-    // test questions
     []() -> Question* { return new Q73(); },
     []() -> Question* { return new Q74(); },
     []() -> Question* { return new Q75(); },
     []() -> Question* { return new Q76(); },
     []() -> Question* { return new Q77(); },
     []() -> Question* { return new Q78(); },
+    // test questions
     []() -> Question* { return new Q79(); },
     []() -> Question* { return new Q80(); },
     []() -> Question* { return new Q81(); },
@@ -129,25 +132,79 @@ static const std::array<Question*(*)(), all_question_num> create_question{
     []() -> Question* { return new Q111(); },
     []() -> Question* { return new Q112(); },
     []() -> Question* { return new Q113(); },
+    []() -> Question* { return new Q114(); },
+    []() -> Question* { return new Q115(); },
+    []() -> Question* { return new Q116(); },
+    []() -> Question* { return new Q117(); },
+    []() -> Question* { return new Q118(); },
+    []() -> Question* { return new Q119(); },
+    []() -> Question* { return new Q120(); },
+    []() -> Question* { return new Q121(); },
+    []() -> Question* { return new Q122(); },
+    []() -> Question* { return new Q123(); },
+    []() -> Question* { return new Q124(); },
+    []() -> Question* { return new Q125(); },
+    []() -> Question* { return new Q126(); },
+    []() -> Question* { return new Q127(); },
+    []() -> Question* { return new Q128(); },
+    []() -> Question* { return new Q129(); },
+    []() -> Question* { return new Q130(); },
+    []() -> Question* { return new Q131(); },
+    []() -> Question* { return new Q132(); },
 };
 
-string init_question(int id)
+// test mode 2
+static const std::array<Question*(*)(), t_question_num> test_question{
+    []() -> Question* { return new Qt1(); },
+    []() -> Question* { return new Qt2(); },
+    []() -> Question* { return new Qt3(); },
+    []() -> Question* { return new Qt4(); },
+    []() -> Question* { return new Qt5(); },
+    []() -> Question* { return new Qt6(); },
+    []() -> Question* { return new Qt7(); },
+    []() -> Question* { return new Qt8(); },
+    []() -> Question* { return new Qt9(); },
+    []() -> Question* { return new Qt10(); },
+    []() -> Question* { return new Qt11(); },
+    []() -> Question* { return new Qt12(); },
+    []() -> Question* { return new Qt13(); },
+    []() -> Question* { return new Qt14(); },
+    []() -> Question* { return new Qt15(); },
+    []() -> Question* { return new Qt16(); },
+    []() -> Question* { return new Qt17(); },
+    []() -> Question* { return new Qt18(); },
+    []() -> Question* { return new Qt19(); },
+    []() -> Question* { return new Qt20(); },
+    []() -> Question* { return new Qt21(); },
+    []() -> Question* { return new Qt22(); },
+    []() -> Question* { return new Qt23(); },
+    []() -> Question* { return new Qt24(); },
+};
+
+string init_question(const int id, const int mode)
 {
     vector<Player> players;
     Player tempP;
     for (int i = 0; i < 10; i++) {
         players.push_back(tempP);
     }
-    Question* question = create_question[id - 1]();
+    Question* question;
+    if (mode != 2) {
+        question = create_question[id - 1]();
+    } else {
+        question = test_question[id - 1]();
+    }
     question -> init(players);
     question -> initTexts(players);
     question -> initOptions();
     thread_local static string str;
     str = "";
-    str += "题号：#" + to_string(question -> id) + "\n";
+    str += string("题号：#") + (mode == 2 ? "t" : "") + to_string(question -> id) + "\n";
     str += "出题者：" + (question -> author) + "\n";
-    if (id > k_question_num) {
+    if (mode == 1) {
         str += "[测试] ";
+    } else if (mode == 2) {
+        str += "[其他/废弃] ";
     }
     str += "题目：" + (question -> title) + "\n\n";
     str += question -> String();
@@ -165,7 +222,14 @@ string export_questions()
             questions_str += "\n++下方为测试题库，平衡性尚未测试完全，不会出现在正式游戏中++";
             questions_str += "\n**********************************************************************\n\n";
         }
-        questions_str += init_question(i);
+        questions_str += init_question(i, i > k_question_num);
+    }
+    questions_str += "\n**********************************************************************";
+    questions_str += "\n++下方为其他/废弃题库，可能不再考虑修改或更新，不会出现在正式游戏中++";
+    questions_str += "\n**********************************************************************\n\n";
+    for (int i = 1; i <= t_question_num; i++) {
+        questions_str += "------------------------------------------------------------\n";
+        questions_str += init_question(i, 2);
     }
     return questions_str;
 }
@@ -178,12 +242,12 @@ int main()
     p = localtime(&timep);
     char file[50];
 
-    sprintf(file, "乌合之众题库_%d.%d.%d_%d-%d.txt", 1900 + p->tm_year, 1+ p->tm_mon, p->tm_mday, k_question_num, all_question_num);
+    sprintf(file, "乌合之众题库_%d.%d.%d_%d-%d-%d.txt", 1900 + p->tm_year, 1+ p->tm_mon, p->tm_mday, k_question_num, all_question_num, t_question_num);
     freopen(file, "w", stdout);
 
     cout << "乌合之众题库" << endl << endl;
     cout << "本记录导出时间：" << ctime(&timep) << endl;
-    cout << "总题目数：" << all_question_num << endl;
+    cout << "总题目数：" << (all_question_num + t_question_num) << "（包含 " << t_question_num << " 个废弃题目）" << endl;
     cout << "正式题库题目数：" << k_question_num << endl << endl;
     cout << "注：部分题目数字会根据参与游戏的人数和当前分数发生变化，此展示题库默认10人参与游戏且所有人分数为0" << endl << endl;
 

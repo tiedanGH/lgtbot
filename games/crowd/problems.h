@@ -3287,7 +3287,7 @@ public:
 	{
         options.push_back("+1分");
         options.push_back("+2分");
-		options.push_back("如果B大于A，+4分。反之-3分");
+		options.push_back("如果选择B的人数大于A，+4分。反之-3分");
 		options.push_back("如果A选项人数最少且有人选择C选项，+C分，并使B选项改为-2分");
 	}
 	virtual void initExpects() override
