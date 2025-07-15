@@ -93,9 +93,9 @@ class UnitMaps {
         "oops！检测到核心温度急剧上升，即将超过阈值…准备启动自毁程序…",
         "你相信自己的铜头铁臂可以击败一切，却不知眼前的岩浆能轻易融化所有金属。",
     };
-    // 热源出局提示
-    static constexpr const array<string_view, 3> heat_end_hints = {
-        "你被滚滚热浪永远淹没了...周围的一切都在高温中扭曲变形，直到你彻底消失在火焰的深渊。",  // 铁蛋
+    // 热源公开提示
+    static constexpr const array<string_view, 3> heat_active_hints = {
+        "你被滚滚热浪淹没了...周围的一切都在高温中扭曲变形，只剩下火焰的深渊。",  // 铁蛋
         "哦不！你落入了巨人萝卜的火锅池里，这下你只好成为萝卜的夜宵了。",   // 纤光
         "你失败了！\nSteve试图在岩浆中游泳。",
     };
@@ -170,7 +170,7 @@ class UnitMaps {
     const int k_exit_num = 4;
     std::mt19937 g;
 
-    const vector<Map> all_maps = {
+    vector<Map> all_maps = {
         {Map1(), GridType::WATER, "1"},
         {Map2(), GridType::PORTAL, "2"},
         {Map3(), GridType::GRASS, "3"}, 
@@ -206,7 +206,7 @@ class UnitMaps {
         {Map33(), GridType::TRAP, "33"},
         {Map34(), GridType::BUTTON, "34"},
     };
-    const vector<Map> all_exits = {
+    vector<Map> all_exits = {
         {Exit1(), GridType::EXIT, "1"},
         {Exit2(), GridType::EXIT, "2"}, 
         {Exit3(), GridType::EXIT, "3"},
@@ -218,7 +218,7 @@ class UnitMaps {
         {Exit9(), GridType::EXIT, "9"},
         {Exit10(), GridType::EXIT, "10"},
     };
-    const vector<Map> special_maps = {
+    vector<Map> special_maps = {
         {SMap1(), GridType::SPECIAL, "S1"},
         {SMap2(), GridType::SPECIAL, "S2"},
         {SMap3(), GridType::SPECIAL, "S3"},
@@ -236,9 +236,6 @@ class UnitMaps {
 
     vector<Map> maps;
     vector<Map> exits;
-    
-    vector<Map> origin_maps;
-    vector<Map> origin_exits;
 
     UnitMaps(const int32_t mode)
     {
@@ -268,8 +265,6 @@ class UnitMaps {
             std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), k_map_num - 2, g);
             SampleExits(all_exits, k_exit_num / 2);
         }
-        origin_maps = maps;
-        origin_exits = exits;
         origin_pos = pos;
     }
 
@@ -327,9 +322,9 @@ class UnitMaps {
     static string ShowSpecialEvent(const int type)
     {
         if (type == 1) {
-            return "[特殊事件]【怠惰的园丁】草丛将在其区块内随机位置生成（有可能生成在中间）";
+            return "[特殊事件]【怠惰的园丁】树丛将在其区块内随机位置生成（有可能生成在中间）";
         } else if (type == 2) {
-            return "[特殊事件]【营养过剩】草丛将额外向随机1个方向再次生成1个（共8个方向，且不可隔墙生长）";
+            return "[特殊事件]【营养过剩】树丛和陷阱将额外向随机1个方向再次生成1个树丛（不可隔墙生长）";
         } else if (type == 3) {
             return "[特殊事件]【雨天小故事】地图中所有树丛变成水洼，陷阱会发出啪啪声";
         } else {
@@ -340,51 +335,101 @@ class UnitMaps {
     // 特殊事件1——怠惰的园丁：草丛将在其区块内随机位置生成
     void SpecialEvent1()
     {
-        for (auto& map: maps) {
-            for (int k = 0; k < 9; ++k) {
-                int i = k / 3, j = k % 3;
-                if (map.block[i][j].Type() == GridType::GRASS) {
-                    map.block[i][j].SetType(GridType::EMPTY);
-                    int m;
-                    do {
-                        m = rand() % 9;
-                    } while (map.block[m / 3][m % 3].Type() != GridType::EMPTY);
-                    map.block[m / 3][m % 3].SetType(GridType::GRASS);
-                    break;
+        auto MarkMaps = [](auto& maps) {
+            for (auto& map : maps) {
+                for (int k = 0; k < 9; ++k) {
+                    int i = k / 3, j = k % 3;
+                    if (map.block[i][j].Type() == GridType::GRASS)
+                        map.block[i][j].SetContent("？");
                 }
             }
-        }
+        };
+        auto ProcessMaps = [](auto& maps) {
+            for (auto& map: maps) {
+                for (int k = 0; k < 9; ++k) {
+                    int i = k / 3, j = k % 3;
+                    if (map.block[i][j].Type() == GridType::GRASS) {
+                        map.block[i][j].SetType(GridType::EMPTY);
+                        int m;
+                        do {
+                            m = rand() % 9;
+                        } while (map.block[m / 3][m % 3].Type() != GridType::EMPTY);
+                        map.block[m / 3][m % 3].SetType(GridType::GRASS);
+                        break;
+                    }
+                }
+            }
+        };
+
+        MarkMaps(all_maps);
+        MarkMaps(all_exits);
+        MarkMaps(special_maps);
+        ProcessMaps(maps);
+        ProcessMaps(exits);
     }
 
-    // 特殊事件2——营养过剩：树丛将额外向随机1个方向再次生成1个
+    // 特殊事件2——营养过剩：树丛和陷阱将额外向随机1个方向再次生成1个树丛
     void SpecialEvent2()
     {
-        for (auto& map: maps) {
-            for (int k = 0; k < 9; ++k) {
-                int i = k / 3, j = k % 3;
-                if (map.block[i][j].Type() == GridType::GRASS && map.type != GridType::SPECIAL) {
-                    int m;
-                    do {
-                        m = rand() % 9;
-                    } while (!map.block[m / 3][m % 3].CanGrow());
-                    map.block[m / 3][m % 3].SetType(GridType::GRASS);
-                    break;
+        auto MarkMaps = [](auto& maps) {
+            for (auto& map : maps) {
+                for (int k = 0; k < 9; ++k) {
+                    int i = k / 3, j = k % 3;
+                    if (map.block[i][j].CanGrow())
+                        map.block[i][j].SetContent("？");
                 }
             }
-        }
+        };
+        auto ProcessMaps = [this](auto& maps) {
+            for (auto& map : maps) {
+                vector<pair<int, int>> growablePositions;
+                int grassCount = 0;
+                for (int i = 0; i < 3; ++i) {
+                    for (int j = 0; j < 3; ++j) {
+                        if (map.block[i][j].Type() == GridType::GRASS || map.block[i][j].Type() == GridType::TRAP) {
+                            grassCount++;
+                        }
+                        if (map.block[i][j].CanGrow()) {
+                            growablePositions.emplace_back(i, j);
+                        }
+                    }
+                }
+                int targetGrowth = min(grassCount, static_cast<int>(growablePositions.size()));
+                if (targetGrowth == 0) continue;    // 无法生长则跳过
+
+                std::shuffle(growablePositions.begin(), growablePositions.end(), g);
+                for (int i = 0; i < targetGrowth; i++) {
+                    int x = growablePositions[i].first;
+                    int y = growablePositions[i].second;
+                    map.block[x][y].SetType(GridType::GRASS);
+                }
+            }
+        };
+
+        MarkMaps(all_maps);
+        MarkMaps(all_exits);
+        MarkMaps(special_maps);
+        ProcessMaps(maps);
+        ProcessMaps(exits);
     }
 
     // 特殊事件3——雨天小故事：地图中所有树丛变成水洼
     void SpecialEvent3()
     {
-        for (auto& map: maps) {
-            for (int k = 0; k < 9; ++k) {
-                int i = k / 3, j = k % 3;
-                if (map.block[i][j].Type() == GridType::GRASS) {
-                    map.block[i][j].SetType(GridType::WATER);
+        auto ProcessMaps = [](auto& maps) {
+            for (auto& map: maps) {
+                for (int k = 0; k < 9; ++k) {
+                    int i = k / 3, j = k % 3;
+                    if (map.block[i][j].Type() == GridType::GRASS) {
+                        map.block[i][j].SetType(GridType::WATER);
+                    }
                 }
             }
-        }
+        };
+
+        ProcessMaps(maps);
+        ProcessMaps(exits);
+        ProcessMaps(special_maps);
     }
 
     // 大地图区块位置随机
@@ -396,7 +441,7 @@ class UnitMaps {
                 candidates.push_back({i, j});
             }
         }
-        random_shuffle(candidates.begin(), candidates.end());
+        std::shuffle(candidates.begin(), candidates.end(), g);
         vector<pair<int,int>> chosen;
         bool found = backtrack(0, chosen, candidates);
         if (found) {
@@ -420,12 +465,12 @@ class UnitMaps {
         origin_pos = pos;
     }
 
-    void SetMapBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string map_id, const bool special) const
+    void SetMapBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string& map_id, const bool special) const
     {
         SetBlock(x, y, grid_map, FindBlockById(map_id, false, special));
     }
 
-    void SetExitBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string exit_id, const bool special) const
+    void SetExitBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string& exit_id, const bool special) const
     {
         SetBlock(x, y, grid_map, FindBlockById(exit_id, true, special));
     }
@@ -949,16 +994,16 @@ class UnitMaps {
         map[1][1].SetType(GridType::TRAP);
 
         map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
-        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
-        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
 
         return map;
     }
@@ -968,16 +1013,16 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
-        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
         map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
         return map;
@@ -1015,17 +1060,17 @@ class UnitMaps {
         map[1][2].SetType(GridType::PORTAL).SetPortal(0, -2);
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
-        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         map[1][0].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
         map[1][2].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
 
-        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
-        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -1123,17 +1168,17 @@ class UnitMaps {
         auto map = InitializeMapTemplate();
         map[1][1].SetType(GridType::TRAP);
 
-        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
         map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
 
-        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
-        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -1141,10 +1186,10 @@ class UnitMaps {
     static vector<vector<Grid>> Map34()
     {
         auto map = InitializeMapTemplate();
-        map[0][2].SetType(GridType::BUTTON).SetButton(0, -2, Direct::DOWN);
-        map[2][0].SetType(GridType::BUTTON).SetButton(0, 2, Direct::UP);
+        map[0][2].SetType(GridType::BUTTON).SetButton(0, -2, Direct::DOWN).SetContent("A");
+        map[2][0].SetType(GridType::BUTTON).SetButton(0, 2, Direct::UP).SetContent("B");
 
-        map[0][0].SetWall(Wall::EMPTY, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+        map[0][0].SetWall(Wall::EMPTY, Wall::DOOR, Wall::EMPTY, Wall::EMPTY).SetWallContent({"", "A", "", ""});
         map[0][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
         map[0][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
 
@@ -1154,7 +1199,7 @@ class UnitMaps {
 
         map[2][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
         map[2][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[2][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetWallContent({"B", "", "", ""});
 
         return map;
     }
@@ -1368,14 +1413,14 @@ class UnitMaps {
 
         map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
         map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
-        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
-        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
         map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
@@ -1390,14 +1435,14 @@ class UnitMaps {
         map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
 
         map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
-        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
+        map[0][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
 
-        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[2][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
         map[2][1].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::NORMAL, Wall::NORMAL);
         map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
@@ -1436,11 +1481,11 @@ class UnitMaps {
     static vector<vector<Grid>> SMap2()
     {
         auto map = InitializeMapTemplate();
-        map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2);
-        map[0][2].SetType(GridType::PORTAL).SetPortal(2, -2);
+        map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2).SetContent("A", "#FFF8E7");
+        map[0][2].SetType(GridType::PORTAL).SetPortal(2, -2).SetContent("B", "#FFF8E7");
         map[1][1].SetType(GridType::WATER);
-        map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
-        map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
+        map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2).SetContent("B", "#FFF8E7");
+        map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2).SetContent("A", "#FFF8E7");
 
         map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
         map[0][1].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
@@ -1460,22 +1505,22 @@ class UnitMaps {
     static vector<vector<Grid>> SMap3()
     {
         auto map = InitializeMapTemplate();
-        map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2);
-        map[0][2].SetType(GridType::PORTAL).SetPortal(2, -2);
+        map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2).SetContent("A", "#FFF8E7");
+        map[0][2].SetType(GridType::PORTAL).SetPortal(2, -2).SetContent("B", "#FFF8E7");
         map[1][1].SetType(GridType::TRAP);
-        map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
-        map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
+        map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2).SetContent("B", "#FFF8E7");
+        map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2).SetContent("A", "#FFF8E7");
 
         map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
-        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
         map[0][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
 
-        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         map[2][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
-        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
         map[2][2].SetWall(Wall::NORMAL, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
 
         return map;
@@ -1484,15 +1529,15 @@ class UnitMaps {
     static vector<vector<Grid>> SMap4()
     {
         auto map = InitializeMapTemplate();
-        map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2);
-        map[0][1].SetType(GridType::PORTAL).SetPortal(2, 0);
-        map[0][2].SetType(GridType::PORTAL).SetPortal(2, -2);
-        map[1][0].SetType(GridType::PORTAL).SetPortal(0, 2);
-        map[1][1].SetType(GridType::PORTAL).SetPortal(0, 0);
-        map[1][2].SetType(GridType::PORTAL).SetPortal(0, -2);
-        map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2);
-        map[2][1].SetType(GridType::PORTAL).SetPortal(-2, 0);
-        map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2);
+        map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2).SetContent("A", "#FFF8E7");
+        map[0][1].SetType(GridType::PORTAL).SetPortal(2, 0).SetContent("B", "#FFF8E7");
+        map[0][2].SetType(GridType::PORTAL).SetPortal(2, -2).SetContent("C", "#FFF8E7");
+        map[1][0].SetType(GridType::PORTAL).SetPortal(0, 2).SetContent("D", "#FFF8E7");
+        map[1][1].SetType(GridType::PORTAL).SetPortal(0, 0).SetContent("E(E)", "#FFF8E7");
+        map[1][2].SetType(GridType::PORTAL).SetPortal(0, -2).SetContent("D", "#FFF8E7");
+        map[2][0].SetType(GridType::PORTAL).SetPortal(-2, 2).SetContent("C", "#FFF8E7");
+        map[2][1].SetType(GridType::PORTAL).SetPortal(-2, 0).SetContent("B", "#FFF8E7");
+        map[2][2].SetType(GridType::PORTAL).SetPortal(-2, -2).SetContent("A", "#FFF8E7");
 
         map[0][0].SetWall(Wall::EMPTY, Wall::NORMAL, Wall::EMPTY, Wall::NORMAL);
         map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::NORMAL, Wall::NORMAL);
