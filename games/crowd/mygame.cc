@@ -17,6 +17,7 @@
 #include "utility/html.h"
 
 #include "problems.h"
+#include "problems_t.h"
 #include "rules.h"
 
 using namespace std;
@@ -43,9 +44,11 @@ const MutableGenericOptions k_default_generic_options;
 
 
 // formal questions
-constexpr static uint32_t k_question_num = 72;
-// with test questions
-constexpr static uint32_t all_question_num = 113;
+constexpr static uint32_t k_question_num = 78;
+// with test1 questions
+constexpr static uint32_t all_question_num = 132;
+// test2 questions
+constexpr static uint32_t t_question_num = 24;
 
 
 static const std::array<Question*(*)(), all_question_num> create_question{
@@ -121,13 +124,13 @@ static const std::array<Question*(*)(), all_question_num> create_question{
     []() -> Question* { return new Q70(); },
     []() -> Question* { return new Q71(); },
     []() -> Question* { return new Q72(); },
-    // test questions
     []() -> Question* { return new Q73(); },
     []() -> Question* { return new Q74(); },
     []() -> Question* { return new Q75(); },
     []() -> Question* { return new Q76(); },
     []() -> Question* { return new Q77(); },
     []() -> Question* { return new Q78(); },
+    // test questions
     []() -> Question* { return new Q79(); },
     []() -> Question* { return new Q80(); },
     []() -> Question* { return new Q81(); },
@@ -163,26 +166,79 @@ static const std::array<Question*(*)(), all_question_num> create_question{
     []() -> Question* { return new Q111(); },
     []() -> Question* { return new Q112(); },
     []() -> Question* { return new Q113(); },
+    []() -> Question* { return new Q114(); },
+    []() -> Question* { return new Q115(); },
+    []() -> Question* { return new Q116(); },
+    []() -> Question* { return new Q117(); },
+    []() -> Question* { return new Q118(); },
+    []() -> Question* { return new Q119(); },
+    []() -> Question* { return new Q120(); },
+    []() -> Question* { return new Q121(); },
+    []() -> Question* { return new Q122(); },
+    []() -> Question* { return new Q123(); },
+    []() -> Question* { return new Q124(); },
+    []() -> Question* { return new Q125(); },
+    []() -> Question* { return new Q126(); },
+    []() -> Question* { return new Q127(); },
+    []() -> Question* { return new Q128(); },
+    []() -> Question* { return new Q129(); },
+    []() -> Question* { return new Q130(); },
+    []() -> Question* { return new Q131(); },
+    []() -> Question* { return new Q132(); },
 };
 
+// test mode 2
+static const std::array<Question*(*)(), t_question_num> test_question{
+    []() -> Question* { return new Qt1(); },
+    []() -> Question* { return new Qt2(); },
+    []() -> Question* { return new Qt3(); },
+    []() -> Question* { return new Qt4(); },
+    []() -> Question* { return new Qt5(); },
+    []() -> Question* { return new Qt6(); },
+    []() -> Question* { return new Qt7(); },
+    []() -> Question* { return new Qt8(); },
+    []() -> Question* { return new Qt9(); },
+    []() -> Question* { return new Qt10(); },
+    []() -> Question* { return new Qt11(); },
+    []() -> Question* { return new Qt12(); },
+    []() -> Question* { return new Qt13(); },
+    []() -> Question* { return new Qt14(); },
+    []() -> Question* { return new Qt15(); },
+    []() -> Question* { return new Qt16(); },
+    []() -> Question* { return new Qt17(); },
+    []() -> Question* { return new Qt18(); },
+    []() -> Question* { return new Qt19(); },
+    []() -> Question* { return new Qt20(); },
+    []() -> Question* { return new Qt21(); },
+    []() -> Question* { return new Qt22(); },
+    []() -> Question* { return new Qt23(); },
+    []() -> Question* { return new Qt24(); },
+};
 
-string init_question(int id)
+string init_question(const int id, const int mode)
 {
     vector<Player> players;
     Player tempP;
     for (int i = 0; i < 10; i++) {
         players.push_back(tempP);
     }
-    Question* question = create_question[id - 1]();
+    Question* question;
+    if (mode != 2) {
+        question = create_question[id - 1]();
+    } else {
+        question = test_question[id - 1]();
+    }
     question -> init(players);
     question -> initTexts(players);
     question -> initOptions();
     thread_local static string str;
     str = "";
-    str += "题号：#" + to_string(question -> id) + "\n";
+    str += string("题号：#") + (mode == 2 ? "t" : "") + to_string(question -> id) + "\n";
     str += "出题者：" + (question -> author) + "\n";
-    if (id > k_question_num) {
+    if (mode == 1) {
         str += "[测试] ";
+    } else if (mode == 2) {
+        str += "[其他/废弃] ";
     }
     str += "题目：" + (question -> title) + "\n\n";
     str += question -> String();
@@ -197,7 +253,18 @@ char* find_question(const string& keyword)
     notfind_str = "[错误] 未找到包含“" + keyword + "”的题目";
     bool flag = false;
     for (int i = 1; i <= all_question_num; i++) {
-        find_str = init_question(i);
+        find_str = init_question(i, i > k_question_num);
+        string::size_type position = find_str.find(keyword);
+        if (position != std::string::npos) {
+            flag = true;
+            break;
+        }
+    }
+    if (flag) {
+        return (char*)find_str.c_str();
+    }
+    for (int i = 1; i <= t_question_num; i++) {
+        find_str = init_question(i, 2);
         string::size_type position = find_str.find(keyword);
         if (position != std::string::npos) {
             flag = true;
@@ -311,8 +378,10 @@ class RoundStage : public SubGameStage<>
         while(r == -1 || Main().used.find(r) != Main().used.end())
         {
             r = rand() % k_question_num;
-            if (GAME_OPTION(测试模式)) {
+            if (GAME_OPTION(测试模式) == 1) {
                 r = rand() % (all_question_num - k_question_num) + k_question_num;
+            } else if (GAME_OPTION(测试模式) == 2) {
+                r = rand() % t_question_num;
             }
             if(count++ > 1000) {
                 Main().used.clear();
@@ -328,7 +397,11 @@ class RoundStage : public SubGameStage<>
             r = 0;
         }
 
-        q = create_question[r]();
+        if (GAME_OPTION(测试模式) != 2) {
+            q = create_question[r]();
+        } else {
+            q = test_question[r]();
+        }
 
         if(q == NULL)
         {
@@ -566,7 +639,7 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
     }
 
     if(GAME_OPTION(测试模式)) {
-        Global().Boardcast() << "[警告] 正在进行新题测试！如出现异常，请联系管理员中断游戏。";
+        Global().Boardcast() << "[警告] 正在进行新题测试！如出现异常，请联系管理员中断游戏。当前测试题库：" << GAME_OPTION(测试模式);
     }
 
     setter.Emplace<RoundStage>(*this, ++round_);
@@ -594,6 +667,10 @@ void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason,
     for(int i = 1; i < round_; i++)
         fb += "<td><font size=7>　　</font></td><td><font size=7>　　　</font></td>";
     fb += "<td><font size=7>　　　　</font></td></tr>";
+    fb += "<tr bgcolor=\"E7E7E7\"><td><font size=6><b>玩家</b></font></td>";
+    for(int i = 1; i < round_; i++)
+        fb += "<td colspan=\"2\"><font size=6><b>第 " + to_string(i) + " 题</b></font></td>";
+    fb += "<td><font size=6><b>终局分数</b></font></td></tr>";
     for(int i = 0; i < finalBoard.size(); i++)
     {
         fb += finalBoard[i];
