@@ -35,14 +35,17 @@ const std::vector<RuleCommand> k_rule_commands = {};
 
 bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
 {
-    const uint32_t size_option = GET_OPTION_VALUE(game_options, 边长);
-    const uint32_t treasure_option = GET_OPTION_VALUE(game_options, 宝藏);
-    const uint32_t bomb_option = GET_OPTION_VALUE(game_options, 炸弹);
     uint32_t& map_option = GET_OPTION_VALUE(game_options, 地图);
-    if (size_option == 0) {
+    const int32_t size_option = GET_OPTION_VALUE(game_options, 边长);
+    const int32_t treasure_option = GET_OPTION_VALUE(game_options, 宝藏);
+    const int32_t bomb_option = GET_OPTION_VALUE(game_options, 炸弹);
+    const int32_t humidifier_option = GET_OPTION_VALUE(game_options, 加湿器);
+    const int32_t ink_option = GET_OPTION_VALUE(game_options, 墨水瓶);
+    
+    if (size_option == -1) {
         const char* map_names[] = {"中地图", "大地图", "特大地图"};
         uint32_t player_num = generic_options_readonly.PlayerNum();
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 3; i++) {
             if (player_num > maps[i].limit && player_num <= maps[i + 1].limit && map_option < i + 1) {
                 map_option = i + 1;
                 reply() << "[警告] 玩家数 " << player_num << " 超出当前地图人数限制，自动将大小调整为 " << map_names[i];
@@ -71,11 +74,20 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
                 << "O橙(" << modified[3] << ")、G绿(" << modified[4] << ")、P紫(" << modified[5] << ")";
     }
     
-    const int max_limit = size_option ? size_option * size_option : maps[map_option].size * maps[map_option].size;
-    const int treasure = treasure_option ? treasure_option : maps[map_option].treasure;
-    const int bomb = bomb_option ? bomb_option : maps[map_option].bomb;
-    if (treasure + bomb > max_limit) {
-        reply() << "[错误] 无效配置：当前地图大小最多可容纳非空地元素 " << max_limit << " 个（当前为：" << (treasure + bomb) << "），请修正配置！";
+    srand((unsigned int)time(NULL));
+    const int32_t max_limit = size_option >= 0 ? size_option * size_option : maps[map_option].size * maps[map_option].size;
+    const int32_t treasure = treasure_option >= 0 ? treasure_option : maps[map_option].treasure;
+    const int32_t bomb = bomb_option >= 0 ? bomb_option : maps[map_option].bomb;
+    const int32_t humidifier = humidifier_option >= 0 ? humidifier_option : 0;
+    const int32_t ink = ink_option >= 0 ? ink_option : 0;
+
+    int32_t total_special = 0;
+    if (GET_OPTION_VALUE(game_options, 道具) == 1) {
+        total_special = max(humidifier + ink, maps[map_option].special);
+    }
+    int32_t total_num = treasure + bomb + total_special;
+    if (total_num > max_limit) {
+        reply() << "[错误] 无效配置：当前地图大小最多可容纳非空地元素 " << max_limit << " 个，当前为：" << total_num << "（" << treasure << "+" << bomb << "+" << total_special << "），请修正配置！";
         return false;
     }
 
@@ -88,39 +100,59 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
     InitOptionsCommand("使用预设地图类型",
-        [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option) {
+        [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option, const uint32_t& item_mode) {
             GET_OPTION_VALUE(game_options, 地图) = map_option;
+            GET_OPTION_VALUE(game_options, 道具) = item_mode;
             return NewGameMode::MULTIPLE_USERS;
         },
-        AlterChecker<uint32_t>({{"小地图", 0}, {"中地图", 1}, {"大地图", 2}, {"特大地图", 3}})),
+        AlterChecker<uint32_t>({{"小地图", 0}, {"中地图", 1}, {"大地图", 2}, {"特大地图", 3}}),
+        OptionalDefaultChecker<AlterChecker<uint32_t>>(0, map<string, uint32_t>{{"经典", 0}, {"全部", 1}})),
     InitOptionsCommand("自定义游戏配置（边长、生命、道具数量）",
         [] (
             MyGameOptions& game_options,
             MutableGenericOptions& generic_options,
-            const uint32_t& size_option,
-            const uint32_t& hp_option,
-            const uint32_t& treasure_option,
-            const uint32_t& bomb_option
+            const int32_t& size_option,
+            const int32_t& hp_option,
+            const int32_t& treasure_option,
+            const int32_t& bomb_option,
+            const int32_t& humidifier_option,
+            const int32_t& ink_option
         ) {
+            uint32_t& map_option = GET_OPTION_VALUE(game_options, 地图);
+            for (int i = 3; i >= 0; i--) {
+                if (size_option >= maps[i].size && map_option < i) {
+                    map_option = i;
+                    break;
+                }
+            }
             GET_OPTION_VALUE(game_options, 边长) = size_option;
             GET_OPTION_VALUE(game_options, 生命) = hp_option;
             GET_OPTION_VALUE(game_options, 宝藏) = treasure_option;
             GET_OPTION_VALUE(game_options, 炸弹) = bomb_option;
+            GET_OPTION_VALUE(game_options, 加湿器) = humidifier_option;
+            GET_OPTION_VALUE(game_options, 墨水瓶) = ink_option;
+            if (humidifier_option >= 0 || ink_option >= 0) {
+                GET_OPTION_VALUE(game_options, 道具) = 1;
+            }
             return NewGameMode::MULTIPLE_USERS;
         },
-        OptionalDefaultChecker<ArithChecker<uint32_t>>(0, 4, 20, "边长"),
-        OptionalDefaultChecker<ArithChecker<uint32_t>>(0, 1, 10, "生命"),
-        OptionalDefaultChecker<ArithChecker<uint32_t>>(0, 0, 100, "宝藏"),
-        OptionalDefaultChecker<ArithChecker<uint32_t>>(0, 0, 100, "炸弹")),
+        ArithChecker<int32_t>(4, 20, "边长"),
+        OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 1, 10, "生命"),
+        OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 0, 200, "宝藏"),
+        OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 0, 200, "炸弹"),
+        OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 0, 200, "加湿器"),
+        OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 0, 200, "墨水瓶")),
     InitOptionsCommand("独自一人开始游戏",
-        [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option)
+        [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option, const uint32_t& item_mode)
         {
             GET_OPTION_VALUE(game_options, 地图) = map_option;
+            GET_OPTION_VALUE(game_options, 道具) = item_mode;
             generic_options.bench_computers_to_player_num_ = maps[map_option].limit;
             return NewGameMode::SINGLE_USER;
         },
         VoidChecker("单机"),
-        OptionalDefaultChecker<AlterChecker<uint32_t>>(1, map<string, unsigned int>{{"小地图", 0}, {"中地图", 1}, {"大地图", 2}, {"特大地图", 3}})),
+        OptionalDefaultChecker<AlterChecker<uint32_t>>(1, map<string, uint32_t>{{"小地图", 0}, {"中地图", 1}, {"大地图", 2}, {"特大地图", 3}}),
+        OptionalDefaultChecker<AlterChecker<uint32_t>>(0, map<string, uint32_t>{{"经典", 0}, {"全部", 1}})),
 };
 
 // ========== GAME STAGES ==========
@@ -158,16 +190,21 @@ class MainStage : public MainGameStage<RoundStage>
     void FirstStageFsm(SubStageFsmSetter setter)
     {
         srand((unsigned int)time(NULL));
-        const int hp_option = GAME_OPTION(生命) ? GAME_OPTION(生命) : maps[GAME_OPTION(地图)].hp;
+        const int32_t hp_option = GAME_OPTION(生命) >= 0 ? GAME_OPTION(生命) : maps[GAME_OPTION(地图)].hp;
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             board.players.emplace_back(Global().PlayerName(pid), Global().PlayerAvatar(pid, 40), hp_option);
         }
         board.Initialize(
             GAME_OPTION(地图),
             GAME_OPTION(配比),
+            GAME_OPTION(道具),
             GAME_OPTION(边长),
-            GAME_OPTION(宝藏),
-            GAME_OPTION(炸弹)
+            {
+                GAME_OPTION(宝藏),
+                GAME_OPTION(炸弹),
+                GAME_OPTION(加湿器),
+                GAME_OPTION(墨水瓶),
+            }
         );
 
         setter.Emplace<RoundStage>(*this, ++round_);
@@ -188,7 +225,9 @@ class MainStage : public MainGameStage<RoundStage>
 
         if (board.AliveCount() == 0) {
             Global().Boardcast() << "所有玩家均被淘汰，游戏结束！";
-        } else if (board.AliveCount() == 1) {
+        } else if (board.countLeftGridType(GridType::TREASURE) == 0) {
+            Global().Boardcast() << "地图内无剩余宝藏，游戏结束！";
+        } else {
             int left = board.countLeftGridType(GridType::TREASURE);
             for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
                 if (board.players[pid].hp > 0) {
@@ -196,39 +235,8 @@ class MainStage : public MainGameStage<RoundStage>
                 }
             }
             Global().Boardcast() << "存活人数仅剩一人，游戏结束！剩余的 " << left << " 个宝藏将直接计入存活玩家的得分";
-        } else {
-            Global().Boardcast() << "地图内无剩余宝藏，游戏结束！";
         }
         Global().Boardcast() << Markdown(board.GetBoard(true), (board.size + 2) * 43);
-/* *********************************************************** */
-        // 积分奖励发放
-        std::regex pattern(R"(机器人\d+号)");
-        bool hasBots = std::ranges::any_of(
-            std::views::iota(0u, Global().PlayerNum()),
-            [&](unsigned int pid) {
-                return std::regex_match(Global().PlayerName(pid), pattern);
-            }
-        );
-        if (!hasBots && Global().PlayerNum() > 1) {
-            std::string pt_message = "新游戏积分已记录";
-            for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-                auto name = Global().PlayerName(pid);
-                auto start = name.find_last_of('('), end = name.find(')', start);
-                std::string id = name.substr(start + 1, end - start - 1);
-                
-                int rank = 0;
-                for (int i = 0; i < player_scores_.size(); ++i) {
-                    if (player_scores_[i] <= player_scores_[pid] && i != pid) {
-                        rank++;
-                    }
-                }
-                int32_t point = (Global().PlayerNum() * 50 + 200 * rank * pow(1.05, rank)) * min(round_ / 15.0, 2.0);
-                pt_message += "\n" + id + " " + std::to_string(point);
-            }
-            pt_message += "\n「#pt help」查看游戏积分帮助";
-            Global().Boardcast() << pt_message;
-        }
-/* *********************************************************** */
     }
 };
 
@@ -296,7 +304,7 @@ class RoundStage : public SubGameStage<>
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             if (!Main().board.players[pid].has_dug && Main().board.players[pid].hp > 0) {
                 Main().board.players[pid].hp -= 1;
-                Main().board.players[pid].change = -1;
+                Main().board.players[pid].change_hp = -1;
                 if (Main().board.players[pid].hp <= 0 && Main().board.AliveCount() > 0) {
                     Global().Eliminate(pid);
                 }
