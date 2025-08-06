@@ -222,8 +222,6 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
 
     virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
 
-    bool hasBots();
-
     int64_t PlayerScore(const PlayerID pid) const
     {
         if (GAME_OPTION(连线奖励)) {
@@ -928,17 +926,6 @@ void MainStage::NextStageFsm(SelectStage& sub_stage, const CheckoutReason reason
     NewStage_(setter);
 }
 
-bool MainStage::hasBots()
-{
-    std::regex pattern(R"(机器人\d+号)");
-    for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-        if (std::regex_match(Global().PlayerName(pid), pattern)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
 {
     if (!CheckGameOver_(players_) && it_ != cards_.end()) {
@@ -989,6 +976,29 @@ void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason,
             if (players_[pid].comb_->BreakLine() == 0) Global().Achieve(pid, Achievement::蜂巢完美者);
             if (players_[pid].comb_->Length9()) Global().Achieve(pid, Achievement::贯穿星河);
         }
+/* *********************************************************** */
+        // 积分奖励发放
+        std::regex pattern(R"(机器人\d+号)");
+        bool hasBots = std::ranges::any_of(
+            std::views::iota(0u, Global().PlayerNum()),
+            [&](unsigned int pid) {
+                return std::regex_match(Global().PlayerName(pid), pattern);
+            }
+        );
+        if (!hasBots && Global().PlayerNum() > 1) {
+            std::string pt_message = "新游戏积分已记录";
+            for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
+                auto name = Global().PlayerName(pid);
+                auto start = name.find_last_of('('), end = name.find(')', start);
+                std::string id = name.substr(start + 1, end - start - 1);
+                double multiple[4] = {1, 0.8, 1.2, 1.1};
+                int32_t point = players_[pid].comb_->Score() * 4 * multiple[GAME_OPTION(卡池)];
+                pt_message += "\n" + id + " " + std::to_string(point);
+            }
+            pt_message += "\n「#pt help」查看游戏积分帮助";
+            Global().Boardcast() << pt_message;
+        }
+/* *********************************************************** */
     } else {
         Global().Boardcast() << "【本局卡池】" + game_card[GAME_OPTION(卡池)] + (GAME_OPTION(道具) ? "" : "\n【特殊道具】关闭") + "\n自定义种子：" + seed_str_;
     }

@@ -339,7 +339,7 @@ class RoundStage : public SubGameStage<>
         Global().SaveMarkdown(Main().board.GetBoard(Main().board.grid_map), 60 * (GAME_OPTION(边长) + 1));
 
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            Main().board.players[pid].move_record = "";
+            Main().board.players[pid].ClearMoveRecord();
             if (pid != currentPlayer) {
                 Global().SetReady(pid);
             }
@@ -397,6 +397,7 @@ class RoundStage : public SubGameStage<>
         
         bool ready_status = HandleGridInteraction(player, sender);
         if (ready_status) return StageErrCode::READY;
+        // Global().SaveMarkdown(Main().board.GetBoard(Main().board.grid_map), 60 * (GAME_OPTION(边长) + 1));   // TODO 待删除，单步调试用
 
         // 继续行动
         if (step == 1) {
@@ -419,13 +420,13 @@ class RoundStage : public SubGameStage<>
         Grid& grid = Main().board.grid_map[player.x][player.y];
         // [逃生舱]
         if (grid.Type() == GridType::EXIT) {
-            player.move_record += "(逃生)";
+            player.UpdateEndRecord("逃生");
             int exited = Main().board.exit_num - Main().board.ExitCount();
             player.score.exit_score += Score::exit_order[exited];   // 逃生分
             grid.SetType(GridType::EMPTY);
 
             if (GAME_OPTION(大乱斗)) {
-                player.move_record += "【传送】";
+                player.NewContentRecord("【传送】");
                 Main().board.TeleportPlayer(player.pid);  // 大乱斗随机传送
                 sender << UnitMaps::RandomHint(UnitMaps::exit_hints) << "\n\n您已抵达【逃生舱】！此逃生舱已失效，" << At(player.pid) << " 被随机传送至地图其他地方！";
             } else {
@@ -467,7 +468,7 @@ class RoundStage : public SubGameStage<>
         if (grid.Type() == GridType::TRAP) {
             grid.TrapTrigger();
             if (grid.TrapStatus()) {
-                player.move_record += "(陷阱)";
+                player.UpdateEndRecord("陷阱");
                 sender << UnitMaps::RandomHint(UnitMaps::trap_hints) << "\n\n移动触发【陷阱】，本回合被强制停止行动！";
                 return true;
             }
@@ -480,7 +481,7 @@ class RoundStage : public SubGameStage<>
         }
         if (grid.Type() == GridType::HEAT) {
             if (player.heated) {
-                player.move_record += "(热源)";
+                player.UpdateEndRecord("热源");
                 sender << UnitMaps::RandomHint(UnitMaps::heat_active_hints) << "\n\n您本局游戏已进入过【热源】，高温难耐，本回合无法继续前进！";
                 return true;
             } else {
@@ -516,7 +517,7 @@ class RoundStage : public SubGameStage<>
             if (hide) {
                 sender << "移动进入【树丛】（隐匿中，不会向其他人发出声响）\n\n";
             } else {
-                player.move_record += "[沙沙]";
+                player.UpdateSoundRecord(sound);
                 sender << UnitMaps::RandomHint(UnitMaps::grass_hints) << "\n移动进入【树丛】，请其他玩家留意私信声响信息！\n\n";
                 SendSoundMessage(player.x, player.y, sound, false);
             }
@@ -524,7 +525,7 @@ class RoundStage : public SubGameStage<>
             if (hide) {
                 sender << "移动发出【啪啪声】（隐匿中，不会向其他人发出声响）\n\n";
             } else {
-                player.move_record += "[啪啪]";
+                player.UpdateSoundRecord(sound);
                 sender << UnitMaps::RandomHint(UnitMaps::papa_hints) << "\n移动发出【啪啪声】，请其他玩家留意私信声响信息！\n\n";
                 SendSoundMessage(player.x, player.y, sound, false);
             }
@@ -558,7 +559,7 @@ class RoundStage : public SubGameStage<>
             }
             return StageErrCode::FAILED;
         }
-        if (!hide) player.move_record += "(停止)";
+        if (!hide) player.NewContentRecord("(停止)");
         active_stop = true;
         reply() << "您选择主动停止行动，本回合结束！主动停止无法获得四周墙壁信息";
         return StageErrCode::READY;
@@ -595,10 +596,10 @@ class RoundStage : public SubGameStage<>
         hide = true;
         player.hide_remaining--;
         if (GAME_OPTION(隐匿) == 1) {
-            player.move_record += "【隐匿行动】";
+            player.NewContentRecord("【隐匿行动】");
             reply() << "使用隐匿技能，本回合剩余时间转为私聊行动，不会发出声响，不会触发捕捉。剩余次数：" << player.hide_remaining;
         } else if (GAME_OPTION(隐匿) == 2) {
-            player.move_record += "�";
+            player.NewContentRecord("�");
             reply() << "使用隐匿技能，下一步请在私聊行动，不会发出声响，不会触发捕捉。剩余次数：" << player.hide_remaining;
         }
         return StageErrCode::OK;
@@ -617,10 +618,10 @@ class RoundStage : public SubGameStage<>
             sender << Markdown(Main().board.GetPlayerTable(Main().round_));
             for (PlayerID pid = 0; pid < currentPlayer.Get(); ++pid) {
                 if (Main().board.players[pid].out == 0) {
-                    sender << "\n[" << pid.Get() << "号]本回合行动轨迹：\n" << Main().board.players[pid].move_record;
+                    sender << "\n[" << pid.Get() << "号]本回合行动轨迹：\n" << Main().board.players[pid].GetMoveRecord();
                 }
             }
-            sender << "\n[" << currentPlayer.Get() << "号]正在行动中：\n" << Main().board.players[currentPlayer].move_record;
+            sender << "\n[" << currentPlayer.Get() << "号]正在行动中：\n" << Main().board.players[currentPlayer].GetMoveRecord();
         } else {
             sender << Main().board.players[pid].private_record;
         }
@@ -637,7 +638,7 @@ class RoundStage : public SubGameStage<>
             sender << "本局游戏地图为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << "\n";
         }
         sender << Markdown(Main().board.GetAllRecord(), 500);
-        sender << "\n[" << currentPlayer.Get() << "号]正在行动中：\n" << Main().board.players[currentPlayer].move_record;
+        sender << "\n[" << currentPlayer.Get() << "号]正在行动中：\n" << Main().board.players[currentPlayer].GetMoveRecord();
         if (!is_public) {
             sender << "\n\n" << Main().board.players[pid].private_record;
         }
@@ -654,22 +655,23 @@ class RoundStage : public SubGameStage<>
             sender << At(t) << " 被捕捉！";
 
             if (Main().round_ == 1) {
-                player.move_record += "(首轮捕捉)【传送】";
-                Main().board.players[t].all_record += (Main().board.players[t].all_record == "" ? "<br>" : "") + string("【首轮被抓传送】");
+                if (GAME_OPTION(点杀)) player.NewContentRecord("(首轮捕捉)"); else player.UpdateEndRecord("首轮捕捉");
+                player.NewContentRecord("【传送】");
+                Main().board.players[t].all_record += (Main().board.players[t].all_record.empty() ? "<br>" : "") + string("【首轮被抓传送】");
                 Main().board.TeleportPlayer(t);  // 随机传送被捉方
                 Main().board.TeleportPlayer(player.pid);  // 随机传送捕捉方
                 sender << "\n【首轮玩家保护】\n首轮捕捉不生效：双方均被随机传送至地图其他地方！";
                 return true;
             }
 
-            player.move_record += "(捕捉)";
+            if (GAME_OPTION(点杀)) player.NewContentRecord("(捕捉)"); else player.UpdateEndRecord("捕捉");
             Main().board.players[t].out = 1;
             Global().Eliminate(t);
             player.score.catch_score += 100;        // 抓人分
             Main().board.players[t].score.catch_score -= 100;
 
             if (Main().Alive_() > 1) {
-                player.move_record += "【传送】";
+                player.NewContentRecord("【传送】");
                 Main().board.TeleportPlayer(player.pid);  // 随机传送捕捉方
                 Main().board.UpdatePlayerTarget(GAME_OPTION(捉捕目标));   // 捕捉顺位变更
                 sender << "\n" << At(player.pid) << " 被随机传送至地图其他地方，捕捉目标顺位发生变更！\n";
@@ -719,7 +721,7 @@ class RoundStage : public SubGameStage<>
 
     virtual CheckoutErrCode OnStageTimeout() override
     {
-        Main().board.players[currentPlayer].move_record += "(超时)";
+        Main().board.players[currentPlayer].NewContentRecord("(超时)");
         active_stop = true;
         if (step == 0) {
             Main().board.players[currentPlayer].hook_status = true;
@@ -766,9 +768,9 @@ class RoundStage : public SubGameStage<>
                 PlayerCatch(player, sender);
             }
         }
-        Global().Boardcast() << "[" << currentPlayer.Get() << "号]玩家本回合的完整行动轨迹：\n" << player.move_record;
+        Global().Boardcast() << "[" << currentPlayer.Get() << "号]玩家本回合的完整行动轨迹：\n" << player.GetMoveRecord();
         // 记录历史行动轨迹
-        player.all_record += "<br>【第 " + to_string(Main().round_) + " 回合】<br>" + player.move_record;
+        player.all_record += "<br>【第 " + to_string(Main().round_) + " 回合】<br>" + player.GetMoveRecord();
         // 仅剩1玩家，游戏结束
         if ((Main().Alive_() == 1 && Global().PlayerNum() > 1) || (Main().Alive_() == 0 && Global().PlayerNum() == 1)) {
             if (Main().withoutE_win_) {     // 无逃生舱最后生还胜利

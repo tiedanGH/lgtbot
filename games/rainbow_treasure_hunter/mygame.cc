@@ -206,6 +206,7 @@ class MainStage : public MainGameStage<RoundStage>
                 GAME_OPTION(墨水瓶),
             }
         );
+        // Global().SaveMarkdown(board.GetBoard(true), (board.size + 2) * 43);  // TODO 调试用，需删除
 
         setter.Emplace<RoundStage>(*this, ++round_);
     }
@@ -237,6 +238,34 @@ class MainStage : public MainGameStage<RoundStage>
             Global().Boardcast() << "存活人数仅剩一人，游戏结束！剩余的 " << left << " 个宝藏将直接计入存活玩家的得分";
         }
         Global().Boardcast() << Markdown(board.GetBoard(true), (board.size + 2) * 43);
+/* *********************************************************** */
+        // 积分奖励发放
+        std::regex pattern(R"(机器人\d+号)");
+        bool hasBots = std::ranges::any_of(
+            std::views::iota(0u, Global().PlayerNum()),
+            [&](unsigned int pid) {
+                return std::regex_match(Global().PlayerName(pid), pattern);
+            }
+        );
+        if (hasBots) return;
+        std::string pt_message = "新游戏积分已记录";
+        for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
+            auto name = Global().PlayerName(pid);
+            auto start = name.find_last_of('('), end = name.find(')', start);
+            std::string id = name.substr(start + 1, end - start - 1);
+            
+            int rank = 0;
+            for (int i = 0; i < player_scores_.size(); ++i) {
+                if (player_scores_[i] <= player_scores_[pid] && i != pid) {
+                    rank++;
+                }
+            }
+            int32_t point = (Global().PlayerNum() * 50 + 200 * rank * pow(1.05, rank)) * min(round_ / 15.0, 2.0);
+            pt_message += "\n" + id + " " + std::to_string(point);
+        }
+        pt_message += "\n「#pt help」查看游戏积分帮助";
+        Global().Boardcast() << pt_message;
+/* *********************************************************** */
     }
 };
 

@@ -27,6 +27,11 @@ static_assert(sizeof(ADMIN_COMMAND_SIGN) == 2, "The ADMIN_COMMAND_SIGN string mu
 static ErrCode HandleRequest(BotCtx& bot, const std::optional<GroupID> gid, const UserID uid, const std::string& msg,
                              MsgSender& reply)
 {
+    // 移除#run和#pb的报错反馈
+    size_t start = msg.find_first_not_of(" \t\n\r");
+    std::string trimmed = (start == std::string::npos) ? "" : msg.substr(start);
+    if (trimmed.starts_with("#run") || trimmed.starts_with("#pb")) return EC_REQUEST_EMPTY;
+
     if (std::string first_arg; !(std::stringstream(msg) >> first_arg) || first_arg.empty()) {
         reply() << "[错误] 我不理解，所以你是想表达什么？";
         return EC_REQUEST_EMPTY;
@@ -43,13 +48,29 @@ static ErrCode HandleRequest(BotCtx& bot, const std::optional<GroupID> gid, cons
         default:
             std::shared_ptr<Match> match = bot.match_manager().GetMatch(uid);
             if (!match) {
+                
+                // 整活设置失败反馈
+                int num, count = 0;
+                try { num = stoi(msg); } catch(...) { num = -1; }
+                for (int i = 0; i < msg.size(); i++) {
+                    if (((msg[i] >= '0' && msg[i] <= '9') || msg[i] == ' ') && count <= 2) {
+                        if (msg[i] == ' ') { count++; }
+                    } else {
+                        num = -1; break;
+                    }
+                }
+                if (num >= 0 && num <= 19 && gid.has_value()) {
+                    reply() << "设置失败，奖励淘汰！";
+                    return EC_MATCH_USER_NOT_IN_MATCH;
+                }
+
                 reply() << "[错误] 您未参与游戏\n"
-                           "若您想执行元指令，请尝试在请求前加\"" META_COMMAND_SIGN "\"，或通过\"" META_COMMAND_SIGN "帮助\"查看所有支持的元指令";
+                           "若您想执行元指令，请尝试在请求前加\"#\"，或通过\"#帮助\"查看所有支持的元指令";
                 return EC_MATCH_USER_NOT_IN_MATCH;
             }
             if (match->gid() != gid && gid.has_value()) {
-                reply() << "[错误] 您未在本群参与游戏\n";
-                "若您想执行元指令，请尝试在请求前加\"" META_COMMAND_SIGN "\"，或通过\"" META_COMMAND_SIGN "帮助\"查看所有支持的元指令";
+                reply() << "[错误] 您未在本群参与游戏\n"
+                           "若您想执行元指令，请尝试在请求前加\"" META_COMMAND_SIGN "\"，或通过\"" META_COMMAND_SIGN "帮助\"查看所有支持的元指令";
                 return EC_MATCH_NOT_THIS_GROUP;
             }
             return match->Request(uid, gid, msg, reply);

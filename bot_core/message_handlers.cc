@@ -188,7 +188,8 @@ static ErrCode show_gamelist(BotCtx& bot, const UserID uid, const std::optional<
             table.Get(table.Row() - 2, 4).SetContent("<img src=\"file:///" +
                     (std::filesystem::absolute(bot.game_path()) / game_handle.Info().module_name_ / "icon.png").string() +
                     "\" style=\"width:70px; height:70px; vertical-align: middle;\">");
-            table.Get(table.Row() - 1, 1).SetStyle("style=\"width:470px;\"").SetContent(std::string("<font size=\"3\"> ") + game_handle.Info().description_ + "</font>");
+            table.Get(table.Row() - 1, 1).SetStyle("style=\"width:470px;\"");
+            table.Get(table.Row() - 1, 1).SetContent(std::string("<font size=\"3\"> ") + game_handle.Info().description_ + "</font>");
         }
         send_image();
     }
@@ -198,7 +199,15 @@ static ErrCode show_gamelist(BotCtx& bot, const UserID uid, const std::optional<
 static ErrCode new_game(BotCtx& bot, const UserID uid, const std::optional<GroupID>& gid, MsgSenderBase& reply,
                         const std::string& gamename, const std::vector<std::string>& args)
 {
-    const auto it = bot.game_handles().find(gamename);
+    auto it = bot.game_handles().find(gamename);
+
+    // random game
+    // if (gamename == "随机") {
+    //     auto begin = bot.game_handles().begin();
+    //     std::advance(begin, rand() % bot.game_handles().size());
+    //     it = bot.game_handles().find(begin->first);
+    // }
+    
     if (it == bot.game_handles().end()) {
         reply() << "[错误] 创建失败：未知的游戏名，请通过「" META_COMMAND_SIGN "游戏列表」查看游戏名称";
         return EC_REQUEST_UNKNOWN_GAME;
@@ -214,6 +223,41 @@ static ErrCode new_game(BotCtx& bot, const UserID uid, const std::optional<Group
     const std::string binded_args = std::accumulate(args.begin(), args.end(), std::string{},
             [](std::string&& s, const std::string& arg) { return std::move(s) + arg + " "; });
     return bot.match_manager().NewMatch(it->second, binded_args, uid, gid, reply);
+}
+
+static ErrCode new_random_game(BotCtx& bot, const UserID uid, const std::optional<GroupID>& gid, MsgSenderBase& reply,
+                        const int32_t mode)
+{
+    std::vector<std::pair<const std::string, GameHandle>*> eligible_games;
+    for (auto& entry : bot.game_handles()) {
+        const auto lockedOptions = entry.second.DefaultGameOptions().Lock();
+        int maxPlayers = entry.second.Info().max_player_num_fn_(lockedOptions->game_options_.get());
+        bool valid = false;
+        switch (mode) {
+            case 1: valid = (maxPlayers == 1); break;
+            case 2: valid = (maxPlayers == 2); break;
+            case 3: valid = (maxPlayers >= 3 || maxPlayers == 0); break;
+            default: valid = true; break;
+        }
+        if (valid) eligible_games.push_back(&entry);
+    }
+    if (eligible_games.empty()) {
+        reply() << "[错误] 随机失败：没有符合人数要求的游戏";
+        return EC_REQUEST_UNKNOWN_GAME;
+    }
+
+    size_t idx = rand() % eligible_games.size();
+    auto& selected_game = eligible_games[idx];
+    
+    if (gid.has_value()) {
+        const auto running_match = bot.match_manager().GetMatch(*gid);
+        ErrCode rc = EC_OK;
+        if (running_match && (rc = running_match->Terminate(false /*is_force*/)) != EC_OK) {
+            reply() << "[错误] 创建失败：该房间已经开始游戏";
+            return rc;
+        }
+    }
+    return bot.match_manager().NewMatch(selected_game->second, "", uid, gid, reply);
 }
 
 template <typename Fn>
@@ -477,6 +521,7 @@ static ErrCode about(BotCtx& bot, const UserID uid, const std::optional<GroupID>
     sender << "\n"
               "\n作者：森高（QQ：654867229）"
               "\nGitHub：http://github.com/slontia/lgtbot"
+              "\n欢迎入群体验（QQ 群）：1059834024、541402580"
               "\n"
               "\n若您使用中遇到任何 BUG 或其它问题，欢迎私信作者，或前往 GitHub 主页提 issue"
               "\n本项目仅供娱乐和技术交流，请勿用于商业用途，健康游戏，拒绝赌博";
@@ -666,7 +711,7 @@ static ErrCode show_profile(BotCtx& bot, const UserID uid, const std::optional<G
             } else {
                 for (const auto& [name, description] : it->second.Info().achievements_) {
                     if (name == info.achievement_name_) {
-                        recent_honors_table.GetLastRow(3).SetStyle("style=\"width:440px;\"").SetContent(description);
+                        recent_honors_table.GetLastRow(3).SetContent(description).SetStyle("style=\"width:440px;\"");
                         break;
                     }
                 }
@@ -890,6 +935,9 @@ const std::vector<MetaCommandGroup> meta_cmds = {
             make_command("在当前房间建立公开游戏，或私信 bot 以建立私密游戏（游戏名称可以通过「" META_COMMAND_SIGN "游戏列表」查看）",
                         new_game, VoidChecker(META_COMMAND_SIGN "新游戏"), AnyArg("游戏名称", "猜拳游戏"),
                         RepeatableChecker<AnyArg>("预设指令", "某指令")),
+            make_command("根据人数条件建立随机游戏房间",
+                        new_random_game, VoidChecker(META_COMMAND_SIGN "随机游戏"),
+                        OptionalDefaultChecker<AlterChecker<int32_t>>(0, std::map<std::string, int32_t>{{"全部", 0}, {"单人", 1}, {"双人", 2}, {"多人", 3}})),
             make_command("房主设置参与游戏的AI数量，使得玩家不低于一定数量（属于配置变更，会使得全部玩家退出游戏）",
                         set_bench_to, VoidChecker(META_COMMAND_SIGN "替补至"), ArithChecker<uint32_t>(2, 32, "数量")),
             make_command("（已废弃）房主调整分数倍率",

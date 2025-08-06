@@ -224,8 +224,9 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
             attack_count[pid] = timeout[pid] = 0;
         }
 
+/* *********************************************************** */
         // 初始化BOSS战配置
-        if (Global().PlayerName(1) == "机器人0号") {
+        if (Global().PlayerName(1) == "机器人0号" || Global().PlayerName(1) == "PLAYER_1") {
             boss.BossType = GAME_OPTION(BOSS挑战);
             boss.tempBossType = 0;
             boss.overlap = GAME_OPTION(重叠);
@@ -233,39 +234,93 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
             board[0].MapName = "<div><b>挑战者</b></div>" + board[0].MapName;
             board[1].MapName = boss.BossDesc();
 
+            int pct = 100;
             auto sender = Global().Boardcast();
 
             if (GAME_OPTION(BOSS挑战) >= 0 && GAME_OPTION(连发) == 3 && GAME_OPTION(侦察) == 100) {
-                sender << "[提示] 初始化预设BOSS配置成功！\n\n";
+                sender << "[提示] 初始化预设BOSS配置成功，挑战成功即可获得奖励！\n";
             } else {
-                sender << "[警告] 当前游戏未使用默认连发或侦察配置。\n\n";
+                // 非默认配置变更奖励倍率
+                if (GAME_OPTION(连发) < 3) {
+                    pct = pct * (3 - GAME_OPTION(连发)) * 2;
+                } else {
+                    pct = pct * (13 - GAME_OPTION(连发)) / 10;
+                }
+                if (GAME_OPTION(侦察) >= 10) {
+                    pct = GAME_OPTION(侦察) == 100 ? pct : pct * (100 + (10 - GAME_OPTION(侦察)) * 4) / 100;
+                } else {
+                    pct = pct * (100 + (10 - GAME_OPTION(侦察)) * 10) / 100;
+                }
+                sender << "[警告] 当前游戏未使用默认连发或侦察配置，本局积分奖励倍率发生变化。\n";
             }
-            sender << "[本局挑战配置详情]" <<
+            if (GAME_OPTION(形状).size() != 1) {
+                pct = pct * 0.5;
+                sender << "[警告] 由于使用自定义飞机形状，本局积分奖励减半。\n";
+                if (board[0].crucial_num > 1) {
+                    if (GAME_OPTION(要害) == 0) {
+                        pct = pct / board[0].crucial_num;
+                        sender << "本局为多要害模式，但因开启要害提示，积分倍率下降至 1/" << board[0].crucial_num << "\n";
+                    } else {
+                        pct = pct * board[0].crucial_num;
+                        sender << "本局为多要害模式，且开启首要害/无要害，积分倍率上调至 " << board[0].crucial_num << "倍\n";
+                    }
+                }
+            }
+            sender << "\n[本局挑战配置详情]" <<
                       "\n- 重叠 " << (GAME_OPTION(重叠) ? "允许" : "不允许") <<
                       "\n- 要害 " << (GAME_OPTION(要害) == 0 ? "有" : (GAME_OPTION(要害) == 1 ? "无" : "首次")) <<
                       "\n- 连发 " << to_string(GAME_OPTION(连发)) <<
-                      "\n- 侦察 " << (GAME_OPTION(侦察) == 100 ? "随机" : to_string(GAME_OPTION(侦察)));
+                      "\n- 侦察 " << (GAME_OPTION(侦察) == 100 ? "随机" : to_string(GAME_OPTION(侦察))) << "\n\n";
             if (GAME_OPTION(BOSS挑战) == 0) {
                 board[0].sizeX = board[0].sizeY = board[1].sizeX = board[1].sizeY = 14;
                 board[0].planeNum = 3;
                 board[1].planeNum = 5;
+                boss.points = 600;
+                if (GAME_OPTION(重叠)) boss.points += 600;
+                if (GAME_OPTION(要害) == 2) boss.points += 1200;
+                if (GAME_OPTION(要害) == 1) boss.points += 1500;
+                if (GAME_OPTION(重叠) && GAME_OPTION(要害) > 0) boss.points += 800;
+                sender << "[BOSS挑战 ??? 奖励明细]\n基础奖励　　600 积分\n可重叠　　　+600 积分\n首要害　　　+1200 积分\n无要害　　　+1500 积分\n双特规叠加　+800 积分\n\n";
             }
             if (GAME_OPTION(BOSS挑战) == 1) {
                 board[0].sizeX = board[0].sizeY = board[1].sizeX = board[1].sizeY = 14;
                 board[0].planeNum = 3;
                 board[1].planeNum = 6;
+                boss.points = 400;
+                if (GAME_OPTION(重叠)) boss.points += 400;
+                if (GAME_OPTION(要害) == 2) boss.points += 900;
+                if (GAME_OPTION(要害) == 1) boss.points += 1200;
+                if (GAME_OPTION(重叠) && GAME_OPTION(要害) > 0) boss.points += 1000;
+                sender << "[BOSS挑战 1 奖励明细]\n基础奖励　　400 积分\n可重叠　　　+400 积分\n首要害　　　+900 积分\n无要害　　　+1200 积分\n双特规叠加　+1000 积分\n\n";
             }
             if (GAME_OPTION(BOSS挑战) == 2) {
                 board[0].sizeX = board[0].sizeY = board[1].sizeX = board[1].sizeY = 14;
                 board[0].planeNum = 3;
                 board[1].planeNum = 5;
+                boss.points = 500;
+                if (GAME_OPTION(重叠)) boss.points += 500;
+                if (GAME_OPTION(要害) == 2) boss.points += 1000;
+                if (GAME_OPTION(要害) == 1) boss.points += 1200;
+                if (GAME_OPTION(重叠) && GAME_OPTION(要害) > 0) boss.points += 800;
+                sender << "[BOSS挑战 2 奖励明细]\n基础奖励　　500 积分\n可重叠　　　+500 积分\n首要害　　　+1000 积分\n无要害　　　+1200 积分\n双特规叠加　+800 积分\n\n";
             }
             if (GAME_OPTION(BOSS挑战) == 3) {
                 board[0].sizeX = board[0].sizeY = board[1].sizeX = board[1].sizeY = 14;
                 board[0].planeNum = 3;
                 board[1].planeNum = 6;
+                boss.points = 500;
+                if (GAME_OPTION(重叠)) boss.points += 500;
+                if (GAME_OPTION(要害) == 2) boss.points += 900;
+                if (GAME_OPTION(要害) == 1) boss.points += 1200;
+                if (GAME_OPTION(重叠) && GAME_OPTION(要害) > 0) boss.points += 800;
+                sender << "[BOSS挑战 3 奖励明细]\n基础奖励　　500 积分\n可重叠　　　+500 积分\n首要害　　　+900 积分\n无要害　　　+1200 积分\n双特规叠加　+800 积分\n\n";
             }
+            boss.points = boss.points * pct / 100;
+            if (pct != 100) sender << "积分倍率：" + to_string(pct) + "%\n\n";
+
+            sender << "本局获胜奖励：" + to_string(boss.points) + " 积分";
         }
+/* *********************************************************** */
         board[0].InitializeMap(GAME_OPTION(形状).size() == 1);
         board[1].InitializeMap(GAME_OPTION(形状).size() == 1);
         
@@ -357,6 +412,16 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
                 }
             }
         }
+
+/* *********************************************************** */
+        // BOSS挑战给积分
+        if (Global().PlayerName(1) == "机器人0号" && player_scores_[0] == 1) {
+            Global().Boardcast() << "恭喜你战胜了BOSS，根据开启的特殊规则，赢得了 " + to_string(boss.points) + " 积分！";
+            auto startPos = Global().PlayerName(0).find_last_of('(');
+            auto endPos = Global().PlayerName(0).find(')', startPos);
+            Global().Boardcast() << "游戏积分 tiedan " << Global().PlayerName(0).substr(startPos + 1, endPos - startPos - 1) << " " + to_string(boss.points);
+        }
+/* *********************************************************** */
     }
 
 };
@@ -572,6 +637,11 @@ class AttackStage : public SubGameStage<>
     virtual CheckoutErrCode OnStageOver() override
     {
         Global().Boardcast() << Markdown(Main().GetAllMap(0, 0, GAME_OPTION(要害)));
+/* *********************************************************** */
+        if (Global().PlayerName(1) == "机器人0号") {
+            Global().SaveMarkdown(Main().GetAllMap(1, 1, 0));
+        }
+/* *********************************************************** */
         // 重置上回合打击位置
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             for(int i = 1; i <= Main().board[pid].sizeX; i++) {

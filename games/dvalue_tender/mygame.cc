@@ -11,6 +11,10 @@
 #include "game_framework/util.h"
 #include "utility/html.h"
 
+#include "nash-equilibrium-solver/core/dfs_diff.h"
+#include "nash-equilibrium-solver/util/lemke-howson-killer/bimatrix.cpp"
+#include "nash-equilibrium-solver/util/lemke-howson-killer/algorithm.cpp"
+
 namespace lgtbot {
 
 namespace game {
@@ -82,8 +86,13 @@ class MainStage : public MainGameStage<RoundStage>
         , player_coins_(Global().PlayerNum(), 0)
         , player_wins_(Global().PlayerNum(), 0)
         , player_now_(Global().PlayerNum(), 0)
-    {
-    }
+        , st_([](const DiffGame& g){
+            if(g.coin[0]==g.coin[1] && g.score[0]==g.score[1]) return 0.;
+            if(g.coin[0]==0 && g.score[0]<=g.score[1]) return -1.;
+            if(g.coin[1]==0 && g.score[0]>=g.score[1]) return 1.;
+            return NaN;
+        }, std::filesystem::path(Global().ResourceDir()) / "hash.bin")
+    {}
 
     virtual void FirstStageFsm(SubStageFsmSetter setter) override;
     virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
@@ -104,6 +113,9 @@ class MainStage : public MainGameStage<RoundStage>
 
     std::string roundBoard;
     int round_;
+
+    DiffGame game_{};
+    DfsStrategy<DiffGame> st_;
 
   private:
     CompReqErrCode Status_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
@@ -151,9 +163,12 @@ class RoundStage : public SubGameStage<>
   public:
     RoundStage(MainStage& main_stage, const uint64_t round)
         : StageFsm(main_stage, "第 " + std::to_string(round) + " 回合",
-                MakeStageCommand(*this, "下分", &RoundStage::GiveCoin_, ArithChecker<int64_t>(0, 1000000, "金币")))
+                MakeStageCommand(*this, "下分", &RoundStage::GiveCoin_, ArithChecker<int64_t>(0, 1000000, "金币")),
+                MakeStageCommand(*this, "分析当前局势", &RoundStage::Analysis_, VoidChecker("分析")))
     {
     }
+
+    double value_;
 
     virtual void OnStageBegin() override
     {
@@ -193,75 +208,88 @@ class RoundStage : public SubGameStage<>
 
     virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply) override
     {
+        if (Global().IsReady(pid)) {
+            return StageErrCode::OK;
+        }
+        
         int c1 = Main().player_coins_[0];
         int c2 = Main().player_coins_[1];
         int w1 = Main().player_wins_[0];
         int w2 = Main().player_wins_[1];
         int r = Main().round_;
         int f = 0;
-
-
-        if(c1 == 0)
-        {
-            if(c2 == 0) return GiveCoinInternal_(pid, reply, 0);
-            return GiveCoinInternal_(pid, reply, 1);
+        if ((r <= 9 && ((c1 + 1) * (5 - w2 - floor((r - w1 - w2 - 1) / 2)) <= c2 || (w1 <= w2 && c1 * (10 - r) < c2))) ||
+            (r > 9 && (c1 + 1) * (7 - w2) <= c2)
+        ) {
+            f = c1 + 1;
+        } else {
+            int rnd, rnd2;
+            vector<pair<DiffGame::Action, double>> result;
+            result = get_result(Main().game_, Main().st_, rnd, rnd2);
+            f = (int)result[rnd2].first;
         }
 
-        if(r <= 9)
-        {
-            if((c1 + 1) * (10 - r) <= c2)
-            {
-                f = c1 + 1;
-            }
-            else
-            {
-                if(w1 == 0)
-                {
-                    f = rand() % 9;
-                }
-                if(w1 == 1)
-                {
-                    if(rand() % 3) f = rand() % 3 + 3;
-                    else if(rand() % 2) f = rand() % 2 + 9;
-                    else f = 0;
-                }
-                if(w1 == 2)
-                {
-                    if(rand() % 2) f = rand() % 3;
-                    else if(rand() % 2) f = rand() % 2 + 5;
-                    else f = rand() % 2 + 9;
-                }
-                if(w1 == 3)
-                {
-                    if(rand() % 2) f = rand() % 3 + 2;
-                    else f = rand() % 2 + 10;
-                }
-                if(w1 == 4)
-                {
-                    if(rand() % 2)
-                    {
-                        f = 1;
-                        if(rand() % 2) f = 3;
-                    }
-                    else
-                    {
-                        f = c1 + 1;
-                        if(rand() % 2 && c1 > 5) f -= rand() % (c1/2);
-                    }
-                }
-            }
-        }
-        else
-        {
-            if((c1 + 1) * (13 - r) <= c2)
-            {
-                f = c1 + 1;
-            }
-            else
-            {
-                f = rand() % (c2 + 1);
-            }
-        }
+        // if(c1 == 0)
+        // {
+        //     if(c2 == 0) return GiveCoinInternal_(pid, reply, 0);
+        //     return GiveCoinInternal_(pid, reply, 1);
+        // }
+
+        // if(r <= 9)
+        // {
+        //     if((c1 + 1) * (10 - r) <= c2)
+        //     {
+        //         f = c1 + 1;
+        //     }
+        //     else
+        //     {
+        //         if(w1 == 0)
+        //         {
+        //             f = rand() % 9;
+        //         }
+        //         if(w1 == 1)
+        //         {
+        //             if(rand() % 3) f = rand() % 3 + 3;
+        //             else if(rand() % 2) f = rand() % 2 + 9;
+        //             else f = 0;
+        //         }
+        //         if(w1 == 2)
+        //         {
+        //             if(rand() % 2) f = rand() % 3;
+        //             else if(rand() % 2) f = rand() % 2 + 5;
+        //             else f = rand() % 2 + 9;
+        //         }
+        //         if(w1 == 3)
+        //         {
+        //             if(rand() % 2) f = rand() % 3 + 2;
+        //             else f = rand() % 2 + 10;
+        //         }
+        //         if(w1 == 4)
+        //         {
+        //             if(rand() % 2)
+        //             {
+        //                 f = 1;
+        //                 if(rand() % 2) f = 3;
+        //             }
+        //             else
+        //             {
+        //                 f = c1 + 1;
+        //                 if(rand() % 2 && c1 > 5) f -= rand() % (c1/2);
+        //             }
+        //         }
+        //     }
+        // }
+        // else
+        // {
+        //     if((c1 + 1) * (13 - r) <= c2)
+        //     {
+        //         f = c1 + 1;
+        //     }
+        //     else
+        //     {
+        //         f = rand() % (c2 + 1);
+        //     }
+        // }
 
         if(f < 0) f = 0;
         if(f > c2) f = c2;
@@ -311,6 +339,9 @@ class RoundStage : public SubGameStage<>
                 ;
 
         Global().Boardcast() << Main().roundBoard;
+
+        Main().game_.step_simultaneous(now0, now1);
+        value_ = Main().st_.evaluate(Main().game_);
     }
 
   private:
@@ -349,6 +380,31 @@ class RoundStage : public SubGameStage<>
         // Returning |READY| means the player is ready. The current stage will be over when all surviving players are ready.
         return StageErrCode::READY;
     }
+
+    AtomReqErrCode Analysis_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        auto sender = reply();
+        if (abs(value_ - 1) <= 0.05) sender << "左侧必胜";
+        else if (value_ >= 0.8) sender << "左侧胜势";
+        else if (value_ >= 0.6) sender << "左侧大幅领先";
+        else if (value_ >= 0.15) sender << "左侧优势";
+        else if (value_ >= 0.05) sender << "左侧略微领先";
+        else if (value_ >= -0.05) sender << "双方均势";
+        else if (value_ > -0.15) sender << "右侧略微领先";
+        else if (value_ > -0.6) sender << "右侧优势";
+        else if (value_ > -0.8) sender << "右侧大幅领先";
+        else if (value_ > -1) sender << "右侧胜势";
+        else if (abs(value_ + 1) <= 0.05) sender << "右侧必胜";
+        std::ostringstream tempStream;
+        double roundedValue = round(value_ * 100.0) / 100.0;
+        if (roundedValue > -0.005 && roundedValue < 0.005) {
+            roundedValue = 0.0;
+        }
+        tempStream << std::fixed << std::setprecision(2) << roundedValue;
+        sender << "\n局面得分：" << tempStream.str();
+        // Returning |READY| means the player is ready. The current stage will be over when all surviving players are ready.
+        return StageErrCode::OK;
+    }
 };
 
 void MainStage::FirstStageFsm(SubStageFsmSetter setter)
@@ -359,6 +415,8 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
     for(int i = 0; i < Global().PlayerNum(); i++){
         player_coins_[i] = GAME_OPTION(金币);
     }
+
+    game_.init();
 
     setter.Emplace<RoundStage>(*this, ++round_);
 }

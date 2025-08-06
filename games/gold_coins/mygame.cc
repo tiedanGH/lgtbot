@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <algorithm>
+#include <regex>
 
 #include "game_framework/stage.h"
 #include "game_framework/util.h"
@@ -888,6 +889,28 @@ void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason,
         }
         player_scores_[i] += (GAME_OPTION(特殊规则) == 2) ? player_alive_round_[i] : -ceil(player_alive_round_[i] * 0.5);
     }
+/* *********************************************************** */
+    // 积分奖励发放
+    std::regex pattern(R"(机器人\d+号)");
+    int realPlayerCount = std::ranges::count_if(
+        std::views::iota(0u, Global().PlayerNum()),
+        [&](unsigned int pid) {
+            return !std::regex_match(Global().PlayerName(pid), pattern);
+        }
+    );
+    if (realPlayerCount < 4) return;
+    string pt_message = "新游戏积分已记录";
+    for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
+        auto name = Global().PlayerName(pid);
+        if (std::regex_match(name, pattern)) continue;
+        auto start = name.find_last_of('('), end = name.find(')', start);
+        std::string id = name.substr(start + 1, end - start - 1);
+        int32_t point = player_alive_round_[pid] * 80;
+        if (point > 0) pt_message += "\n" + id + " " + to_string(point);
+    }
+    pt_message += "\n「#pt help」查看游戏积分帮助";
+    Global().Boardcast() << pt_message;
+/* *********************************************************** */
     // Returning empty variant means the game will be over.
     return;
 }
