@@ -52,7 +52,7 @@ uint64_t InsertMatch(sqlite::database& db, const std::string& game_name, const s
 {
     db << "INSERT INTO match (game_name, finish_time, group_id, host_user_id, user_count, multiple) VALUES (?,datetime(CURRENT_TIMESTAMP, \'localtime\'),?,?,?,?);"
        << game_name
-       << gid
+       << (gid ? std::optional{gid->GetStr()} : std::nullopt)
        << host_uid.GetStr()
        << user_count
        << multiple;

@@ -75,7 +75,7 @@ void UpdateMatchScore(sqlite::database& db, const uint64_t match_id, const std::
     for (const auto& info : score_infos) {
         db << "UPDATE user_with_match SET zero_sum_score = ?, top_score = ?, level_score = ?, rank_score = ? "
               "WHERE match_id = ? AND user_id = ?;"
-           << info.zero_sum_score_ << info.top_score_ << info.level_score_ << info.rank_score_ << match_id << info.uid_;
+           << info.zero_sum_score_ << info.top_score_ << info.level_score_ << info.rank_score_ << match_id << info.uid_.GetStr();
         std::cout << "uid=" << info.uid_
             << "\tmid=" << match_id
             << "\tzero_sum_score=" << info.zero_sum_score_
