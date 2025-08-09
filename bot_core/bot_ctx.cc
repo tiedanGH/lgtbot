@@ -124,16 +124,24 @@ static std::variant<GameHandleMap, const char*> LoadGameModules(const char* cons
         return game_handles;
     }
 #ifdef _WIN32
-    WIN32_FIND_DATA file_data;
-    HANDLE file_handle = FindFirstFile((std::string(games_path) + "\\*.dll").c_str(), &file_data);
-    if (file_handle == INVALID_HANDLE_VALUE) {
-        return "LoadGameModules: find first file failed";
+    WIN32_FIND_DATA dir_data;
+    HANDLE dir_handle = FindFirstFile((std::string(games_path) + "\\*").c_str(), &dir_data);
+    if (dir_handle == INVALID_HANDLE_VALUE) {
+        return "LoadGameModules: open directory failed";
     }
     do {
-        const auto dll_path = std::string(games_path) + "\\" + file_data.cFileName;
-        LoadGame(LoadLibrary(dll_path.c_str()), game_handles);
-    } while (FindNextFile(file_handle, &file_data));
-    FindClose(file_handle);
+        if ((dir_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 || strcmp(dir_data.cFileName, ".") == 0 || strcmp(dir_data.cFileName, "..") == 0) {
+            WarnLog() << "Not the game directory, skip: " << dir_data.cFileName;
+            continue;
+        }
+        std::string dll_path = std::string(games_path) + "\\" + dir_data.cFileName + "\\libgame.dll";
+        if (GetFileAttributes(dll_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            WarnLog() << "Cannot find libgame.dll, skip: " << dir_data.cFileName;
+        } else {
+            LoadGame(LoadLibrary(dll_path.c_str()), game_handles);
+        }
+    } while (FindNextFile(dir_handle, &dir_data));
+    FindClose(dir_handle);
     InfoLog() << "Load module count: " << game_handles.size();
 #elif __linux__
     DIR* d = opendir(games_path);
