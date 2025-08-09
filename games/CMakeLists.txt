@@ -87,7 +87,9 @@ foreach (GAME_DIR ${GAME_DIRS})
     target_include_directories(${GAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${GAME})
     target_link_libraries(${GAME} ${GAME_THIRD_PARTIES})
     set_target_properties(${GAME} PROPERTIES
+      RUNTIME_OUTPUT_DIRECTORY ${GAME_OUTPUT_PATH}
       LIBRARY_OUTPUT_DIRECTORY ${GAME_OUTPUT_PATH}
+      ARCHIVE_OUTPUT_DIRECTORY ${GAME_OUTPUT_PATH}
       OUTPUT_NAME "libgame"
       PREFIX "")
 
