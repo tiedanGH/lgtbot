@@ -451,6 +451,18 @@ GAME_TEST(5, civilian_and_killer_and_traitor_dead_at_the_same_time_traitor_win)
     ASSERT_SCORE(0, 0, 0, 0, 1);
 }
 
+GAME_TEST(5, both_civilian_and_killer_lose_in_the_first_round)
+{
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 平民 平民 圣女 守卫");
+    ASSERT_PUB_MSG(OK, 0, "血量 15");
+    START_GAME();
+    ASSERT_PRI_MSG(OK, 0, "攻击 A 15");
+    ASSERT_PRI_MSG(OK, 1, "攻击 B 15");
+    ASSERT_PRI_MSG(OK, 2, "攻击 C 15");
+    ASSERT_TIMEOUT(CHECKOUT);
+    ASSERT_SCORE(1, 0, 0, 0, 0);
+}
+
 GAME_TEST(5, killer_dead_body_double_cannot_act)
 {
     ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 替身 平民 平民 内奸");
@@ -1389,6 +1401,61 @@ GAME_TEST(5, agent_achieve_max_round_lose)
     ASSERT_TRUE(StartGame());
     ASSERT_TIMEOUT(CHECKOUT);
     ASSERT_SCORE(1, 1, 1, 1, 0);
+}
+
+GAME_TEST(5, cannot_good_night_without_good_night_mode)
+{
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 替身 平民 圣女 侦探");
+    ASSERT_PUB_MSG(OK, 0, "晚安模式 关闭");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PRI_MSG(FAILED, 3, "晚安");
+}
+
+GAME_TEST(5, good_night_mode_cannot_act_after_good_night)
+{
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 替身 平民 圣女 侦探");
+    ASSERT_PUB_MSG(OK, 0, "晚安模式 开启");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PRI_MSG(OK, 3, "晚安");
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_ELIMINATED(3);
+}
+
+GAME_TEST(5, good_night_mode_killer_cannot_good_night)
+{
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 替身 平民 圣女 侦探");
+    ASSERT_PUB_MSG(OK, 0, "晚安模式 开启");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PRI_MSG(FAILED, 0, "晚安");
+}
+
+GAME_TEST(5, good_night_mode_civilians_cannot_win_until_quorum_good_night)
+{
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 替身 平民 圣女 侦探");
+    ASSERT_PUB_MSG(OK, 0, "晚安模式 开启");
+    ASSERT_PUB_MSG(OK, 0, "血量 15");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PRI_MSG(OK, 0, "攻击 A 15");
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_PRI_MSG(CONTINUE, 2, "晚安");
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_PRI_MSG(CHECKOUT, 3, "晚安");
+    ASSERT_SCORE(0, 0, 1, 1, 1);
+}
+
+GAME_TEST(5, good_night_mode_civilians_cannot_win_until_quorum_good_night_by_killed)
+{
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 替身 平民 圣女 侦探");
+    ASSERT_PUB_MSG(OK, 0, "晚安模式 开启");
+    ASSERT_PUB_MSG(OK, 0, "血量 15");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PRI_MSG(OK, 0, "攻击 A 15");
+    ASSERT_PRI_MSG(OK, 2, "晚安");
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_PRI_MSG(CONTINUE, 1, "攻击 D 15");
+    ASSERT_PRI_MSG(OK, 4, "攻击 E 15");
+    ASSERT_TIMEOUT(CHECKOUT);
+    ASSERT_SCORE(0, 0, 1, 1, 1);
 }
 
 
