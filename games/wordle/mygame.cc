@@ -110,6 +110,14 @@ bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const Gener
 }
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
+    InitOptionsCommand("设定游戏配置",
+            [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& length, const uint32_t& hard) {
+                GET_OPTION_VALUE(game_options, 长度) = length;
+                GET_OPTION_VALUE(game_options, 高难) = hard;
+                return NewGameMode::MULTIPLE_USERS;
+            },
+            ArithChecker<uint32_t>(2, 11, "长度"),
+            OptionalDefaultChecker<ArithChecker<uint32_t>>(0, 0, 2, "高难")),
     InitOptionsCommand("独自一人开始游戏",
             [] (CustomOptions& game_options, MutableGenericOptions& generic_options)
             {
@@ -180,14 +188,17 @@ class MainStage : public MainGameStage<RoundStage>
 //        reply() << "这里输出当前游戏情况";
         // Returning |OK| means the game stage
 
-        string s1, s2, g1, g2;
-        s1 = player_word_[0];
-        s2 = player_word_[1];
-        g1 = player_now_[0];
-        g2 = player_now_[1];
-        Global().Boardcast() << g1 << " " << g2 ;
-        Global().Boardcast() << cmpWordle(s2, g1) << " " << cmpWordle(s1, g2);
-
+        if (wordLength >= 5) {
+            string s1, s2, g1, g2;
+            s1 = player_word_[0];
+            s2 = player_word_[1];
+            g1 = player_now_[0];
+            g2 = player_now_[1];
+            Global().Boardcast() << g1 << " " << g2 ;
+            Global().Boardcast() << cmpWordle(s2, g1) << " " << cmpWordle(s1, g2);
+        } else {
+            Global().Boardcast() << player_now_[pid] << "\n" << cmpWordle(player_word_[!pid], player_now_[pid]);
+        }
 
         return StageErrCode::OK;
     }
