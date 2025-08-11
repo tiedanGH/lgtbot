@@ -687,11 +687,11 @@ class Board
     const string style = R"(
 <style>
     @font-face{
-        font-family: 'qisinanati';
-        src: url("file:///)" + resource_path_ + R"(qisinanati.ttf");
+        font-family: 'QisiJoanna';
+        src: url("file:///)" + resource_path_ + R"(QisiJoanna.ttf");
     }
     .grid {
-        font-family: 'qisinanati';
+        font-family: 'QisiJoanna';
         font-size: 20px;
         width: 40px;
         height: 40px;
