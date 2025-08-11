@@ -26,14 +26,14 @@ const GameProperties k_properties {
     .developer_ = "铁蛋",
     .description_ = "挖宝游戏。推理宝藏、炸弹位置。分高获胜！",
 };
-uint64_t MaxPlayerNum(const MyGameOptions& options) { return 12; }
-uint32_t Multiple(const MyGameOptions& options) { return 1; }
+uint64_t MaxPlayerNum(const CustomOptions& options) { return 12; }
+uint32_t Multiple(const CustomOptions& options) { return 1; }
 const MutableGenericOptions k_default_generic_options{
     .is_formal_{false},
 };
 const std::vector<RuleCommand> k_rule_commands = {};
 
-bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
+bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
 {
     uint32_t& map_option = GET_OPTION_VALUE(game_options, 地图);
     const int32_t size_option = GET_OPTION_VALUE(game_options, 边长);
@@ -100,7 +100,7 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
     InitOptionsCommand("使用预设地图类型",
-        [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option, const uint32_t& item_mode) {
+        [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option, const uint32_t& item_mode) {
             GET_OPTION_VALUE(game_options, 地图) = map_option;
             GET_OPTION_VALUE(game_options, 道具) = item_mode;
             return NewGameMode::MULTIPLE_USERS;
@@ -109,7 +109,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
         OptionalDefaultChecker<AlterChecker<uint32_t>>(0, map<string, uint32_t>{{"经典", 0}, {"全部", 1}})),
     InitOptionsCommand("自定义游戏配置（边长、生命、道具数量）",
         [] (
-            MyGameOptions& game_options,
+            CustomOptions& game_options,
             MutableGenericOptions& generic_options,
             const int32_t& size_option,
             const int32_t& hp_option,
@@ -143,7 +143,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
         OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 0, 200, "加湿器"),
         OptionalDefaultChecker<ArithChecker<int32_t>>(-1, 0, 200, "墨水瓶")),
     InitOptionsCommand("独自一人开始游戏",
-        [] (MyGameOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option, const uint32_t& item_mode)
+        [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& map_option, const uint32_t& item_mode)
         {
             GET_OPTION_VALUE(game_options, 地图) = map_option;
             GET_OPTION_VALUE(game_options, 道具) = item_mode;

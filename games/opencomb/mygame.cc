@@ -31,12 +31,12 @@ const GameProperties k_properties {
     .developer_ = "铁蛋",
     .description_ = "使用特殊道具改变经典地图，体验不一样的数字蜂巢玩法",
 };
-uint64_t MaxPlayerNum(const MyGameOptions& options) { return 10; }
-uint32_t Multiple(const MyGameOptions& options) { return GET_OPTION_VALUE(options, 种子).empty() ? 2 : 0; }
+uint64_t MaxPlayerNum(const CustomOptions& options) { return 10; }
+uint32_t Multiple(const CustomOptions& options) { return GET_OPTION_VALUE(options, 种子).empty() ? 2 : 0; }
 const MutableGenericOptions k_default_generic_options;
 const std::vector<RuleCommand> k_rule_commands = {};
 
-bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options) {
+bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options) {
     if (GET_OPTION_VALUE(game_options, 模式) == 1 && generic_options_readonly.PlayerNum() < 2) {
         reply() << "「云顶」对战模式至少需要 2 人参加游戏";
         return false;
@@ -46,14 +46,14 @@ bool AdaptOptions(MsgSenderBase& reply, MyGameOptions& game_options, const Gener
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
     InitOptionsCommand("独自一人开始游戏",
-            [] (MyGameOptions& game_options, MutableGenericOptions& generic_options)
+            [] (CustomOptions& game_options, MutableGenericOptions& generic_options)
             {
                 generic_options.bench_computers_to_player_num_ = 1;
                 return NewGameMode::SINGLE_USER;
             },
             VoidChecker("单机")),
     InitOptionsCommand("修改游戏配置：卡池、地图、游戏模式、道具、连线奖励",
-            [] (MyGameOptions& game_options,
+            [] (CustomOptions& game_options,
                 MutableGenericOptions& generic_options,
                 const int32_t& card,
                 const std::string map,

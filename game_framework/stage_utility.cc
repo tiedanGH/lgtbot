@@ -18,7 +18,7 @@ namespace GAME_MODULE_NAME {
 
 namespace internal {
 
-PublicStageUtility::PublicStageUtility(const MyGameOptions& game_options, const lgtbot::game::GenericOptions& generic_options, MatchBase& match)
+PublicStageUtility::PublicStageUtility(const CustomOptions& game_options, const lgtbot::game::GenericOptions& generic_options, MatchBase& match)
     : game_options_{game_options}
     , generic_options_(generic_options)
     , match_(match)
@@ -103,7 +103,7 @@ void PublicStageUtility::Leave(const PlayerID pid)
 {
     masker_.SetPermanentInactive(pid);
     if (IsInDeduction()) {
-        Boardcast() << "所有玩家都失去了行动能力，于是游戏将直接推演至终局";
+        match_.GroupMsgSender()() << "所有玩家都失去了行动能力，于是游戏将直接推演至终局";
     }
 }
 
