@@ -131,17 +131,82 @@ class Player
     // 抓捕目标
     PlayerID target;
     // 移动相关
-    int subspace = -1;      // 亚空间剩余步数
-    string move_record;     // 当前回合行动轨迹
-    string all_record;      // 历史回合行动轨迹
-    string private_record;  // 当前回合私信记录
-    int hide_remaining = 0; // 隐匿剩余次数
-    bool inHeatZone = false;// 在热源区块内
-    bool heated = false;    // 两次烫伤出局
+    int subspace = -1;          // 亚空间剩余步数
+    string all_record;          // 历史回合行动轨迹
+    string private_record;      // 当前回合私信记录
+    int hide_remaining = 0;     // 隐匿剩余次数
+    bool inHeatZone = false;    // 在热源区块内
+    bool heated = false;        // 两次烫伤出局
     // 挂机状态（等待时间缩减）
     bool hook_status = false;
     // 玩家分数
     Score score;
+
+    // 当前回合行动轨迹
+    struct Move {
+        int direct;
+        int sound;
+        pair<string, bool> content;
+    };
+    vector<Move> move_record;
+
+    void NewStepRecord(const Direct direct, const string& end = "") { move_record.push_back({static_cast<int>(direct), 0, {end, true}}); }
+    void UpdateSoundRecord(const Sound sound) { if (!move_record.empty()) move_record.back().sound = static_cast<int>(sound); }
+    void UpdateEndRecord(const string& content) { if (!move_record.empty()) move_record.back().content = {content, true}; }
+    void NewContentRecord(const string& content) { move_record.push_back({-1, 0, {content, false}}); }
+    void ClearMoveRecord() { move_record.clear(); }
+
+    string GetMoveRecord()
+    {
+        string result;
+        const size_t N = move_record.size();
+        size_t i = 0;
+        while (i < N) {
+            const Move& mv = move_record[i];
+            // 能否参与合并：同方向、无声效、无额外内容
+            bool mergeable = (mv.direct >= 0 && mv.sound == 0 && mv.content.first.empty());
+            if (mergeable) {
+                size_t j = i, count = 0;
+                while (j < N) {
+                    const Move& next = move_record[j];
+                    if (next.direct == mv.direct && next.sound == 0 && next.content.first.empty()) {
+                        count++; j++;
+                    } else {
+                        break;
+                    }
+                }
+                if (count >= 3) {   // 3 次及以上合并
+                    result += dirSymbol(mv.direct) + "*" + to_string(count);
+                    i = j;
+                    continue;
+                }
+            }
+            result += formatSingle(mv);
+            i++;
+        }
+        return result;
+    }
+
+    static string dirSymbol(int d)
+    {
+        switch (d) {
+            case 0: return "↑";
+            case 1: return "↓";
+            case 2: return "←";
+            case 3: return "→";
+            default: return "";
+        }
+    }
+
+    static string formatSingle(const Move& mv)
+    {
+        string d = dirSymbol(mv.direct);
+        if (mv.sound == 1)      return "[" + d + "沙沙]";
+        else if (mv.sound == 2) return "[" + d + "啪啪]";
+        else if (!mv.content.first.empty()) {
+            return mv.content.second ? "(" + d + mv.content.first + ")" : mv.content.first;
+        } else return d;
+    }   
 };
 
 
