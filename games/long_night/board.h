@@ -332,7 +332,18 @@ class Board
             all_record += "<br><b>[BOSS] 米诺陶斯</b>";
             all_record += boss.all_record + "<br>";
         }
-        return regex_replace(all_record, regex(R"(\]\()"), "] (");
+        return clean_markdown(all_record);
+    }
+
+    static string clean_markdown(const string& input)
+    {
+        string result = input;
+        result = regex_replace(result, regex(R"(\*)"), R"(\*)");
+        result = regex_replace(result, regex(R"(_)"), R"(\_)");
+        result = regex_replace(result, regex(R"(\[)"), R"(\[)");
+        result = regex_replace(result, regex(R"(\])"), R"(\])");
+        result = regex_replace(result, regex(R"(`)"), R"(\`)");
+        return result;
     }
 
     string GetAllScore() const
@@ -366,9 +377,6 @@ class Board
     // 玩家移动
     bool MakeMove(const PlayerID pid, const Direct direction, const bool hide)
     {
-        static const char* arrow[4] = {"↑", "↓", "←", "→"};
-        static const char* hit[4] = {"(↑撞)", "(↓撞)", "(←撞)", "(→撞)"};
-
         int d = static_cast<int>(direction);
         int cx = players[pid].x;
         int cy = players[pid].y;
@@ -389,10 +397,10 @@ class Board
         }
         // 轨迹记录
         if (wall && players[pid].subspace < 0) {
-            if (!hide) players[pid].move_record += hit[d];
+            if (!hide) players[pid].NewStepRecord(direction, "撞");
             return false;
         }
-        if (!hide) players[pid].move_record += arrow[d];
+        if (!hide) players[pid].NewStepRecord(direction);
 
         if (players[pid].subspace > 0) {
             players[pid].subspace--;
