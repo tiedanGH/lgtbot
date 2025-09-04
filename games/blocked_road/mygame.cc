@@ -39,6 +39,14 @@ bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const Gener
 }
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
+    InitOptionsCommand("设置棋子数和边长",
+        [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const uint32_t& num, const uint32_t& size)
+        {
+            GET_OPTION_VALUE(game_options, 棋子) = num;
+            GET_OPTION_VALUE(game_options, 边长) = size;
+            return NewGameMode::MULTIPLE_USERS;
+        },
+        ArithChecker<uint32_t>(3, 6, "棋子"), OptionalDefaultChecker<ArithChecker<uint32_t>>(4, 4, 6, "边长")),
     InitOptionsCommand("独自一人开始游戏",
             [] (CustomOptions& game_options, MutableGenericOptions& generic_options)
             {
