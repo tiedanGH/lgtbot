@@ -365,22 +365,21 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
 
 void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
 {
-    round_++;
-
 //    Global().Boardcast()<<std::to_string(round_)<<std::to_string(player_wins_[0])<<std::to_string(player_wins_[1]);
 
-    if (round_ != 10 && round_ != 13) {
+    int win_need = GAME_OPTION(回合数) / 2 + 1;
+    if (round_ != GAME_OPTION(回合数) && round_ != GAME_OPTION(回合数) + 3) {
         if(
-          (round_ < 10 && (player_wins_[0] < 5 && player_wins_[1] < 5) )
-          ||(round_ > 10 && (player_wins_[0] < 6 && player_wins_[1] < 6) )
+          (round_ < GAME_OPTION(回合数) && (player_wins_[0] < win_need && player_wins_[1] < win_need) )
+          ||(round_ > GAME_OPTION(回合数) && (player_wins_[0] < win_need + 1 && player_wins_[1] < win_need + 1) )
                 ) {
-            setter.Emplace<RoundStage>(*this, round_);
+            setter.Emplace<RoundStage>(*this, ++round_);
             return;
         }
     }
-    else if(round_ == 10){
+    else if(round_ == GAME_OPTION(回合数)){
         if(player_wins_[0] == player_wins_[1]){
-            setter.Emplace<RoundStage>(*this, round_);
+            setter.Emplace<RoundStage>(*this, ++round_);
             return;
         }
     }
