@@ -321,6 +321,9 @@ void MainStage::NextStageFsm(GuessingStage& sub_stage,
     return;
   }
   if (JudgeOver()) {
+    Global().Boardcast() << "本局游戏双方等式: \n"
+                         << target_[0] << "\n"
+                         << target_[1];
     return;
   }
   table_.AddLine();
