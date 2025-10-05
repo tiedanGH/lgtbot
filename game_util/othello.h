@@ -71,6 +71,9 @@ class Board
 
     bool Place(const Coor& coor, const ChessType type)
     {
+        if (coor.row_ < 0 || coor.row_ >= k_size_ || coor.col_ < 0 || coor.col_ >= k_size_) {
+            return false;
+        }
         auto& box = Get_(coor);
         if (box.cur_type_ != ChessType::NONE) {
             return false; // there is already a chess
