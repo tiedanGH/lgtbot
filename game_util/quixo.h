@@ -111,15 +111,15 @@ class Board
         if (src_type != Type::_ && src_type != type) {
             return ErrCode::INVALID_SRC;
         }
+        if (!TryPush_<true>(src_coor, dst_coor, type) && !TryPush_<false>(src_coor, dst_coor, type)) {
+            return ErrCode::INVALID_DST;
+        }
         if (src_type == Type::_) {
             if (type == Type::X1 || type == Type::X2) {
                 ++chess_counts_[static_cast<uint32_t>(Symbol::X)];
             } else if (type == Type::O1 || type == Type::O2) {
                 ++chess_counts_[static_cast<uint32_t>(Symbol::O)];
             }
-        }
-        if (!TryPush_<true>(src_coor, dst_coor, type) && !TryPush_<false>(src_coor, dst_coor, type)) {
-            return ErrCode::INVALID_DST;
         }
         areas_[dst_coor.x_][dst_coor.y_] = type;
         last_move_coor_.emplace(dst_coor);
