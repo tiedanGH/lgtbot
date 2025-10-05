@@ -2,9 +2,9 @@ name: CMake
 
 on:
   push:
-    branches: [ master ]
+    branches: [ cmake-test ]
   pull_request:
-    branches: [ master ]
+    branches: [ cmake-test ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -71,7 +71,7 @@ jobs:
         submodules: recursive
 
     - name: Configure CMake
-      run: cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_SIMULATOR=ON -DWITH_GAMES=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+      run: cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_CXX_FLAGS="-DGFLAGS_IS_A_DLL=0" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_SIMULATOR=ON -DWITH_GAMES=ON
 
     - name: Build
       working-directory: build
