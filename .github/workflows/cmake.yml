@@ -2,9 +2,9 @@ name: CMake
 
 on:
   push:
-    branches: [ cmake-test ]
+    branches: [ main ]
   pull_request:
-    branches: [ cmake-test ]
+    branches: [ main ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
@@ -18,7 +18,7 @@ jobs:
              sudo apt update
              sudo apt install gcc-12 g++-12
     
-    - name: Install dependences
+    - name: Install dependencies
       run: sudo apt-get remove libunwind-14 -y; sudo apt-get install -y libgoogle-glog-dev libgflags-dev libgtest-dev libsqlite3-dev libqt5webkit5-dev python3-pybind11
 
     - name: Checkout repository and submodules
@@ -27,7 +27,7 @@ jobs:
         submodules: recursive
 
     - name: Configure CMake
-      run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_SIMULATOR=ON -DWITH_GAMES=ON
+      run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_TOOLS=ON -DWITH_GAMES=ON
       shell: bash
       env:
        CC:   gcc-12
@@ -71,7 +71,7 @@ jobs:
         submodules: recursive
 
     - name: Configure CMake
-      run: cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_CXX_FLAGS="-DGFLAGS_IS_A_DLL=0" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_SIMULATOR=ON -DWITH_GAMES=ON
+      run: cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_CXX_FLAGS="-DGFLAGS_IS_A_DLL=0" -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_TOOLS=ON -DWITH_GAMES=ON
 
     - name: Build
       working-directory: build
