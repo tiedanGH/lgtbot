@@ -1,4 +1,4 @@
-## Nerdual
+## Nerduel
 
 - **原作：** dva
 - **游戏人数：** 2
