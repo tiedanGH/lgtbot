@@ -17,7 +17,7 @@ jobs:
     - run:   |
              sudo apt update
              sudo apt install gcc-12 g++-12
-    
+
     - name: Install dependences
       run: sudo apt-get remove libunwind-14 -y; sudo apt-get install -y libgoogle-glog-dev libgflags-dev libgtest-dev libsqlite3-dev libqt5webkit5-dev python3-pybind11
 
@@ -27,7 +27,9 @@ jobs:
         submodules: recursive
 
     - name: Configure CMake
-      run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_SIMULATOR=ON -DWITH_GAMES=ON
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} \
+        -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_TOOLS=ON -DWITH_GAMES=ON
       shell: bash
       env:
        CC:   gcc-12
@@ -71,7 +73,14 @@ jobs:
         submodules: recursive
 
     - name: Configure CMake
-      run: cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_SIMULATOR=ON -DWITH_GAMES=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+      # Temporary: fix gflags compile error
+      #   define GFLAGS_IS_A_DLL=0 to avoid "operator '&&' has no left operand" in gflags.h
+      #   -Dgoogle=gflags resolves undefined 'google::RegisterFlagValidator' symbol
+      run: |
+        cmake -G "MinGW Makefiles" -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DWITH_GCOV=OFF -DWITH_ASAN=OFF -DWITH_GLOG=OFF -DWITH_SQLITE=ON -DWITH_TEST=ON -DWITH_TOOLS=ON -DWITH_GAMES=ON \
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+          -DCMAKE_CXX_FLAGS="-DGFLAGS_IS_A_DLL=0 -Dgoogle=gflags"
 
     - name: Build
       working-directory: build
