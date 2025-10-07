@@ -30,7 +30,6 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsigned-char -g")
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/json/include)
 
 if (WITH_IMAGE)
-  set(gflags_LIBRARIES gflags::gflags)
   find_package(gflags REQUIRED)
   add_subdirectory(third_party/markdown2image)
 endif()
