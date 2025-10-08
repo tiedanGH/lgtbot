@@ -345,15 +345,19 @@ class RoundStage : public SubGameStage<>
         if (pid == Main().currentPlayer) {
             int X, Y, addx, addy;
             string result;
-            while (result != "OK") {
-                int c = rand() % GAME_OPTION(棋子) + 1;
-                for (int i = 1; i <= Main().board.size; i++) {
-                    for (int j = 1; j <= Main().board.size; j++) {
-                        if (Main().board.chess[i][j] == pid + 1 && c >= 0) {
-                            c--; X = i; Y = j;
+            int try_count = 0;
+            while (result != "OK" && try_count++ < 1000) {
+                std::vector<pair<int, int>> pieces;
+                for (int i = 1; i <= Main().board.size; ++i) {
+                    for (int j = 1; j <= Main().board.size; ++j) {
+                        if (Main().board.chess[i][j] == pid + 1) {
+                            pieces.push_back({i, j});
                         }
                     }
                 }
+                int c = rand() % GAME_OPTION(棋子);
+                X = pieces[c].first;
+                Y = pieces[c].second;
                 addx = addy = 0;
                 if (rand() % 2) {
                     addx = rand() % 2 == 1 ? 1 : -1;
