@@ -224,7 +224,7 @@ static std::variant<nlohmann::json, const char*> LoadConfig(const char* const co
             }
         }
         if (game_json.contains("is_formal")) {
-            locked_option->generic_options_.is_formal_ = game_json["is_formal"].get<bool>() ? 1 : 0;
+            locked_option->generic_options_.is_formal_ = game_json["is_formal"].get<bool>();
             InfoLog() << "LoadConfig set game '" << game_name << "' is_formal: " << static_cast<int>(locked_option->generic_options_.is_formal_);
         }
     }
