@@ -215,3 +215,6 @@ html/
 
 # Mac
 .DS_Store
+
+# Copilot
+_codeql_detected_source_root
