@@ -94,7 +94,7 @@ class PublicStageUtility
     }
 
   private:
-    // Deduction mode is determined by Match, which checks if all human players are eliminated and there are alive computer players.
+    // Deduction mode is determined by Match: true only when all human players are eliminated AND at least one computer player is alive.
     bool IsInDeduction() const { return match_.IsInDeduction(); }
 
     void Leave(const PlayerID pid);
