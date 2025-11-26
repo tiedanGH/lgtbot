@@ -94,8 +94,8 @@ class PublicStageUtility
     }
 
   private:
-    // TODO: Stage should identify which players are computers. `match_.IsInDeduction()` condition should be removed.
-    bool IsInDeduction() const { return match_.IsInDeduction() || masker_.IsAllPermanentInactive(); }
+    // Deduction mode is determined by Match, which checks if all human players are eliminated and there are alive computer players.
+    bool IsInDeduction() const { return match_.IsInDeduction(); }
 
     void Leave(const PlayerID pid);
 
