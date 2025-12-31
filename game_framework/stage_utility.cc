@@ -104,6 +104,8 @@ void PublicStageUtility::Leave(const PlayerID pid)
     const bool was_all_permanent_inactive = masker_.IsAllPermanentInactive();
     masker_.SetPermanentInactive(pid);
     if (!was_all_permanent_inactive && masker_.IsAllPermanentInactive()) {
+        // Use match_.GroupMsgSender() directly to bypass the IsInDeduction() check
+        // that would return EmptyMsgSender after masker_.IsAllPermanentInactive() becomes true
         match_.GroupMsgSender()() << "所有玩家都失去了行动能力，于是游戏将直接推演至终局";
     }
 }
