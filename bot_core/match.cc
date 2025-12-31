@@ -522,8 +522,12 @@ void Match::Eliminate(const PlayerID pid)
 {
     if (std::exchange(players_[pid].state_, Player::State::ELIMINATED) != Player::State::ELIMINATED) {
         Tell(pid) << "很遗憾，您被淘汰了，可以通过「" META_COMMAND_SIGN "退出」以退出游戏";
-        is_in_deduction_ = std::ranges::all_of(players_,
+        // Enter deduction mode only if all players are eliminated AND there is at least one alive computer player
+        const bool all_players_eliminated = std::ranges::all_of(players_,
                 [](const auto& p) { return std::get_if<ComputerID>(&p.id_) || p.state_ == Player::State::ELIMINATED; });
+        const bool has_alive_computer = std::ranges::any_of(players_,
+                [](const auto& p) { return std::get_if<ComputerID>(&p.id_) && p.state_ != Player::State::ELIMINATED; });
+        is_in_deduction_ = all_players_eliminated && has_alive_computer;
         MatchLog_(InfoLog()) << "Eliminate player pid=" << pid << " is_in_deduction=" << Bool2Str(is_in_deduction_);
     }
 }
