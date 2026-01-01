@@ -102,7 +102,8 @@ void PublicStageUtility::StopTimer()
 void PublicStageUtility::Leave(const PlayerID pid)
 {
     masker_.SetPermanentInactive(pid);
-    if (IsInDeduction()) {
+    if (IsInDeduction() && !is_in_deduction_) {
+        is_in_deduction_ = true;
         match_.GroupMsgSender()() << "所有玩家都失去了行动能力，于是游戏将直接推演至终局";
     }
 }

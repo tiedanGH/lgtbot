@@ -111,6 +111,7 @@ class PublicStageUtility
     int32_t bot_message_id_{0}; // the ID of each bot message
     int32_t saved_image_no_{0};
     std::optional<std::chrono::time_point<std::chrono::steady_clock>> timer_finish_time_;
+    bool is_in_deduction_{false};
 };
 
 class AtomicStage;
