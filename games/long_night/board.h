@@ -2,15 +2,21 @@
 struct GetBoardOptions {
     bool with_player = true;
     bool with_content = false;
+    bool with_ground = true;
 };
 
 class Board
 {
   public:
-    Board(string image_path, const int32_t mode) : image_path_(std::move(image_path)), unitMaps(mode) {}
+    Board(string image_path, const int32_t image_type, const int32_t mode, const vector<string>& custom_blocks)
+        : image_path_(std::move(image_path)), image_type_(image_type), gamemode(mode), g(std::random_device{}()), unitMaps(mode, g, custom_blocks) {}
+
+    // 随机引擎
+    std::mt19937 g;
 
     // 图片资源文件夹
     const string image_path_;
+    const int32_t image_type_;
 
 	// 玩家
     uint32_t playerNum;
@@ -21,38 +27,42 @@ class Board
     int size = 9;
     // 地图
     vector<vector<Grid>> grid_map;
+    int gamemode;
     int exit_num;  // 逃生舱数量
     string init_html_;
     // 区块模板
     UnitMaps unitMaps;
     // BOSS
-    struct Boss {
-        int x = -1;
-        int y = -1;
-        int steps = -1;
-        PlayerID target;
-        string all_record;
-    } boss;
+    Boss boss{size, players};
+    // 完整赛况额外信息
+    string all_extra_record;
     // 特殊区块位置（暂不使用）
     // pair<int, int> special_pos = {12, 12};
 
     // 初始化地图
-    void Initialize(const bool boss)
+    void Initialize()
     {
-        std::random_device rd;
-        g = std::mt19937(rd());
         grid_map.resize(size);
         player_map.resize(size);
         for (int i = 0; i < size; i++) {
             grid_map[i].resize(size);
             player_map[i].resize(size);
         }
-        InitializeBlock();              // 初始化区块
+
+        InitializeBlocks();              // 初始化区块
         FixAdjacentWalls(grid_map);     // 相邻墙面修复
         FixInvalidPortals(grid_map);    // 封闭传送门替换为水洼
         RandomizePlayers();             // 随机生成玩家
-        if (boss) BossSpawn();          // 初始化BOSS
-        // 保存初始盘面
+
+        // 成就辅助：记录玩家初始位置
+        for (PlayerID pid = 0; pid < playerNum; ++pid) {
+            players[pid].achievement.MakeStep(players[pid].x, players[pid].y);
+        }
+    }
+
+    // 保存初始盘面
+    void SaveGameStartMap()
+    {
         init_html_ = GetBoard(grid_map);
     }
 
@@ -66,48 +76,52 @@ class Board
         for (int x = 1; x < size * 2; x = x + 2) {
             for (int y = 1; y < size * 2; y = y + 2) {
                 int gridX = (x+1)/2-1, gridY = (y+1)/2-1;
-                if (size >= 3) {
-                    map.Get(x, y).SetStyle("class=\"grid\" " + GetGridStyle(grid_map[gridX][gridY].Type(), true));
+                const Grid& grid = grid_map[gridX][gridY];
+                if (options.with_ground) {
+                    map.Get(x, y).SetStyle("class=\"grid\" " + GetGridStyle(grid.Type(), grid.Attach(), true));
                 } else {
-                    map.Get(x, y).SetStyle("class=\"grid\"");
+                    map.Get(x, y).SetStyle("class=\"grid\" " + GetGridStyle(GridType::EMPTY, AttachType::EMPTY, true));
                 }
                 if (options.with_content) {
-                    string content = grid_map[gridX][gridY].GetContent().first;
+                    string content = grid.GetContent().first;
                     if (!content.empty()) {
-                        map.Get(x, y).SetContent(HTML_SIZE_FONT_HEADER(4) "<b>" + content + "</b>" HTML_FONT_TAIL);
+                        map.Get(x, y).SetContent(GetColoredMark(content, grid.Type(), grid.Attach()));
                     }
                 } else if (options.with_player) {
-                    string content = "";
-                    if (boss.x == gridX && boss.y == gridY) {
-                        content += HTML_COLOR_FONT_HEADER(red) "★" HTML_FONT_TAIL;
+                    string player_marks;
+                    if (boss.Enable() && boss.x == gridX && boss.y == gridY) {
+                        player_marks += boss.GetBossIcon();
                     }
                     for (auto pid: player_map[gridX][gridY]) {
-                        content += num[pid];
-                        if (content.length() % 2 == 0) {
-                            content += "<br>";
+                        player_marks += num[pid];
+                        if (player_marks.length() % 2 == 0) {
+                            player_marks += "<br>";
                         }
                     }
-                    if (!content.empty()) {
-                        map.Get(x, y).SetContent(HTML_SIZE_FONT_HEADER(4) + content + HTML_FONT_TAIL);
+                    // 根据[地形/附着]改变玩家标记样式
+                    if (!player_marks.empty()) {
+                        map.Get(x, y).SetContent(GetColoredMark(player_marks, grid.Type(), grid.Attach()));
                     }
                 }
+                // 调试：测试地形文字颜色
+                // map.Get(x, y).SetContent(GetColoredMark(num[0], grid.Type(), grid.Attach()));
             }
         }
         // 纵向围墙
         for (int x = 1; x < size * 2; x = x + 2) {
             for (int y = 0; y < size * 2 - 1; y = y + 2) {
                 int gridX = (x+1)/2-1, gridY = y/2;
-                map.Get(x, y).SetStyle("class=\"wall-col\" style=\"font-size:8px; line-height:8px; padding:0; margin:0;\"")
-                    .SetColor(GetWallColor(grid_map[gridX][gridY].GetWall<Direct::LEFT>()));
+                Wall wall = grid_map[gridX][gridY].GetWall<Direct::LEFT>();
+                map.Get(x, y).SetStyle("class=\"wall-col\" style=\"" + GetWallStyle(wall, "col") + "\"");
                 if (options.with_content) {
-                    string content = GetWallContent(grid_map, gridX, gridY, Direct::LEFT);
+                    string content = Grid::GetWallContent(grid_map, gridX, gridY, Direct::LEFT);
                     if (!content.empty()) map.Get(x, y).SetContent(content);
                 }
             }
-            map.Get(x, size*2).SetStyle("class=\"wall-col\" style=\"font-size:8px; line-height:8px; padding:0; margin:0;\"")
-                .SetColor(GetWallColor(grid_map[(x+1)/2-1][size-1].GetWall<Direct::RIGHT>()));
+            Wall wall = grid_map[(x+1)/2-1][size-1].GetWall<Direct::RIGHT>();
+            map.Get(x, size*2).SetStyle("class=\"wall-col\" style=\"" + GetWallStyle(wall, "col") + "\"");
             if (options.with_content) {
-                string content = GetWallContent(grid_map, (x+1)/2-1, size-1, Direct::RIGHT);
+                string content = Grid::GetWallContent(grid_map, (x+1)/2-1, size-1, Direct::RIGHT);
                 if (!content.empty()) map.Get(x, size*2).SetContent(content);
             }
         }
@@ -115,49 +129,30 @@ class Board
         for (int y = 1; y < size * 2; y = y + 2) {
             for (int x = 0; x < size * 2 - 1; x = x + 2) {
                 int gridX = x/2, gridY = (y+1)/2-1;
-                map.Get(x, y).SetStyle("class=\"wall-row\" style=\"font-size:8px; line-height:8px; padding:0; margin:0;\"")
-                    .SetColor(GetWallColor(grid_map[gridX][gridY].GetWall<Direct::UP>()));
+                Wall wall = grid_map[gridX][gridY].GetWall<Direct::UP>();
+                map.Get(x, y).SetStyle("class=\"wall-row\" style=\"" + GetWallStyle(wall, "row") + "\"");
                 if (options.with_content) {
-                    string content = GetWallContent(grid_map, gridX, gridY, Direct::UP);
+                    string content = Grid::GetWallContent(grid_map, gridX, gridY, Direct::UP);
                     if (!content.empty()) map.Get(x, y).SetContent(content);
                 }
             }
-            map.Get(size*2, y).SetStyle("class=\"wall-row\" style=\"font-size:8px; line-height:8px; padding:0; margin:0;\"")
-                .SetColor(GetWallColor(grid_map[size-1][(y+1)/2-1].GetWall<Direct::DOWN>()));
+            Wall wall = grid_map[size-1][(y+1)/2-1].GetWall<Direct::DOWN>();
+            map.Get(size*2, y).SetStyle("class=\"wall-row\" style=\"" + GetWallStyle(wall, "row") + "\"");
             if (options.with_content) {
-                string content = GetWallContent(grid_map, size-1, (y+1)/2-1, Direct::DOWN);
+                string content = Grid::GetWallContent(grid_map, size-1, (y+1)/2-1, Direct::DOWN);
                 if (!content.empty()) map.Get(size*2, y).SetContent(content);
             }
         }
         // 角落方块
         for (int x = 0; x < size * 2 + 1; x = x + 2) {
             for (int y = 0; y < size * 2 + 1; y = y + 2) {
-                map.Get(x, y).SetStyle("class=\"corner\"").SetColor("black");
+                map.Get(x, y).SetStyle("class=\"corner\" style=\"background-image: url('" + ToFileUrl(image_path_ + GetImageTypeFolder() + "walls/corner.png") + "');\"");
             }
         }
-        return style + map.ToString();
+        return GetBoardStyle() + map.ToString();
     }
 
-    // 获取墙壁上的提示文本
-    string GetWallContent(const vector<vector<Grid>>& grid_map, const int x, const int y, const Direct direction) const
-    {
-        const int d = static_cast<int>(direction);
-        const int od = static_cast<int>(opposite(direction));
-        const vector<string> vec1 = grid_map[x][y].GetContent().second;
-        if (d >= 0 && d < (int)vec1.size() && !vec1[d].empty()) {
-            return vec1[d];
-        }
-        int nx = x + k_DX_Direct[d];
-        int ny = y + k_DY_Direct[d];
-        if (0 <= nx && nx < grid_map.size() && 0 <= ny && ny < grid_map.size()) {
-            const vector<string> vec2 = grid_map[nx][ny].GetContent().second;
-            if (od >= 0 && od < (int)vec2.size() && !vec2[od].empty()) {
-                return vec2[od];
-            }
-        }
-        return "";
-    }
-
+    // 获取终局对比盘面
     string GetFinalBoard() const
     {
         html::Table finalTable(2, 2);
@@ -166,13 +161,155 @@ class Board
         finalTable.Get(0, 1).SetContent(HTML_SIZE_FONT_HEADER(5) "<b>终局地图</b>" HTML_FONT_TAIL);
         finalTable.Get(1, 0).SetStyle("style=\"padding: 10px 20px 10px 10px\"").SetContent(init_html_);
         finalTable.Get(1, 1).SetStyle("style=\"padding: 10px 10px 10px 20px\"").SetContent(GetBoard(grid_map));
-        return GetPlayerTable(-1) + style + finalTable.ToString();
+        return GetPlayerTable(-1) + GetBoardStyle() + finalTable.ToString();
+    }
+
+    // 全部区块信息展示
+    string GetAllBlocksInfo(const int special, const bool bomb_mode, const int32_t test_mode = 0) const
+    {
+        int col_num = (test_mode == 1 || test_mode == 3) ? 8 : 4;
+        const vector<UnitMaps::Map>& maps = test_mode == 0 ? unitMaps.maps : (test_mode == 2 ? unitMaps.twist_maps : unitMaps.all_maps);
+        const vector<UnitMaps::Map>& exits = test_mode == 0 ? unitMaps.exits : (test_mode == 2 ? unitMaps.twist_exits : unitMaps.all_exits);
+        const vector<UnitMaps::Map>& special_maps = unitMaps.special_maps;
+        const string title = 
+            (test_mode == 0) ? "" 
+            : (test_mode == 2) ? 
+                (HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》幻变模式轮换区块</b>" HTML_FONT_TAIL) 
+                : (HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》狂野+疯狂模式全部区块</b>" HTML_FONT_TAIL);
+        bool has_special = (test_mode == 3);
+        for (const auto& map : maps) {
+            if (map.is_special) {
+                has_special = true;
+            }
+        }
+
+        int line_num = (ceil(maps.size() / (double) col_num) + ceil(exits.size() / (double) col_num)) * 2 +  + has_special * (ceil(special_maps.size() / (double) col_num) * 2 + 1);
+        html::Table blocks(line_num, col_num);
+        blocks.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size: 25px; line-height: 1.2;\"");
+        int row = 0;
+        for (int i = 0; i < maps.size(); i++) {
+            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 25px 25px 0 25px\"").SetContent(GetSingleBlock(0, maps[i].id, special));
+            // 特殊地图不显示id
+            if (maps[i].is_special && gamemode >= 0) {
+                blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) HTML_SIZE_FONT_HEADER(6) "<b>？？？</b>" HTML_FONT_TAIL HTML_FONT_TAIL);
+            } else {
+                blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>" + maps[i].id + "<br>"
+                    HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + maps[i].title + HTML_FONT_TAIL HTML_FONT_TAIL "</b>" HTML_FONT_TAIL);
+            }
+            if ((i + 1) % col_num == 0 || i == maps.size() - 1) row += 2;
+        }
+        for (int i = 0; i < exits.size(); i++) {
+            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 0 25px\"").SetContent(GetSingleBlock(1, exits[i].id, special));
+            blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>EXIT " + exits[i].id + "<br>"
+                HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + exits[i].title + HTML_FONT_TAIL HTML_FONT_TAIL "</b>" HTML_FONT_TAIL);
+            if ((i + 1) % col_num == 0 || i == exits.size() - 1) row += 2;
+        }
+        if (has_special && gamemode >= 0) {
+            blocks.MergeRight(row, 0, col_num);
+            blocks.Get(row++, 0).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
+                .SetContent(HTML_SIZE_FONT_HEADER(6) "<b>特殊区块列表<br>" HTML_FONT_TAIL HTML_SIZE_FONT_HEADER(5) "（多传送门按照图中字母代号传送）" HTML_FONT_TAIL "</b>");
+            for (int i = 0; i < special_maps.size(); i++) {
+                blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 0 25px\"")
+                    .SetContent(GetBoard(unitMaps.FindBlockById(special_maps[i].id, false, special == 3), GetBoardOptions{.with_content = true}));
+                blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>" + special_maps[i].id + "<br>"
+                    HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + special_maps[i].title + HTML_FONT_TAIL HTML_FONT_TAIL "</b>" HTML_FONT_TAIL);
+                if ((i + 1) % col_num == 0 || i == special_maps.size() - 1) row += 2;
+            }
+        }
+
+        const vector<pair<Wall, string>> all_walls_info = {
+            { Wall::DOOR, "【门】初始关闭状态的门，关闭时视为墙壁。当关联的按钮被按下时会切换开关状态<br><b>如果门发生过变化，在回合结束会进行提示。</b>关闭的门在私信墙壁信息会显示为**普通墙壁**" },
+            { Wall::DOOROPEN, "【门 (开)】初始打开状态的门，玩家可移动穿过打开的门。在私信墙壁信息会显示为**无墙壁**" },
+        };
+        const vector<pair<AttachType, string>> all_attachs_info = {
+            { AttachType::BUTTON, "【按钮】玩家进入时会触发区块内按钮相关事件。（出生不算）<br>进入按钮格**没有任何信息提示**，且仅在进入时才会触发按钮" },
+            { AttachType::BOMB, "【炸弹】玩家**经过并尝试离开**会引爆炸弹，使玩家**立即出局并-100分**<br>在炸弹上**结束行动**可拆除炸弹，放置后直接停止不会拆除。**炸弹不能放置在其他附着类型上**" },
+            { AttachType::BOX, "【箱子】玩家相邻箱子且向箱子移动时，箱子可被推动。（不会出生在箱子内）<br>**箱子不可移动到本区块外，其后方有玩家、墙壁或其他附着时，均不可被推动**。<br>若箱子不可被推动，则视为**撞墙**，且**箱子本身不会显示为墙壁**。" },
+        };
+        const vector<pair<GridType, string>> all_grids_info = {
+            { GridType::GRASS, "【树丛】玩家进入时会发出让其他人听见的**沙沙声**。（出生不算）" },
+            { GridType::WATER, "【水洼】玩家进入时会发出让其他人听见的**啪啪声**。（出生不算）" },
+            { GridType::PORTAL, "【传送门】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>进入后，再任意2次移动后就会传送至同区块另1个传送门。<br>进入后，玩家视作进入亚空间，上述2次移动都在亚空间内。" },
+            { GridType::ONEWAYPORTAL, "【传送门出口】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br>**玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置**" },
+            { GridType::TRAP, "【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的**沙沙声**（出生不算）<br>被偶数次进入时，不发出声响，并**强制玩家停止**（出生不算）" },
+            { GridType::HEAT, "【热源】进入热源周围8格时，将**私信**收到热浪提示。（只有移动时才能感受到热浪）<br>当进入热源时，将**私信**收到高温烫伤提示（不会出生在热源内）<br>在整局游戏中，**当第 2 次或更多次进入热源时，会被强制停止行动**" },
+            { GridType::EXIT, "【逃生舱】逃生者使用后，**会消失**。" + (test_mode == 0 ? ("本局逃生舱数量为 **" + to_string(exit_num) + "** 个。") : "") },
+        };
+
+        auto GenerateWallStyle = [&](Wall wall, const string& direction) {
+            return "<div class='wall-row' style=\""
+                + GetWallStyle(wall, direction)
+                + "\"></div>";
+        };
+        vector<UnitMaps::Map> all_maps_in_game;
+        all_maps_in_game.insert(all_maps_in_game.end(), maps.begin(), maps.end());
+        all_maps_in_game.insert(all_maps_in_game.end(), exits.begin(), exits.end());
+        if (has_special && gamemode >= 0) all_maps_in_game.insert(all_maps_in_game.end(), special_maps.begin(), special_maps.end());
+
+        int legend_max_size = all_walls_info.size() + all_attachs_info.size() + all_grids_info.size() + 1;
+        html::Table legend(legend_max_size, 2);
+        legend.SetTableStyle("cellpadding=\"5\" cellspacing=\"0\" style=\"font-size: 22px;\"");
+        for (int i = 0; i < legend_max_size; i++) {
+            legend.Get(i, 1).SetStyle("style=\"text-align: left;\"");
+        }
+        const string wall_html =
+            "<div style=\"width:" + to_string(GRID_SIZE) + "px;\">" +
+                GenerateWallStyle(Wall::NORMAL, "row") +
+                GetGridStyle(GridType::EMPTY, AttachType::EMPTY, false) +
+                GenerateWallStyle(Wall::NORMAL, "row") +
+            "</div>";
+        legend.Get(0, 0).SetContent(wall_html);
+        legend.Get(0, 1).SetContent("【墙壁】如图例，上下为墙壁，玩家不可从上下通过，可以从左右通过");
+        row = 1;
+        for (const auto& wall_info: all_walls_info) {
+            if (UnitMaps::MapContainWallType(all_maps_in_game, wall_info.first)) {
+                legend.Get(row, 0).SetContent(GenerateWallStyle(wall_info.first, "row"));
+                legend.Get(row, 1).SetContent(wall_info.second);
+                row++;
+            }
+        }
+        for (const auto& attach_info: all_attachs_info) {
+            if (UnitMaps::MapContainAttachType(all_maps_in_game, attach_info.first) || (attach_info.first == AttachType::BOMB && bomb_mode)) {
+                legend.Get(row, 0).SetContent(GetGridStyle(GridType::EMPTY, attach_info.first, false));
+                legend.Get(row, 1).SetContent(attach_info.second);
+                row++;
+            }
+        }
+        for (const auto& grid_info: all_grids_info) {
+            if (UnitMaps::MapContainGridType(all_maps_in_game, grid_info.first)) {
+                if (grid_info.first == GridType::GRASS && special == 3) continue;
+                legend.Get(row, 0).SetContent(GetGridStyle(grid_info.first, AttachType::EMPTY, false));
+                legend.Get(row, 1).SetContent(grid_info.second);
+                row++;
+            }
+        }
+        legend.ResizeRow(row);
+        return title + blocks.ToString() + legend.ToString();
+    }
+
+    string GetSingleBlock(const int type, const string& id, const int special) const
+    {
+        // 特殊地图不显示预览（自定义模式除外）
+        if (id[0] == 'S' && gamemode >= 0) {
+            string size = to_string(GRID_SIZE * 3 + WALL_SIZE * 4) + "px";
+            return "<div style=\"width:" + size + "; height:" + size + "; background:#e0e0e0;"
+                "border:2px dashed black; font-size:30px; color:#333;"
+                "display:flex; align-items:center; justify-content:center;\">"
+                "<b>特殊区块</b></div>";
+        }
+        vector<vector<Grid>> grid;
+        if (type == 0) {
+            grid = unitMaps.FindBlockById(id, false, special == 3);
+        } else if (type == 1) {
+            grid = unitMaps.FindBlockById(id, true);
+        }
+        return GetBoard(grid, GetBoardOptions{.with_content = true});
     }
 
     // 获取玩家信息
     string GetPlayerTable(const int round) const
     {
-        html::Table playerTable(playerNum + (boss.steps >= 0), 6);
+        html::Table playerTable(playerNum + boss.Enable(), 6);
         playerTable.SetTableStyle("align=\"center\" cellpadding=\"2\"");
         for (int pid = 0; pid < playerNum; pid++) {
             playerTable.Get(pid, 0).SetStyle("style=\"width:60px; text-align:right;\"").SetContent(to_string(pid) + "号：");
@@ -186,7 +323,7 @@ class Board
                 playerTable.Get(pid, 3).SetStyle("style=\"width:120px;\"").SetColor("#E5E5E5").SetContent("【已出局】");
             } else if (players[pid].target == 100) {
                 playerTable.MergeRight(pid, 3, 3);
-                playerTable.Get(pid, 3).SetStyle("style=\"width:150px;\"").SetContent("【单机模式】<br>寻找唯一的逃生舱！");
+                playerTable.Get(pid, 3).SetStyle("style=\"width:130px;\"").SetContent("【单机模式】<br>寻找唯一逃生舱！");
             } else if (players[pid].out == 0) {
                 playerTable.Get(pid, 3).SetStyle("style=\"width:40px;\"").SetContent("捕捉<br>目标");
                 playerTable.Get(pid, 4).SetStyle("style=\"width:40px;\"").SetContent("[" + to_string(players[pid].target) + "号]");
@@ -196,154 +333,138 @@ class Board
                 playerTable.Get(pid, 3).SetStyle("style=\"width:120px;\"").SetColor("#FFA07A").SetContent("[玩家状态错误]");
             }
         }
-        if (boss.steps >= 0) {
-            playerTable.Get(playerNum, 0).SetStyle("style=\"width:60px;\"").SetContent("<font color=\"red\" size=\"5\">★</font>");
+        if (boss.Enable()) {
+            playerTable.Get(playerNum, 0).SetStyle("style=\"width:60px;\"").SetContent("<font size=\"5\">" + boss.GetBossIcon() + "</font>");
             playerTable.MergeRight(playerNum, 1, 2);
-            playerTable.Get(playerNum, 1).SetStyle("style=\"width:290px;\"").SetColor("lavender").SetContent("[BOSS] 米诺陶斯");
-            playerTable.Get(playerNum, 3).SetStyle("style=\"width:40px;\"").SetContent("捕捉<br>目标");
+            playerTable.Get(playerNum, 1).SetStyle("style=\"width:290px;\"").SetColor("lavender").SetContent("[BOSS] " + boss.GetBossName());
+            playerTable.Get(playerNum, 3).SetStyle("style=\"width:40px;\"").SetContent("追击<br>目标");
             playerTable.Get(playerNum, 4).SetStyle("style=\"width:40px;\"").SetContent("[" + to_string(boss.target) + "号]");
             playerTable.Get(playerNum, 5).SetStyle("style=\"width:40px;\"").SetContent(players[boss.target].avatar);
         }
         return (round > 0 ? "### 第 " + to_string(round) + " 回合" : "") + playerTable.ToString();
     }
 
-    // 全部区块信息展示
-    string GetAllBlocksInfo(const int special, const int32_t test_mode = 0) const
+    string GetPlayerString() const
     {
-        const vector<UnitMaps::Map>& maps = test_mode == 0 ? unitMaps.maps : (test_mode == 2 ? unitMaps.rotation_maps : unitMaps.all_maps);
-        const vector<UnitMaps::Map>& exits = test_mode == 0 ? unitMaps.exits : (test_mode == 2 ? unitMaps.rotation_exits : unitMaps.all_exits);
-        const vector<UnitMaps::Map>& special_maps = unitMaps.special_maps;
-        const string title = 
-            (test_mode == 0) ? "" 
-            : (test_mode == 2) ? 
-                (HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》幻变模式轮换区块</b>" HTML_FONT_TAIL) 
-                : (HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》狂野+疯狂模式全部区块</b>" HTML_FONT_TAIL);
-        bool has_special = (test_mode == 3);
-        for (const auto& map : maps) {
-            if (map.type == GridType::SPECIAL) {
-                has_special = true;
-            }
-        }
-
-        int line_num = (ceil(maps.size() / 4.0) + ceil(exits.size() / 4.0)) * 2 +  + has_special * (ceil(special_maps.size() / 4.0) * 2 + 1);
-        html::Table blocks(line_num, 4);
-        blocks.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size: 25px;\"");
-        int row = 0;
-        for (int i = 0; i < maps.size(); i++) {
-            blocks.Get(row, i % 4).SetStyle("style=\"padding: 25px 25px 0px 25px\"").SetContent(GetSingleBlock(0, maps[i].id, special));
-            // 特殊地图不显示id
-            blocks.Get(row + 1, i % 4).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>" + (maps[i].id[0] == 'S' ? "？？？" : maps[i].id) + "</b>" HTML_FONT_TAIL);
-            if ((i + 1) % 4 == 0 || i == maps.size() - 1) row += 2;
-        }
-        for (int i = 0; i < exits.size(); i++) {
-            blocks.Get(row, i % 4).SetStyle("style=\"padding: 20px 25px 5px 25px\"").SetContent(GetSingleBlock(1, exits[i].id, special));
-            blocks.Get(row + 1, i % 4).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>EXIT " + exits[i].id + "</b>" HTML_FONT_TAIL);
-            if ((i + 1) % 4 == 0 || i == exits.size() - 1) row += 2;
-        }
-        if (has_special) {
-            blocks.MergeRight(row, 0, 4);
-            blocks.Get(row++, 0).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
-                .SetContent(HTML_SIZE_FONT_HEADER(6) "<b>特殊区块列表<br>" HTML_FONT_TAIL HTML_SIZE_FONT_HEADER(5) "（多传送门按照图中字母代号传送）" HTML_FONT_TAIL "</b>");
-            for (int i = 0; i < special_maps.size(); i++) {
-                blocks.Get(row, i % 4).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
-                    .SetContent(GetBoard(unitMaps.FindBlockById(special_maps[i].id, false, special == 3), GetBoardOptions{.with_content = true}));
-                blocks.Get(row + 1, i % 4).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>" + special_maps[i].id + "</b>" HTML_FONT_TAIL);
-                if ((i + 1) % 4 == 0 || i == special_maps.size() - 1) row += 2;
-            }
-        }
-        const string wall_svg = "<svg width=\"50\" height=\"70\">"
-                "<rect x=\"0\" y=\"0\" width=\"50\" height=\"10\" fill=\"black\"/>"
-                "<rect x=\"0\" y=\"10\" width=\"50\" height=\"50\" fill=\"white\" stroke=\"black\"/>"
-                "<rect x=\"0\" y=\"60\" width=\"50\" height=\"10\" fill=\"black\"/>"
-                "</svg>";
-        auto GenerateWallSvg = [](const std::string& color) -> std::string {
-            return "<svg width=\"50\" height=\"10\">"
-                "<rect x=\"0\" y=\"0\" width=\"50\" height=\"10\" fill=\"" + color + "\"/>"
-                "</svg>";
-        };
-        const vector<pair<Wall, string>> all_walls_info = {
-            { Wall::DOOR, "【门】初始为关闭状态，关闭时视为墙壁。当关联的按钮被按下时会切换开关状态<br><b>如果门发生过变化，在回合结束会进行提示。</b>关闭的门在私信墙壁信息会显示为**普通墙壁**" },
-        };
-        const vector<pair<GridType, string>> all_grids_info = {
-            { GridType::BUTTON, "【按钮】玩家进入时会触发区块内按钮相关事件。（出生不算）<br>进入按钮格**没有任何信息提示**，且仅在进入时才会触发按钮" },
-            { GridType::GRASS, "【树丛】玩家进入时会发出让其他人听见的**沙沙声**。（出生不算）" },
-            { GridType::WATER, "【水洼】玩家进入时会发出让其他人听见的**啪啪声**。（出生不算）" },
-            { GridType::PORTAL, "【传送门】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>进入后，再任意2次移动后就会传送至同区块另1个传送门。<br>进入后，玩家视作进入亚空间，上述2次移动都在亚空间内。" },
-            { GridType::ONEWAYPORTAL, "【传送门出口】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br>**玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置**" },
-            { GridType::TRAP, "【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的**沙沙声**（出生不算）<br>被偶数次进入时，不发出声响，并**强制玩家停止**（出生不算）" },
-            { GridType::HEAT, "【热源】进入热源周围8格时，将**私信**受到热浪提示。（出生不算）<br>当进入热源时，将**私信**收到高温烫伤提示（不会出生在热源内）<br>在整局游戏中，**当第 2 次或更多次进入热源时，会被强制停止行动**" },
-            { GridType::BOX, "【箱子】玩家相邻箱子且向箱子移动时，箱子可被推动。（不会出生在箱子内）<br>**箱子不可移动到本区块外**。若箱子不可推动，则撞墙，箱子本身不会显示为墙。" },
-            { GridType::EXIT, "【逃生舱】逃生者使用后，**会消失**。默认逃生舱数=人数的一半" },
-        };
-        vector<UnitMaps::Map> all_maps_in_game;
-        all_maps_in_game.insert(all_maps_in_game.end(), maps.begin(), maps.end());
-        all_maps_in_game.insert(all_maps_in_game.end(), exits.begin(), exits.end());
-        if (has_special) all_maps_in_game.insert(all_maps_in_game.end(), special_maps.begin(), special_maps.end());
-
-        html::Table legend(all_grids_info.size() + 1, 2);
-        legend.SetTableStyle("cellpadding=\"5\" cellspacing=\"0\" style=\"font-size: 22px;\"");
-        for (int i = 0; i < all_grids_info.size() + 1; i++) {
-            legend.Get(i, 1).SetStyle("style=\"text-align: left;\"");
-        }
-        legend.Get(0, 0).SetContent(wall_svg);
-        legend.Get(0, 1).SetContent("【墙壁】黑色为墙壁，如图例，玩家不可从上下通过，可以从左右通过");
-        row = 1;
-        for (const auto& wall_info: all_walls_info) {
-            if (UnitMaps::MapContainWallType(all_maps_in_game, wall_info.first)) {
-                legend.Get(row, 0).SetContent(GenerateWallSvg(GetWallColor(wall_info.first)));
-                legend.Get(row, 1).SetContent(wall_info.second);
-                row++;
-            }
-        }
-        for (const auto& grid_info: all_grids_info) {
-            if (UnitMaps::MapContainGridType(all_maps_in_game, grid_info.first)) {
-                if (grid_info.first == GridType::GRASS && special == 3) continue;
-                legend.Get(row, 0).SetContent(GetGridStyle(grid_info.first, false));
-                legend.Get(row, 1).SetContent(grid_info.second);
-                row++;
-            }
-        }
-        legend.ResizeRow(row);
-        return title + blocks.ToString() + legend.ToString();
-    }
-
-    string GetSingleBlock(const int type, const string& id, const int special) const
-    {
-        // 特殊地图不显示预览
-        if (id[0] == 'S') return "";
-        vector<vector<Grid>> grid;
-        if (type == 0) {
-            grid = unitMaps.FindBlockById(id, false, special == 3);
-        } else if (type == 1) {
-            grid = unitMaps.FindBlockById(id, true);
-        }
-        return GetBoard(grid, GetBoardOptions{.with_content = true});
-    }
-
-    string GetAllRecord() const
-    {
-        string all_record;
+        string players_string;
         for (int pid = 0; pid < playerNum; pid++) {
-            all_record += "<b>[" + to_string(pid) + "号]" + players[pid].name + "</b>";
-            all_record += players[pid].all_record + "<br>";
-            if (pid < playerNum - 1) all_record += "<br>";
+            if (pid > 0) players_string += "\n";
+            players_string += "[" + to_string(pid) + "号]" + players[pid].name;
+            if (players[pid].out == 2) players_string += "【逃生舱撤离】";
+            else if (players[pid].out == 1) players_string += "【已出局】";
+            else if (players[pid].target == 100) players_string += "【单机模式】";
+            else if (players[pid].out == 0) players_string += "\n目标→ [" + to_string(players[pid].target) + "号]" + players[players[pid].target].name;
+            else players_string += "[玩家状态错误]";
         }
-        if (boss.steps >= 0) {
-            all_record += "<br><b>[BOSS] 米诺陶斯</b>";
-            all_record += boss.all_record + "<br>";
+        if (boss.Enable()) {
+            players_string += "\n[BOSS] " + boss.GetBossName() + "\n";
+            players_string += "目标→ [" + to_string(boss.target) + "号]" + players[boss.target].name;
         }
-        return clean_markdown(all_record);
+        return players_string;
     }
 
-    static string clean_markdown(const string& input)
+    // 完整赛况
+    string GetAllRecordHtml(const int query_pid) const
     {
-        string result = input;
-        result = regex_replace(result, regex(R"(\*)"), R"(\*)");
-        result = regex_replace(result, regex(R"(_)"), R"(\_)");
-        result = regex_replace(result, regex(R"(\[)"), R"(\[)");
-        result = regex_replace(result, regex(R"(\])"), R"(\])");
-        result = regex_replace(result, regex(R"(`)"), R"(\`)");
-        return result;
+        const char* style = R"(
+<style>
+    .record {}
+    .player {
+        padding: 8px;
+        margin-bottom: 8px;
+        border-left: 4px solid #4CAF50;
+        background: #F9F9F9;
+    }
+    .player.out {
+        opacity: 0.6;
+        border-left-color: #E5E5E5;
+        background: #F9F9F9;
+    }
+    .player.exit {
+        opacity: 0.6;
+        border-left-color: #FFE06F;
+        background: #FFF3E0;
+    }
+    .player-title {
+        font-size: 16px;
+    }
+    .player-record {}
+    .boss {
+        margin-top: 12px;
+        padding: 8px;
+        background: #FFF3E0;
+        border-left: 4px solid #FF9800;
+    }
+    .extra {
+        margin-top: 12px;
+        padding: 8px;
+        background: #E3F2FD;
+        border-left: 4px solid #2196F3;
+    }
+</style>
+)";
+        string record_html;
+        record_html += "<div class='record'>";
+        // 玩家记录
+        for (int pid = 0; pid < playerNum; pid++) {
+            record_html += "<div class='player";
+            if (players[pid].out == 1) record_html += " out";
+            if (players[pid].out == 2) record_html += " exit";
+            record_html += "'>";
+
+            record_html += "<div class='player-title'>";
+            record_html += "<b>[" + to_string(pid) + "号]" + esc_html(players[pid].name) + "</b>";
+            record_html += "</div>";
+
+            record_html += "<div class='player-record'>";
+            record_html += players[pid].GetAllMoveRecord(query_pid == pid ? -1 : query_pid);
+            record_html += "</div>";
+
+            record_html += "</div>";
+        }
+        // BOSS 记录
+        if (boss.Enable()) {
+            record_html += "<div class='boss'>";
+            record_html += "<div class='boss-title'><b>[BOSS] " + boss.GetBossName() + " " + boss.GetBossIcon() + "</b></div>";
+            record_html += "<div class='boss-record'>";
+            record_html += boss.GetBossRecord(query_pid);
+            record_html += "</div>";
+            record_html += "</div>";
+        }
+        // 额外信息
+        if (!all_extra_record.empty()) {
+            record_html += "<div class='extra'>";
+            record_html += "<div class='extra-title'><b>[额外信息]</b></div>";
+            record_html += "<div class='extra-record'>";
+            record_html += all_extra_record;
+            record_html += "</div>";
+            record_html += "</div>";
+        }
+        record_html += "</div>";
+        return style + record_html;
+    }
+
+    string GetAllRecordString(const int query_pid) const
+    {
+        string record_string;
+        // 玩家记录
+        for (int pid = 0; pid < playerNum; pid++) {
+            record_string += "[" + to_string(pid) + "号]" + players[pid].name;
+            if (players[pid].out == 1) record_string += "【已出局】";
+            if (players[pid].out == 2) record_string += "【逃生舱撤离】";
+            record_string += "\n" + players[pid].GetAllMoveRecord(query_pid == pid ? -1 : query_pid, false) + "\n";
+        }
+        // BOSS 记录
+        if (boss.Enable()) {
+            record_string += "[BOSS] " + boss.GetBossName() + " " + boss.GetBossIcon();
+            record_string += boss.GetBossRecord(query_pid, false) + "\n";
+        }
+        // 额外信息
+        if (!all_extra_record.empty()) {
+            record_string += "[额外信息]";
+            record_string += replace_br_with_line(all_extra_record) + "\n";
+        }
+        return record_string;
     }
 
     string GetAllScore() const
@@ -383,26 +504,37 @@ class Board
         int nx = (cx + k_DX_Direct[d] + size) % size;
         int ny = (cy + k_DY_Direct[d] + size) % size;
 
-        bool wall = false;
-        switch (direction) {
-            case Direct::UP:    wall = grid_map[cx][cy].GetWall<Direct::UP>() != Wall::EMPTY; break;
-            case Direct::DOWN:  wall = grid_map[cx][cy].GetWall<Direct::DOWN>() != Wall::EMPTY; break;
-            case Direct::LEFT:  wall = grid_map[cx][cy].GetWall<Direct::LEFT>() != Wall::EMPTY; break;
-            case Direct::RIGHT: wall = grid_map[cx][cy].GetWall<Direct::RIGHT>() != Wall::EMPTY; break;
-            default: return false;
-        }
-        // 非撞墙尝试移动箱子
-        if (!wall && grid_map[nx][ny].Type() == GridType::BOX && players[pid].subspace < 0) {
-            wall = !BoxMove(nx, ny, k_DX_Direct[d], k_DY_Direct[d]);
+        bool hit_wall = false;
+        if (players[pid].subspace < 0) {
+            switch (direction) {
+                case Direct::UP:    hit_wall = !grid_map[cx][cy].CanPass<Direct::UP>(); break;
+                case Direct::DOWN:  hit_wall = !grid_map[cx][cy].CanPass<Direct::DOWN>(); break;
+                case Direct::LEFT:  hit_wall = !grid_map[cx][cy].CanPass<Direct::LEFT>(); break;
+                case Direct::RIGHT: hit_wall = !grid_map[cx][cy].CanPass<Direct::RIGHT>(); break;
+                default: return false;
+            }
+            // 非撞墙，尝试移动箱子
+            if (!hit_wall && grid_map[nx][ny].Attach() == AttachType::BOX) {
+                bool box_success = BoxMove(nx, ny, k_DX_Direct[d], k_DY_Direct[d]);
+                if (box_success) players[pid].achievement.visitAttach(AttachType::BOX); // 成就[乒铃乓啷]辅助
+                hit_wall = !box_success;
+            }
+            // 撞墙
+            if (hit_wall) {
+                if (!hide) players[pid].NewStepRecord(direction, "撞");
+                return false;
+            }
         }
         // 轨迹记录
-        if (wall && players[pid].subspace < 0) {
-            if (!hide) players[pid].NewStepRecord(direction, "撞");
-            return false;
-        }
         if (!hide) players[pid].NewStepRecord(direction);
 
-        if (players[pid].subspace > 0) {
+        // 非撞墙，炸弹触发，实际不移动
+        if (players[pid].bomb_trigger) {
+            return true;
+        }
+
+        // 亚空间，实际不移动
+        if (players[pid].InSubspace()) {
             players[pid].subspace--;
             return true;
         }
@@ -412,6 +544,9 @@ class Board
         players[pid].x = nx;
         players[pid].y = ny;
         player_map[nx][ny].push_back(pid);
+
+        // 成就记录
+        players[pid].achievement.MakeStep(nx, ny);
 
         // 探索分
         auto& explore = players[pid].score.explore_map[nx][ny];
@@ -434,13 +569,13 @@ class Board
         int b_nx = (b_cx + dx + size) % size;
         int b_ny = (b_cy + dy + size) % size;
         if (!player_map[b_nx][b_ny].empty()) return false;
-        if (grid_map[b_nx][b_ny].Type() != GridType::EMPTY) return false;
+        if (grid_map[b_nx][b_ny].Attach() != AttachType::EMPTY) return false;
 
         bool wall = false;
-        if (dx == -1 && dy == 0)        wall = grid_map[b_cx][b_cy].GetWall<Direct::UP>() != Wall::EMPTY;
-        else if (dx == 1 && dy == 0)    wall = grid_map[b_cx][b_cy].GetWall<Direct::DOWN>() != Wall::EMPTY;
-        else if (dx == 0 && dy == -1)   wall = grid_map[b_cx][b_cy].GetWall<Direct::LEFT>() != Wall::EMPTY;
-        else if (dx == 0 && dy == 1)    wall = grid_map[b_cx][b_cy].GetWall<Direct::RIGHT>() != Wall::EMPTY;
+        if (dx == -1 && dy == 0)        wall = !grid_map[b_cx][b_cy].CanPass<Direct::UP>();
+        else if (dx == 1 && dy == 0)    wall = !grid_map[b_cx][b_cy].CanPass<Direct::DOWN>();
+        else if (dx == 0 && dy == -1)   wall = !grid_map[b_cx][b_cy].CanPass<Direct::LEFT>();
+        else if (dx == 0 && dy == 1)    wall = !grid_map[b_cx][b_cy].CanPass<Direct::RIGHT>();
         if (wall) return false;
 
         bool sameBlock = false;
@@ -454,8 +589,8 @@ class Board
         }
         if (!sameBlock) return false;
 
-        grid_map[b_cx][b_cy].SetType(GridType::EMPTY);
-        grid_map[b_nx][b_ny].SetType(GridType::BOX);
+        grid_map[b_cx][b_cy].SetAttach(AttachType::EMPTY);
+        grid_map[b_nx][b_ny].SetAttach(AttachType::BOX);
         return true;
     }
 
@@ -469,7 +604,38 @@ class Board
         if (it != oldCell.end()) oldCell.erase(it);
     }
 
-    // 地区声响（0无 1沙沙 2啪啪）
+    // 解析多步行动：将输入字符串解析为方向数组
+    static string parseDirections(const string &input, vector<Direct> &out)
+    {
+        // 按 key 长度降序，优先匹配中文
+        vector<string> keys;
+        for (auto& p : direction_map) keys.push_back(p.first);
+        sort(keys.begin(), keys.end(),[](const string& a, const string& b) {
+            return a.size() > b.size();
+        });
+        vector<Direct> tmp;
+        size_t i = 0;
+        while (i < input.size()) {
+            bool matched = false;
+            for (const auto& k : keys) {
+                if (i + k.size() <= input.size() &&
+                    input.compare(i, k.size(), k) == 0) {
+                    tmp.push_back(direction_map.at(k));
+                    i += k.size();
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                size_t len = utf8CharLen(static_cast<unsigned char>(input[i]));
+                return input.substr(i, len);    // 返回非法字符
+            }
+        }
+        out = std::move(tmp);
+        return "";
+    }
+
+    // 地区声响
     Sound GetSound(const Grid& grid, const bool water_mode) const
     {
         switch(grid.Type()) {
@@ -513,7 +679,7 @@ class Board
 
         // 两玩家在同一位置
         if (dx == 0 && dy == 0) {
-            return "";
+            return "同格";
         }
 
         if (dx == 0) {
@@ -559,24 +725,39 @@ class Board
     pair<string, string> GetSurroundingWalls(const PlayerID pid) const
     {
         Grid grid = grid_map[players[pid].x][players[pid].y];
-        if (players[pid].subspace > 0) {
+        if (players[pid].InSubspace()) {
             grid.SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
         } else {
             grid.HideSpecialWalls();
         }
         string info;
-        if (grid.GetWall<Direct::UP>() == Wall::EMPTY) info += "空"; else info += "墙";
-        if (grid.GetWall<Direct::DOWN>() == Wall::EMPTY) info += "空"; else info += "墙";
-        if (grid.GetWall<Direct::LEFT>() == Wall::EMPTY) info += "空"; else info += "墙";
-        if (grid.GetWall<Direct::RIGHT>() == Wall::EMPTY) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::UP>()) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::DOWN>()) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::LEFT>()) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::RIGHT>()) info += "空"; else info += "墙";
+        return make_pair(info, GetBoard({{grid}}, GetBoardOptions{.with_player = false, .with_ground = false}));
+    }
+
+    // [BOSS-邦邦] 周围墙壁信息
+    pair<string, string> GetBangBangSurroundingWalls(const int x, const int y) const
+    {
+        Grid grid = grid_map[x][y];
+        grid.SetType(GridType::EMPTY).SetAttach(AttachType::BOMB);
+        grid.HideSpecialWalls();
+        string info;
+        if (grid.CanPass<Direct::UP>()) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::DOWN>()) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::LEFT>()) info += "空"; else info += "墙";
+        if (grid.CanPass<Direct::RIGHT>()) info += "空"; else info += "墙";
         return make_pair(info, GetBoard({{grid}}, GetBoardOptions{.with_player = false}));
     }
 
     // 玩家随机传送
     void TeleportPlayer(const PlayerID pid)
     {
-        players[pid].subspace = -1;
-        players[pid].inHeatZone = false;
+        players[pid].subspace = -1;         // 移除亚空间状态
+        players[pid].inHeatZone = false;    // 移除热浪区域状态
+        players[pid].bomb_trigger = false;  // 移除炸弹触发状态
         vector<pair<int, int>> candidates = FindLargestConnectedArea();
     
         // 禁止坐标
@@ -588,7 +769,7 @@ class Board
                 }
             }
         }
-        if (boss.steps >= 0) {
+        if (boss.Enable()) {
             forbiddenSources.push_back({boss.x, boss.y});
         }
         for (const auto& player: players) {
@@ -614,14 +795,13 @@ class Board
             std::back_inserter(finalCandidates),
             [&](auto const& pos) {
                 auto [x, y] = pos;
-                return !forbidden[x][y] && (boss.steps <= 0 || ManhattanDistance(x, y, boss.x, boss.y) > boss.steps);
+                return !forbidden[x][y] && (!boss.Enable() || ManhattanDistance(x, y, boss.x, boss.y, size) > boss.steps);
             }
         );
     
-        // 无有效区域，不传送
+        // 保险方案：无有效区域，直接在最大联通区域内随机
         if (finalCandidates.empty()) {
-            cout << "[debug warning] 传送失败，无有效候选位置" << endl;
-            return;
+            finalCandidates = candidates;
         }
     
         std::shuffle(finalCandidates.begin(), finalCandidates.end(), g);
@@ -690,142 +870,35 @@ class Board
         return count;
     }
 
-    // BOSS生成和锁定目标
-    void BossSpawn()
-    {
-        for (int attempt = 0; attempt < 500; attempt++) {
-            int x = rand() % size;
-            int y = rand() % size;
-            bool nearPlayer = false;
-            for (int i = 0; i < playerNum && !nearPlayer; i++) {
-                for (int dx = -1; dx <= 1 && !nearPlayer; dx++) {
-                    for (int dy = -1; dy <= 1 && !nearPlayer; dy++) {
-                        int nx = (players[i].x + dx + size) % size;
-                        int ny = (players[i].y + dy + size) % size;
-                        if (nx == x && ny == y)
-                            nearPlayer = true;
-                    }
-                }
-            }
-            boss.x = x;
-            boss.y = y;
-            boss.steps = 0;
-            if (!nearPlayer) break;
-        }
-        // 初始锁定最近的玩家作为目标
-        int bestDist = INT_MAX;
-        vector<int> candidates;
-        for (int i = 0; i < playerNum; i++) {
-            int d = ManhattanDistance(boss.x, boss.y, players[i].x, players[i].y);
-            if (d < bestDist) {
-                bestDist = d;
-                candidates.clear();
-                candidates.push_back(i);
-            } else if (d == bestDist) {
-                candidates.push_back(i);
-            }
-        }
-        boss.target = candidates[rand() % candidates.size()];
-    }
-
-    // BOSS更换目标（未更换返回true）
-    bool BossChangeTarget(const bool reset)
-    {
-        int curTarget = boss.target;
-        int curDist = ManhattanDistance(boss.x, boss.y, players[boss.target].x, players[boss.target].y);
-        if (reset || players[boss.target].out > 0) curDist = INT_MAX;
-        for (auto& player : players) {
-            if (player.out > 0) continue;
-            int d = ManhattanDistance(boss.x, boss.y, player.x, player.y);
-            if (d < curDist) {
-                boss.target = player.pid;
-                boss.steps = 0;
-                curDist = d;
-            }
-        }
-        return curTarget == boss.target;
-    }
-
-    // BOSS移动和更换目标（抓到人返回true）
-    bool BossMove()
-    {
-        int targetDist = ManhattanDistance(boss.x, boss.y, players[boss.target].x, players[boss.target].y);
-        boss.steps++;
-        // 步数足够直接走到目标位置
-        if (boss.steps >= targetDist) {
-            boss.x = players[boss.target].x;
-            boss.y = players[boss.target].y;
-            boss.steps = 0;
-            return true;
-        }
-        // 执行移动
-        int stepsRemaining = boss.steps;
-        while (stepsRemaining > 0) {
-            targetDist = ManhattanDistance(boss.x, boss.y, players[boss.target].x, players[boss.target].y);
-            int tx = players[boss.target].x, ty = players[boss.target].y;
-            int dx = tx - boss.x, dy = ty - boss.y;
-            if (abs(dx) > size / 2) { dx = (dx > 0) ? dx - size : dx + size; }
-            if (abs(dy) > size / 2) { dy = (dy > 0) ? dy - size : dy + size; }
-
-            // 如果|dx|≠|dy|则沿较大差值轴走一步
-            if (abs(dx) != abs(dy)) {
-                if (abs(dx) > abs(dy)) {
-                    boss.x = (boss.x + ((dx > 0) ? 1 : -1) + size) % size;
-                } else {
-                    boss.y = (boss.y + ((dy > 0) ? 1 : -1) + size) % size;
-                }
-            } else {
-                // 如果已经正方形，随机选择在 x 或 y 方向上移动一步
-                if (rand() % 2 == 0)
-                    boss.x = (boss.x + ((dx > 0) ? 1 : -1) + size) % size;
-                else
-                    boss.y = (boss.y + ((dy > 0) ? 1 : -1) + size) % size;
-            }
-            stepsRemaining--;
-        }
-        return false;
-    }
-
-    bool IsBossNearby(const Player& player) const
-    {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                int nx = (boss.x + dx + size) % size;
-                int ny = (boss.y + dy + size) % size;
-                if (player.x == nx && player.y == ny) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
   private:
     // 初始化区块
-    void InitializeBlock()
+    void InitializeBlocks()
     {
         vector<UnitMaps::Map> maps = unitMaps.maps;
         vector<UnitMaps::Map> exits = unitMaps.exits;
         std::shuffle(maps.begin(), maps.end(), g);
         std::shuffle(exits.begin(), exits.end(), g);
 
+        const int selected_map_num = gamemode >= 0 ? unitMaps.pos.size() - exit_num : maps.size();
+        const int selected_exit_num = gamemode >= 0 ? exit_num : exits.size();
+
         vector<UnitMaps::Map> selected;
-        for (int i = 0; i < unitMaps.pos.size() - exit_num; i++) {
+        for (int i = 0; i < selected_map_num; i++) {
             selected.push_back(maps[i]);
         }
-        for (int i = 0; i < exit_num; i++) {
+        for (int i = 0; i < selected_exit_num; i++) {
             selected.push_back(exits[i]);
         }
         std::shuffle(selected.begin(), selected.end(), g);
 
         for (int i = 0; i < unitMaps.pos.size(); i++) {
-            if (selected[i].type == GridType::EXIT) {
+            if (selected[i].is_exit) {
                 unitMaps.SetExitBlock(unitMaps.pos[i].first, unitMaps.pos[i].second, grid_map, selected[i].id, true);
             } else {
                 unitMaps.SetMapBlock(unitMaps.pos[i].first, unitMaps.pos[i].second, grid_map, selected[i].id, true);
             }
             // 记录特殊地图坐标（暂不使用）
-            // if (selected[i].type == GridType::SPECIAL) {
+            // if (selected[i].is_special) {
             //     special_pos = unitMaps.pos[i];
             // }
         }
@@ -842,23 +915,24 @@ class Board
                     int nx = (x + k_DX_Direct[d] + size) % size;
                     int ny = (y + k_DY_Direct[d] + size) % size;
 
-                    Wall w1 = grid_map[x][y].GetWallByEnum(dir);
-                    Wall w2 = grid_map[nx][ny].GetWallByEnum(rev);
+                    Wall w1 = grid_map[x][y].GetWall(dir);
+                    Wall w2 = grid_map[nx][ny].GetWall(rev);
                     Wall w = static_cast<int>(w1) > static_cast<int>(w2) ? w1 : w2;
-                    if (w != w1) grid_map[x][y].SetWallByEnum(dir, w);
-                    if (w != w2) grid_map[nx][ny].SetWallByEnum(rev, w);
+                    if (w != w1) grid_map[x][y].SetWall(dir, w);
+                    if (w != w2) grid_map[nx][ny].SetWall(rev, w);
                 }
             }
         }
     }
 
-    // 封闭传送门替换为水洼
+    // 封闭传送门自动更新传送门样式
     void FixInvalidPortals(vector<vector<Grid>>& grid_map) const
     {
         for (int x = 0; x < size; x++) {
             for (int y = 0; y < size; y++) {
                 if (grid_map[x][y].Type() == GridType::PORTAL && grid_map[x][y].IsFullyEnclosed()) {
                     pair<int, int> pRelPos = grid_map[x][y].PortalPos();
+                    grid_map[x][y].SetType(GridType::ONEWAYPORTAL);
                     grid_map[x + pRelPos.first][y + pRelPos.second].SetType(GridType::ONEWAYPORTAL);
                 }
             }
@@ -870,20 +944,20 @@ class Board
     {
         int nx = (x + dx + size) % size;
         int ny = (y + dy + size) % size;
-        if (grid_map[x][y].Type() == GridType::HEAT || grid_map[x][y].Type() == GridType::BOX) {
+        if (grid_map[x][y].Type() == GridType::HEAT || grid_map[x][y].Attach() == AttachType::BOX) {
             return false;
         }
-        if (grid_map[nx][ny].Type() == GridType::HEAT || grid_map[nx][ny].Type() == GridType::BOX) {
+        if (grid_map[nx][ny].Type() == GridType::HEAT || grid_map[nx][ny].Attach() == AttachType::BOX) {
             return false;
         }
         if (dx == -1 && dy == 0)
-            return grid_map[x][y].GetWall<Direct::UP>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::DOWN>() == Wall::EMPTY;
+            return grid_map[x][y].CanPass<Direct::UP>() && grid_map[nx][ny].CanPass<Direct::DOWN>();
         else if (dx == 1 && dy == 0)
-            return grid_map[x][y].GetWall<Direct::DOWN>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::UP>() == Wall::EMPTY;
+            return grid_map[x][y].CanPass<Direct::DOWN>() && grid_map[nx][ny].CanPass<Direct::UP>();
         else if (dx == 0 && dy == -1)
-            return grid_map[x][y].GetWall<Direct::LEFT>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::RIGHT>() == Wall::EMPTY;
+            return grid_map[x][y].CanPass<Direct::LEFT>() && grid_map[nx][ny].CanPass<Direct::RIGHT>();
         else if (dx == 0 && dy == 1)
-            return grid_map[x][y].GetWall<Direct::RIGHT>() == Wall::EMPTY && grid_map[nx][ny].GetWall<Direct::LEFT>() == Wall::EMPTY;
+            return grid_map[x][y].CanPass<Direct::RIGHT>() && grid_map[nx][ny].CanPass<Direct::LEFT>();
         return false;
     }
 
@@ -1145,71 +1219,95 @@ class Board
         return largest;
     }
 
-    // 计算两点间曼哈顿距离
-    int ManhattanDistance(int x1, int y1, int x2, int y2) const
+    string GetImageTypeFolder() const
     {
-        int dx = abs(x1 - x2);
-        int dy = abs(y1 - y2);
-        dx = std::min(dx, size - dx);
-        dy = std::min(dy, size - dy);
-        return dx + dy;
+        switch (image_type_) {
+            case 0: return "classic/";
+            case 1: return "retro/";
+            default: return "";
+        }
     }
 
-    string GetGridStyle(const GridType type, const bool is_bg) const
+    // 获取样式
+    string GetGridStyle(const GridType type, const AttachType attach, const bool is_bg) const
     {
+        string bg_image = ToFileUrl(image_path_ + GetImageTypeFolder() + GetGridImage(type));
+        string attach_image = ToFileUrl(image_path_ + GetImageTypeFolder() + GetAttachImage(attach));
+
         if (is_bg) {
-            return "style=\"background-image: url('file:///" + image_path_ + GetGridImage(type) + "');\"";
+            return "style=\""
+                "background-image: url('" + attach_image + "'), url('" + bg_image + "');"
+                "background-repeat: no-repeat, no-repeat;"
+                "background-position: center, center;"
+                "background-size: contain, cover;"
+                "\"";
         } else {
-            return "<img src='file:///" + image_path_ + GetGridImage(type) + "'>";
+            return "<div style=\"position: relative; width: 50px; height: 50px;\">"
+                "<img src='" + bg_image + "' style='width:100%; height:100%;'>"
+                "<img src='" + attach_image + "' style='position:absolute; top:0; left:0; width:100%; height:100%;'>"
+                "</div>";
         }
     }
 
-    string GetGridImage(const GridType type) const
+    string GetWallStyle(const Wall wall, const string& direction) const
     {
+        const string folder = GetImageTypeFolder() + "walls/";
+        string wall_image = ToFileUrl(image_path_ + folder + GetWallImage(wall, direction));
+        return "background-image: url('" + wall_image + "');";
+    }
+
+    static string GetColoredMark(const string& content, const GridType type, const AttachType attach)
+    {
+        string color;
+
         switch (type) {
-            case GridType::EMPTY:   return "empty.png";
-            case GridType::GRASS:   return "grass.png";
-            case GridType::WATER:   return "water.png";
-            case GridType::ONEWAYPORTAL: return "oneway_portal.png";
-            case GridType::PORTAL:  return "portal.png";
-            case GridType::EXIT:    return "exit.png";
-            case GridType::TRAP:    return "trap.png";
-            case GridType::HEAT:    return "heat.png";
-            case GridType::BOX:     return "box.png";
-            case GridType::BUTTON:  return "button.png";
-            default:                return "unknown.png";
+            case GridType::PORTAL:  color = "#FFFF00"; break;
+            case GridType::ONEWAYPORTAL:  color = "#FFF8E7"; break;
+            // case GridType::HEAT:    color = "#00FFFF"; break;
+            default:;
         }
+        switch (attach) {
+            case AttachType::BOMB:  color = "#FFFF00"; break;
+            default:;
+        }
+
+        if (color.empty()) return "<b>" + content + "</b>";
+        return "<font color=\"" + color + "\"><b>" + content + "</b></font>";
     }
 
-    string GetWallColor(const Wall wall) const
+    static string GetBoardStyle()
     {
-        switch (wall) {
-            case Wall::EMPTY:   return "#FFFFFF";
-            case Wall::NORMAL:  return "#000000";
-            case Wall::DOOR:    return "#EA68A2";
-            default:            return "#D9D9D9";
-        }
-    }
-
-    std::mt19937 g;
-    inline static constexpr const char* style = R"(
+        return R"(
 <style>
     .grid {
-        width: 50px;
-        height: 50px;
+        width: )" + to_string(GRID_SIZE) + R"(px;
+        height: )" + to_string(GRID_SIZE) + R"(px;
+        font-size: 19px;
+        line-height: 1;
+        background-size: cover;
+        background-repeat: no-repeat;
     }
     .wall-row {
-        width: 50px;
-        height: 10px;
+        width: )" + to_string(GRID_SIZE) + R"(px;
+        height: )" + to_string(WALL_SIZE) + R"(px;
+        font-size: 8px;
+        line-height: 8px;
+        background-size: cover;
+        background-repeat: no-repeat;
     }
     .wall-col {
-        width: 10px;
-        height: 50px;
+        width: )" + to_string(WALL_SIZE) + R"(px;
+        height: )" + to_string(GRID_SIZE) + R"(px;
+        font-size: 8px;
+        line-height: 8px;
+        background-size: cover;
+        background-repeat: no-repeat;
     }
     .corner {
-        width: 10px;
-        height: 10px;
+        width: )" + to_string(WALL_SIZE) + R"(px;
+        height: )" + to_string(WALL_SIZE) + R"(px;
     }
 </style>
 )";
+    }
 };
