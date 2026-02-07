@@ -20,11 +20,11 @@ class MainStage;
 template <typename... SubStages> using SubGameStage = StageFsm<MainStage, SubStages...>;
 template <typename... SubStages> using MainGameStage = StageFsm<void, SubStages...>;
 const GameProperties k_properties { 
-    .name_ = "谁是牛头王", // the game name which should be unique among all the games
+    .name_ = "谁是牛头王",
     .developer_ = "铁蛋",
     .description_ = "玩家照着大小顺序摆牌，尽可能获得更少牛头的游戏",
 };
-uint64_t MaxPlayerNum(const CustomOptions& options) { return 10; } // 0 indicates no max-player limits
+uint64_t MaxPlayerNum(const CustomOptions& options) { return 10; }
 uint32_t Multiple(const CustomOptions& options) {
     if (GET_OPTION_VALUE(options, 倍数) != vector<int32_t>{5, 10, 11, 55, 110}) {
         return 0;
@@ -48,6 +48,9 @@ bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const Gener
         return false;
     }
     int cardLimit = generic_options_readonly.PlayerNum() * GET_OPTION_VALUE(game_options, 手牌) + GET_OPTION_VALUE(game_options, 行数);
+    if (GET_OPTION_VALUE(game_options, 策略)) {
+        GET_OPTION_VALUE(game_options, 卡牌) = cardLimit;
+    }
     if (GET_OPTION_VALUE(game_options, 卡牌) < cardLimit) {
         GET_OPTION_VALUE(game_options, 卡牌) = cardLimit;
         reply() << "[警告] 总卡牌数少于最小限制，已自动调整上限为 " << cardLimit;
@@ -74,13 +77,37 @@ bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const Gener
 }
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
-    InitOptionsCommand("独自一人开始游戏",
-            [] (CustomOptions& game_options, MutableGenericOptions& generic_options)
-            {
-                generic_options.bench_computers_to_player_num_ = 6;
-                return NewGameMode::SINGLE_USER;
+    InitOptionsCommand("配置游戏模式和规则变体",
+            [] (CustomOptions& game_options, MutableGenericOptions& generic_options, const vector<int32_t>& modes) {
+                bool single_user = false;
+                for (int32_t mode : modes) {
+                    switch (mode) {
+                        case 0:
+                            single_user = true; break;
+                        case 1:
+                        case 2:
+                        case 3:
+                            GET_OPTION_VALUE(game_options, 模式) = mode; break;
+                        case 4:
+                            GET_OPTION_VALUE(game_options, 大胃王) = true; break;
+                        case 5:
+                            GET_OPTION_VALUE(game_options, 策略) = true; break;
+                        case 6:
+                            GET_OPTION_VALUE(game_options, 专家) = true; break;
+                        default:;
+                    }
+                }
+                if (single_user) {
+                    generic_options.bench_computers_to_player_num_ = 6;
+                    return NewGameMode::SINGLE_USER;
+                }
+                return NewGameMode::MULTIPLE_USERS;
             },
-            VoidChecker("单机")),
+            RepeatableChecker<AlterChecker<int32_t>>(map<string, int32_t>{
+                {"单机", 0},
+                {"22分", 1}, {"33分", 2}, {"66分", 3},
+                {"大胃王", 4}, {"策略", 5}, {"专家", 6},
+            })),
 };
 
 // ========== GAME STAGES ==========
@@ -128,7 +155,10 @@ class MainStage : public MainGameStage<RoundStage>
         if (GAME_OPTION(模式) == 1) Global().Boardcast() << "[提示] 本局为 22分 模式，当手牌打完时有玩家达到 22 个牛头时，游戏才会结束";
         if (GAME_OPTION(模式) == 2) Global().Boardcast() << "[提示] 本局为 33分 模式，当手牌打完时有玩家达到 33 个牛头时，游戏才会结束";
         if (GAME_OPTION(模式) == 3) Global().Boardcast() << "[提示] 本局为 66分 模式，当手牌打完时有玩家达到 66 个牛头时，游戏才会结束";
-        if (GAME_OPTION(模式) == 4) Global().Boardcast() << "[提示] 本局为大胃王模式，每个牛头变更为加分，努力去获取更多的牛头吧！";
+        if (GAME_OPTION(大胃王)) Global().Boardcast() << "[提示] 本局为大胃王模式：每个牛头变更为加分，努力去获取更多的牛头吧！";
+        if (GAME_OPTION(策略)) Global().Boardcast() << "【策略变体】根据游戏人数限制使用的卡片数量，本局卡牌范围为 1~" << GAME_OPTION(卡牌);
+        if (GAME_OPTION(专家)) Global().Boardcast() << "【专家变体】牌会被放置于一行的最左边或者最右边更接近的位置。但只要添加了一行的第 " << GAME_OPTION(上限) << " 张牌，必须拿取这一行的牌和惩罚分数";
+
         for(int pid = 0; pid < Global().PlayerNum(); pid++) {
             Player newPlayer(pid, Global().PlayerName(pid), Global().PlayerAvatar(pid, 40));
             players.push_back(newPlayer);
@@ -143,8 +173,7 @@ class MainStage : public MainGameStage<RoundStage>
         bool game_end = (GAME_OPTION(模式) == 0 && round_ == GAME_OPTION(手牌)) ||
                         (GAME_OPTION(模式) == 1 && table.CheckPlayerHead(22, players)) ||
                         (GAME_OPTION(模式) == 2 && table.CheckPlayerHead(33, players)) ||
-                        (GAME_OPTION(模式) == 3 && table.CheckPlayerHead(66, players)) ||
-                        (GAME_OPTION(模式) == 4 && round_ == GAME_OPTION(手牌));
+                        (GAME_OPTION(模式) == 3 && table.CheckPlayerHead(66, players));
         if (!players[0].hand.empty() || !game_end) {
             if (players[0].hand.empty()) {
                 Global().Boardcast() << "[提示] 手牌用尽但未到达游戏结束条件，将重新洗牌继续游戏！";
@@ -158,13 +187,13 @@ class MainStage : public MainGameStage<RoundStage>
             setter.Emplace<RoundStage>(*this, ++round_);
             return;
         }
-        if (GAME_OPTION(模式) != 4) {
-            Global().Boardcast() << "游戏结束！按照当前持有的牛头数结算扣分";
-        } else {
+        if (GAME_OPTION(大胃王)) {
             Global().Boardcast() << "游戏结束！本局为大胃王模式，按照牛头数结算加分";
+        } else {
+            Global().Boardcast() << "游戏结束！按照当前持有的牛头数结算扣分";
         }
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            if (GAME_OPTION(模式) == 4) {
+            if (GAME_OPTION(大胃王)) {
                 player_scores_[pid] = players[pid].head;
             } else {
                 player_scores_[pid] = -players[pid].head;
@@ -325,21 +354,27 @@ class PlaceStage : public SubGameStage<>
     {}
 
     string once_BoardCast = "";
+    // 存储当前等待手动操作的玩家的候选位置
+    vector<Table::PlaceOption> currentCandidates;
 
     virtual void OnStageBegin() override
     {
         Global().Boardcast() << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
-        PlayerID lastpid = AutoPlaceCard();
+        auto [needManual, activePid] = AutoPlaceCard();
         for (int pid = 0; pid < Global().PlayerNum(); pid++) {
-            if (pid != lastpid) {
+            if (pid != activePid) {
                 Global().SetReady(pid);
             }
         }
         if (once_BoardCast != "") {
             Global().Boardcast() << once_BoardCast << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
         }
-        if (lastpid != -1) {
-            Global().Boardcast() << "请 [" << (lastpid + 1) << "号]" << Global().PlayerName(lastpid) << " 选择一行放置您的卡牌，时限 90 秒";
+        if (activePid != -1) {
+            string hint;
+            if (GAME_OPTION(专家)) {
+                hint = Main().table.GetCandidateOptionsHint(currentCandidates, Main().players[activePid].current);
+            }
+            Global().Boardcast() << hint << "请 [" << (activePid + 1) << "号]" << Global().PlayerName(activePid) << " 选择一行放置您的卡牌，时限 90 秒";
             Global().StartTimer(90);
         }
     }
@@ -355,26 +390,65 @@ class PlaceStage : public SubGameStage<>
             reply() << "[错误] 当前并非是您的选择回合，或您本回合不需要操作";
             return StageErrCode::FAILED;
         }
-        int gain_head = Main().table.PlaceCard(Main().players[pid], line - 1, Main().current_players);
-        Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 放置卡牌于第 " + to_string(line) + " 行，吃掉了该行所有的卡牌，增加了 " + to_string(gain_head) + " 个牛头。\n"
-                             << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
+        
+        if (GAME_OPTION(专家)) {
+            // 验证选择是否在候选列表中
+            if (!Main().table.ValidateLineChoice(line - 1, currentCandidates)) {
+                reply() << "[错误] 您只能从以下候选行中选择：\n" 
+                       << Main().table.GetCandidateOptionsHint(currentCandidates, Main().players[pid].current);
+                return StageErrCode::FAILED;
+            }
+            // 获取该行对应的放置选项（包含自动判定的左右位置）
+            Table::PlaceOption opt = Main().table.GetOptionByLine(line - 1, currentCandidates);
+            int gain_head = Main().table.PlaceCard(Main().players[pid], opt.line, opt.pos, Main().current_players);
+            
+            string posStr = (opt.pos == Table::LEFT) ? "左侧" : "右侧";
+            Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 选择第 " + to_string(line) + " 行，放置在" + posStr
+                                 << (gain_head ? "，吃掉了该行所有的卡牌，增加了 " + to_string(gain_head) + " 个牛头。" : "") << "\n"
+                                 << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
+        } else {
+            // 基础规则：直接放置在右侧
+            int gain_head = Main().table.PlaceCard(Main().players[pid], line - 1, Main().current_players);
+            Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 放置卡牌于第 " + to_string(line) + " 行，吃掉了该行所有的卡牌，增加了 " + to_string(gain_head) + " 个牛头。\n"
+                                 << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
+        }
+
         return StageErrCode::READY;
     }
 
-    // 自动放置卡牌，返回下一个需要手动设置的玩家，-1为全部完成
-    PlayerID AutoPlaceCard() {
+    // 自动放置卡牌，返回 {是否需要手动, 玩家ID}
+    pair<bool, PlayerID> AutoPlaceCard() {
         once_BoardCast = "";
+        currentCandidates.clear();
+        
         while(!Main().current_players.empty()) {
             PlayerID pid = Main().current_players[0].id;
-            int line = Main().table.CheckPlayerNeedPlace(pid, Main().players);
-            if (line != -1) {
-                int gain_head = Main().table.PlaceCard(Main().players[pid], line, Main().current_players);
-                once_BoardCast += "[" + to_string(pid + 1) + "号]将" + to_string(Main().players[pid].current) + "放置于" + to_string(line + 1) + "行" + (gain_head ? "，增加了" + to_string(gain_head) + "个牛头！" : "") + "\n";
+            
+            if (GAME_OPTION(专家)) {
+                auto result = Main().table.CheckPlayerNeedPlaceExpert(pid, Main().players);
+                if (result.needManual) {
+                    // 需要手动选择，保存候选列表
+                    currentCandidates = result.candidateOptions;
+                    return {true, pid};
+                }
+                // 自动放置
+                int gain_head = Main().table.PlaceCard(Main().players[pid], result.autoLine, result.autoPos, Main().current_players);
+                string posStr = (result.autoPos == Table::LEFT) ? "[左侧]" : "右侧";
+                once_BoardCast += "[" + to_string(pid + 1) + "号]将" + to_string(Main().players[pid].current) + "放置于第" + to_string(result.autoLine + 1) + "行" + posStr
+                                + (gain_head ? "，增加了" + to_string(gain_head) + "个牛头！" : "") + "\n";
             } else {
-                return pid;
+                // 基础规则
+                int line = Main().table.CheckPlayerNeedPlace(pid, Main().players);
+                if (line == -1) {
+                    currentCandidates.clear();  // 基础规则下可以选择任意行
+                    return {true, pid};
+                }
+                int gain_head = Main().table.PlaceCard(Main().players[pid], line, Main().current_players);
+                once_BoardCast += "[" + to_string(pid + 1) + "号]将" + to_string(Main().players[pid].current) + "放置于第" + to_string(line + 1) + "行" 
+                                + (gain_head ? "，增加了" + to_string(gain_head) + "个牛头！" : "") + "\n";
             }
         }
-        return -1;
+        return {false, -1};
     }
 
     virtual CheckoutErrCode HandleStageOver_()
@@ -385,27 +459,30 @@ class PlaceStage : public SubGameStage<>
         }
         PlayerID pid = Main().current_players[0].id;
         if (!Global().IsReady(pid)) {
-            int line = 0;
-            for (int i = 1; i < GAME_OPTION(行数); i++) {
-                if (Main().table.GetLineHead(i) < Main().table.GetLineHead(line)) {
-                    line = i;
-                }
-            }
-            int gain_head = Main().table.PlaceCard(Main().players[pid], line, Main().current_players);
-            Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 行动超时，自动放置于第 " << (line + 1) << " 行" << (gain_head ? "，增加了 " + to_string(gain_head) + " 个牛头。" : "");
+            // 超时处理：选择候选位置中牛头最少的
+            Table::PlaceOption bestOpt = Main().table.SelectMinHeadOption(currentCandidates);
+            int gain_head = Main().table.PlaceCard(Main().players[pid], bestOpt.line, bestOpt.pos, Main().current_players);
+            string posStr = "";
+            if (GAME_OPTION(专家) && !currentCandidates.empty()) posStr = (bestOpt.pos == Table::LEFT) ? "[左侧]" : "右侧";
+            Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 行动超时，自动放置于第 " << (bestOpt.line + 1) << " 行" << posStr
+                                 << (gain_head ? "，增加了 " + to_string(gain_head) + " 个牛头。" : "");
             Global().Hook(pid);
             Global().SetReady(pid);
         }
         // 继续下一个玩家行动
-        PlayerID lastpid = AutoPlaceCard();
+        auto [needManual, nextPid] = AutoPlaceCard();
         if (once_BoardCast != "") {
             Global().Boardcast() << once_BoardCast << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
         } else {
             Global().Boardcast() << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
         }
-        if (lastpid != -1) {
-            Global().ClearReady(lastpid);
-            Global().Boardcast() << "请 [" << (lastpid + 1) << "号]" << Global().PlayerName(lastpid) << " 选择一行放置您的卡牌，时限 60 秒";
+        if (nextPid != -1) {
+            string hint;
+            if (GAME_OPTION(专家)) {
+                hint = Main().table.GetCandidateOptionsHint(currentCandidates, Main().players[nextPid].current);
+            }
+            Global().Boardcast() << hint << "请 [" << (nextPid + 1) << "号]" << Global().PlayerName(nextPid) << " 选择一行放置您的卡牌，时限 60 秒";
+            Global().ClearReady(nextPid);
             Global().StartTimer(60);
             return StageErrCode::CONTINUE;
         } else {
@@ -433,14 +510,15 @@ class PlaceStage : public SubGameStage<>
         if (Global().IsReady(pid)) {
             return StageErrCode::OK;
         }
-        int line = 0;
-        for (int i = 1; i < GAME_OPTION(行数); i++) {
-            if (Main().table.GetLineHead(i) < Main().table.GetLineHead(line)) {
-                line = i;
-            }
+        // 选择牛头最少的候选位置
+        Table::PlaceOption bestOpt = Main().table.SelectMinHeadOption(currentCandidates);
+        int gain_head = Main().table.PlaceCard(Main().players[pid], bestOpt.line, bestOpt.pos, Main().current_players);
+        string posStr = "";
+        if (GAME_OPTION(专家) && !currentCandidates.empty()) {
+            posStr = (bestOpt.pos == Table::LEFT) ? "[左侧]" : "右侧";
         }
-        int gain_head = Main().table.PlaceCard(Main().players[pid], line, Main().current_players);
-        Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 放置卡牌于第 " << (line + 1) << " 行，吃掉了该行所有的卡牌，增加了 " << gain_head << " 个牛头。\n"
+        Global().Boardcast() << "[" << (pid + 1) << "号]" << Global().PlayerName(pid) << " 放置卡牌于第 " << (bestOpt.line + 1) << " 行" << posStr
+                             << (gain_head ? "，吃掉了该行所有的卡牌，增加了 " + to_string(gain_head) + " 个牛头。" : "") << "\n"
                              << Markdown(Main().table.GetTable(true, Main().players, Main().current_players));
         return StageErrCode::READY;
     }
