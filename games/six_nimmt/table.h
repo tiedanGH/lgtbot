@@ -31,6 +31,24 @@ public:
 class Table
 {
 public:
+    enum PlacePosition { LEFT, RIGHT };
+    
+    // 单个放置选项
+    struct PlaceOption {
+        int line;
+        PlacePosition pos;
+        int distance;
+    };
+    
+    // 放置结果结构
+    struct PlaceResult {
+        bool needManual;      // 是否需要手动选择
+        int autoLine;         // 自动放置的行号
+        PlacePosition autoPos; // 自动放置的位置
+        vector<PlaceOption> candidateOptions; // 需要手动选择时的候选位置列表
+    };
+
+
     // 游戏文件夹
     string ResourceDir;
     
@@ -178,7 +196,7 @@ public:
         return playerTable.ToString();
     }
 
-    // 检测玩家是否需要手动操作
+    // 检测玩家是否需要手动操作（基础规则）
     int CheckPlayerNeedPlace(const PlayerID pid, const vector<Player> players) const
     {
         int card = players[pid].current;
@@ -197,26 +215,208 @@ public:
             }
         }
         if (!automatic) return -1;
-        else return maxIndex;
+        return maxIndex;
     }
 
-    // 玩家放置卡牌
-    int PlaceCard(Player &player, const int line, vector<Player> &current_players)
+    // 根据卡牌和行号判断应该放在左边还是右边
+    PlacePosition DeterminePosition(const int card, const int line) const
+    {
+        int first = tableStatus[line][0];
+        int last = tableStatus[line][tableStatus[line].size() - 1];
+        bool canRight = (card > last);
+        bool canLeft = (card < first);
+        // 优先右边（如果两边都可以放，说明这行只有一张牌，按基础规则放右边）
+        if (canRight) return RIGHT;
+        if (canLeft) return LEFT;
+        // 理论上不应该到这里
+        return RIGHT;
+    }
+
+    // 检测玩家是否需要手动操作（专家变体）
+    PlaceResult CheckPlayerNeedPlaceExpert(const PlayerID pid, const vector<Player> players) const
+    {
+        PlaceResult result;
+        result.needManual = false;
+        result.autoLine = -1;
+        int card = players[pid].current;
+        
+        vector<PlaceOption> allValidOptions;
+        for (int i = 0; i < lineNum; i++) {
+            int first = tableStatus[i][0];
+            int last = tableStatus[i][tableStatus[i].size() - 1];
+            if (card > last) {
+                PlaceOption opt;
+                opt.line = i;
+                opt.pos = RIGHT;
+                opt.distance = card - last;
+                allValidOptions.push_back(opt);
+            }
+            if (card < first) {
+                PlaceOption opt;
+                opt.line = i;
+                opt.pos = LEFT;
+                opt.distance = first - card;
+                allValidOptions.push_back(opt);
+            }
+        }
+        
+        // 没有合法位置，需要手动选择
+        if (allValidOptions.empty()) {
+            result.needManual = true;
+            result.candidateOptions.clear();
+            return result;
+        }
+        
+        // 距离最小的候选位置
+        int minDistance = INT_MAX;
+        for (const auto& opt : allValidOptions) {
+            if (opt.distance < minDistance) {
+                minDistance = opt.distance;
+            }
+        }
+        for (const auto& opt : allValidOptions) {
+            if (opt.distance == minDistance) {
+                result.candidateOptions.push_back(opt);
+            }
+        }
+        // 单一位置，自动放置
+        if (result.candidateOptions.size() == 1) {
+            result.needManual = false;
+            result.autoLine = result.candidateOptions[0].line;
+            result.autoPos = result.candidateOptions[0].pos;
+            return result;
+        }
+        // 多个最小距离位置，需要手动选择
+        result.needManual = true;
+        return result;
+    }
+
+    // 从候选位置中选择牛头数最少的（用于超时/AI）
+    PlaceOption SelectMinHeadOption(const vector<PlaceOption>& options) const
+    {
+        // 如果没有候选限制，选择牛头最少的行
+        if (options.empty()) {
+            int minHead = INT_MAX;
+            int bestLine = 0;
+            for (int i = 0; i < lineNum; i++) {
+                int head = GetLineHead(i);
+                if (head < minHead) {
+                    minHead = head;
+                    bestLine = i;
+                }
+            }
+            PlaceOption opt;
+            opt.line = bestLine;
+            opt.pos = RIGHT;
+            opt.distance = 0;
+            return opt;
+        }
+        // 在候选位置中选择最少牛头的
+        int minHead = INT_MAX;
+        PlaceOption bestOpt = options[0];
+        for (const auto& opt : options) {
+            if (tableStatus[opt.line].size() >= lineLimit - 1) {
+                int head = GetLineHead(opt.line);
+                if (head < minHead) {
+                    minHead = head;
+                    bestOpt = opt;
+                }
+            } else {
+                if (0 < minHead) {
+                    minHead = 0;
+                    bestOpt = opt;
+                }
+            }
+        }
+        return bestOpt;
+    }
+
+    // 验证玩家选择的行号是否在候选列表中
+    bool ValidateLineChoice(const int line, const vector<PlaceOption>& candidates) const
+    {
+        // 如果候选列表为空，表示可以选择任意行（需要收牌的情况）
+        if (candidates.empty()) {
+            return line >= 0 && line < lineNum;
+        }
+        for (const auto& opt : candidates) {
+            if (opt.line == line) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 从候选列表中找到指定行的选项
+    PlaceOption GetOptionByLine(const int line, const vector<PlaceOption>& candidates) const
+    {
+        for (const auto& opt : candidates) {
+            if (opt.line == line) {
+                return opt;
+            }
+        }
+        // 如果是收牌情况（candidates为空），返回默认选项
+        PlaceOption opt;
+        opt.line = line;
+        opt.pos = RIGHT;
+        opt.distance = 0;
+        return opt;
+    }
+
+    // 生成候选位置的提示信息
+    string GetCandidateOptionsHint(const vector<PlaceOption>& candidates, const int card) const
+    {
+        if (candidates.empty()) {
+            return "卡牌(" + to_string(card) + ")无法放置在任何位置，需要选择一行收牌\n\n";
+        }
+        
+        string hint = "卡牌(" + to_string(card) + ")有以下等距离的放置选择：\n";
+        for (const auto& opt : candidates) {
+            string posStr = (opt.pos == LEFT) ? "左侧" : "右侧";
+            int targetCard = (opt.pos == LEFT) ? tableStatus[opt.line][0] : 
+                                                 tableStatus[opt.line][tableStatus[opt.line].size() - 1];
+            hint += "  第" + to_string(opt.line + 1) + "行(" + posStr + "，与" + to_string(targetCard) + 
+                    "相距" + to_string(opt.distance) + ")\n";
+        }
+        return hint + "\n";
+    }
+
+    // 玩家放置卡牌（全部规则）
+    int PlaceCard(Player &player, const int line, const PlacePosition pos, vector<Player> &current_players)
     {
         int card = player.current;
-        int current_place = tableStatus[line].size() - 1;
+        int current_size = tableStatus[line].size();
         current_players.erase(current_players.begin());
-        // 放置成功
-        if (card > tableStatus[line][current_place] && current_place + 2 < lineLimit) {
-            tableStatus[line].push_back(card);
+
+        bool canPlace = false;
+        if (pos == RIGHT) {     // 右侧放置：牌要大于该行最后一张
+            int last = tableStatus[line][current_size - 1];
+            canPlace = (card > last);
+        } else {    // 左侧放置：牌要小于该行第一张
+            int first = tableStatus[line][0];
+            canPlace = (card < first);
+        }
+        // 如果可以正常放置，且放置后不会达到上限
+        if (canPlace && current_size + 1 < lineLimit) {
+            // 放置成功
+            if (pos == RIGHT) {
+                tableStatus[line].push_back(card);
+            } else {
+                tableStatus[line].insert(tableStatus[line].begin(), card);
+            }
             return 0;
         }
-        // 放置失败
+        // 放置失败：收走该行所有牌
         int gain_head = GetLineHead(line);
         tableStatus[line].clear();
         tableStatus[line].push_back(card);
         player.head += gain_head;
         return gain_head;
+    }
+    
+    // 玩家放置卡牌（基础规则）
+    int PlaceCard(Player &player, const int line, vector<Player> &current_players)
+    {
+        return PlaceCard(player, line, RIGHT, current_players);
     }
 
     int GetLineHead(const int line) const
