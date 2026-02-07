@@ -1,0 +1,7 @@
+EXTEND_OPTION("初始楼层高度", 楼层, (ArithChecker<uint32_t>(10, 50, "层数")), 20)
+EXTEND_OPTION("设置杀手初始血量", 杀手血量, (ArithChecker<uint32_t>(1, 10, "血量")), 2)
+EXTEND_OPTION("设置警察初始血量", 警察血量, (ArithChecker<uint32_t>(1, 10, "血量")), 2)
+EXTEND_OPTION("设置电梯的最大下行楼层", 电梯, (ArithChecker<uint32_t>(2, 10, "层数")), 3)
+EXTEND_OPTION("警察持有的子弹数量", 子弹, (ArithChecker<uint32_t>(1, 20, "数量")), 5)
+EXTEND_OPTION("警察获胜需要解救的人质数", 解救人质, (ArithChecker<uint32_t>(1, 5, "数量")), 2)
+EXTEND_OPTION("每回合时间限制", 时限, (ArithChecker<uint32_t>(10, 3600, "超时时间（秒）")), 180)
