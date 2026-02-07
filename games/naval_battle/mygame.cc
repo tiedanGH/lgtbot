@@ -40,24 +40,24 @@ const std::vector<RuleCommand> k_rule_commands = {};
 bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
 {
     if (generic_options_readonly.PlayerNum() != 2) {
-        reply() << "该游戏为双人游戏，必须为2人参加，当前玩家数为" << generic_options_readonly.PlayerNum();
+        reply() << "该游戏为双人游戏，必须为 2 人参加，当前玩家数为 " << generic_options_readonly.PlayerNum();
         return false;
     }
 
     auto shape = GET_OPTION_VALUE(game_options, 形状);
     if (shape.empty()) {
-        reply() << "[错误] 形状参数不能为空：必须包含5个长度为5的数字串，且只能包含数字012，数字2（机头）有且仅有一个。形如：00000 00200 11111 00100 01110";
+        reply() << "[错误] 形状参数不能为空：必须包含5个长度为5的数字串，且只能包含数字012。形如：00000 00200 11111 00100 01110";
         return false;
     }
     if (shape[0] != "默认") {
         if (shape.size() != 5) {
-            reply() << "[错误] 形状参数数量必须为5个：必须包含5个长度为5的数字串，且只能包含数字012，数字2（机头）有且仅有一个。形如：00000 00200 11111 00100 01110";
+            reply() << "[错误] 形状参数数量必须为5个：必须包含5个长度为5的数字串，且只能包含数字012。形如：00000 00200 11111 00100 01110";
             return false;
         }
         int countOf2 = 0;
         for (const auto& row : shape) {
             if (row.size() != 5) {
-                reply() << "[错误] 形状参数每一行都必须为5个数字：必须包含5个长度为5的数字串，且只能包含数字012，数字2（机头）有且仅有一个。形如：00000 00200 11111 00100 01110";
+                reply() << "[错误] 形状参数每一行都必须为5个数字：必须包含5个长度为5的数字串，且只能包含数字012。形如：00000 00200 11111 00100 01110";
                 return false;
             }
             if (!std::all_of(row.begin(), row.end(), [](char c) { return c == '0' || c == '1' || c == '2'; })) {
@@ -95,7 +95,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
                        "【单机BOSS挑战快捷配置】</br>"
                        "[第1项] 挑战的BOSS类型：仅支持 [0-3]，输入其他为随机</br>"
                        "[第2项] 重叠：[0] 为不允许，[大于0] 均为允许</br>"
-                       "[第3项] 要害：[0] 为有要害，[1] 为无要害，[大于1] 均为首要害</br>"
+                       "[第3项] 要害：[0] 有要害，[1] 无要害，[2] 首要害，[3] 技能</br>"
                        "[第4项] 连发次数：范围 [1-10]，其他输入均为默认3</br>"
                        "[第5项] 侦察区域大小：范围 [0-30]，其他输入均为默认随机</br>"
                        "[第6项] 进攻时限：范围 [30-3600]，其他输入均为默认120</br>"
@@ -110,7 +110,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
                 if (is_single) {
                     if (options.size() >= 1) GET_OPTION_VALUE(game_options, BOSS挑战) = options[0] >= 0 && options[0] <= 3 ? options[0] : 100;
                     if (options.size() >= 2) GET_OPTION_VALUE(game_options, 重叠) = options[1] == 0 ? false : true;
-                    if (options.size() >= 3) GET_OPTION_VALUE(game_options, 要害) = options[2] >= 0 && options[2] <= 2 ? options[2] : 2;
+                    if (options.size() >= 3) GET_OPTION_VALUE(game_options, 要害) = options[2] >= 0 && options[2] <= 3 ? options[2] : 0;
                     if (options.size() >= 4) GET_OPTION_VALUE(game_options, 连发) = options[3] >= 1 && options[3] <= 10 ? options[3] : GET_OPTION_VALUE(game_options, 连发);
                     if (options.size() >= 5) GET_OPTION_VALUE(game_options, 侦察) = options[4] >= 0 && options[4] <= 30 ? options[4] : GET_OPTION_VALUE(game_options, 侦察);
                     if (options.size() >= 6) GET_OPTION_VALUE(game_options, 进攻时限) = options[5] >= 30 && options[5] <= 3600 ? options[5] : GET_OPTION_VALUE(game_options, 进攻时限);
@@ -132,7 +132,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
                     if (options.size() >= 1) GET_OPTION_VALUE(game_options, 边长) = options[0] >= 8 && options[0] <= 15 ? options[0] : 10;
                     if (options.size() >= 2) GET_OPTION_VALUE(game_options, 飞机) = options[1] >= 1 && options[1] <= 8 ? options[1] : 3;
                     if (options.size() >= 3) GET_OPTION_VALUE(game_options, 重叠) = options[2] == 0 ? false : true;
-                    if (options.size() >= 4) GET_OPTION_VALUE(game_options, 要害) = options[3] >= 0 && options[3] <= 2 ? options[3] : 2;
+                    if (options.size() >= 4) GET_OPTION_VALUE(game_options, 要害) = options[3] >= 0 && options[3] <= 3 ? options[3] : 0;
                     if (options.size() >= 5) GET_OPTION_VALUE(game_options, 连发) = options[4] >= 1 && options[4] <= 10 ? options[4] : GET_OPTION_VALUE(game_options, 连发);
                     if (options.size() >= 6) GET_OPTION_VALUE(game_options, 侦察) = options[5] >= 0 && options[5] <= 30 ? options[5] : GET_OPTION_VALUE(game_options, 侦察);
                     return NewGameMode::MULTIPLE_USERS;
@@ -167,8 +167,11 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
 	int round_;
     // 回合攻击次数
     int attack_count[2];
+    // 是否使用“侦察”技能
+	bool scout_used[2] = {false, false};
     // 判定是否是超时淘汰
     int timeout[2];
+
     // BOSS挑战
     Boss boss;
 
@@ -181,8 +184,8 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
 	string GetAllMap(const int show_0, const int show_1, const int crucial_mode)
 	{
 		string allmap = "<table style=\"text-align:center;margin:auto;\"><tr>";
-		allmap += "<td>" + board[0].Getmap(show_0, crucial_mode) + "</td>";
-		allmap += "<td>" + board[1].Getmap(show_1, crucial_mode) + "</td>";
+		allmap += "<td>" + board[0].GetMap(show_0, crucial_mode) + "</td>";
+		allmap += "<td>" + board[1].GetMap(show_1, crucial_mode) + "</td>";
 		allmap += "</tr></table>";
         return allmap;
 	}
@@ -220,7 +223,6 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
             board[pid].MapName += "的地图";
             board[pid].alive = 0;
             board[pid].prepare = 1;
-            board[pid].firstX = board[pid].firstY = -1;
             attack_count[pid] = timeout[pid] = 0;
         }
 
@@ -241,10 +243,10 @@ class MainStage : public MainGameStage<PrepareStage, AttackStage>
                 sender << "[警告] 当前游戏未使用默认连发或侦察配置。\n\n";
             }
             sender << "[本局挑战配置详情]" <<
-                      "\n- 重叠 " << (GAME_OPTION(重叠) ? "允许" : "不允许") <<
-                      "\n- 要害 " << (GAME_OPTION(要害) == 0 ? "有" : (GAME_OPTION(要害) == 1 ? "无" : "首次")) <<
-                      "\n- 连发 " << to_string(GAME_OPTION(连发)) <<
-                      "\n- 侦察 " << (GAME_OPTION(侦察) == 100 ? "随机" : to_string(GAME_OPTION(侦察)));
+                    "\n- 重叠 " << (GAME_OPTION(重叠) ? "允许" : "不允许") <<
+                    "\n- 要害 " << (GAME_OPTION(要害) == 0 ? "有" : (GAME_OPTION(要害) == 1 ? "无" : "首次")) <<
+                    "\n- 连发 " << to_string(GAME_OPTION(连发)) <<
+                    "\n- 侦察 " << (GAME_OPTION(侦察) == 100 ? "随机" : to_string(GAME_OPTION(侦察)));
             if (GAME_OPTION(BOSS挑战) == 0) {
                 board[0].sizeX = board[0].sizeY = board[1].sizeX = board[1].sizeY = 14;
                 board[0].planeNum = 3;
@@ -390,6 +392,9 @@ class PrepareStage : public SubGameStage<>
         if (GAME_OPTION(要害) == 2) {
             Global().Boardcast() << "[特殊规则] 本局仅首“要害”公开：每个玩家命中过1次机头以后，之后再次命中其他机头时，仅告知命中，不提示命中要害，且不具有额外一回合。";
         }
+        if (GAME_OPTION(要害) == 3) {
+            Global().Boardcast() << "[特殊规则] 本局为？要害模式：无要害提示但每人有一次“侦察”机会，可以在回合结束后侦察所有已打击位置是否为要害，若其中有要害，则获得一个额外回合。（每局游戏限一次）";
+        }
 
         // 游戏开始时展示飞机形状
         if (GAME_OPTION(形状).size() != 1) {
@@ -397,7 +402,7 @@ class PrepareStage : public SubGameStage<>
         }
 
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            Global().Tell(pid) << Markdown(Main().board[pid].Getmap(1, GAME_OPTION(要害)));
+            Global().Tell(pid) << Markdown(Main().board[pid].GetMap(1, GAME_OPTION(要害)));
             Global().Tell(pid) << "请放置飞机，指令为「坐标 方向」，如：C5 上\n可通过「帮助」查看全部命令格式";
         }
         Global().StartTimer(GAME_OPTION(放置时限));
@@ -425,7 +430,7 @@ class PrepareStage : public SubGameStage<>
             return StageErrCode::FAILED;
         }
 
-        reply() << Markdown(Main().board[pid].Getmap(1, GAME_OPTION(要害)));
+        reply() << Markdown(Main().board[pid].GetMap(1, GAME_OPTION(要害)));
 		if (Main().board[pid].alive / Main().board[pid].crucial_num < Main().board[pid].planeNum) {
 			reply() << "放置成功！您还有 " + to_string(Main().board[pid].planeNum - Main().board[pid].alive / Main().board[pid].crucial_num) + " 架飞机等待放置，请继续行动";
 		} else {
@@ -451,7 +456,7 @@ class PrepareStage : public SubGameStage<>
             return StageErrCode::FAILED;
         }
 
-        reply() << Markdown(Main().board[pid].Getmap(1, GAME_OPTION(要害)));
+        reply() << Markdown(Main().board[pid].GetMap(1, GAME_OPTION(要害)));
         reply() << "移除成功！";
         return StageErrCode::OK;
     }
@@ -469,7 +474,7 @@ class PrepareStage : public SubGameStage<>
         
         Main().board[pid].RemoveAllPlanes();
         
-        reply() << Markdown(Main().board[pid].Getmap(1, GAME_OPTION(要害)));
+        reply() << Markdown(Main().board[pid].GetMap(1, GAME_OPTION(要害)));
         reply() << "清空成功！";
         return StageErrCode::OK;
     }
@@ -494,7 +499,7 @@ class PrepareStage : public SubGameStage<>
             reply() << "请私信裁判查看当前布置的地图";
             return StageErrCode::FAILED;
         }
-        reply() << Markdown(Main().board[pid].Getmap(1, GAME_OPTION(要害)));
+        reply() << Markdown(Main().board[pid].GetMap(1, GAME_OPTION(要害)));
         return StageErrCode::OK;
     }
 
@@ -551,11 +556,14 @@ class AttackStage : public SubGameStage<>
                 MakeStageCommand(*this, "移除飞机标记（移除+飞机头坐标+方向）", &AttackStage::RemoveMark_,
                         VoidChecker("移除"), AnyArg("飞机头坐标", "C5"), AlterChecker<int>(position_map)),
 				MakeStageCommand(*this, "清空地图上的所有标记", &AttackStage::RemoveALLMark_, VoidChecker("清空")),
+                MakeStageCommand(*this, "[仅？要害模式] 发动“侦察”技能（限一次）", &AttackStage::Scout_, VoidChecker("侦察")),
                 MakeStageCommand(*this, "发射导弹进行攻击！", &AttackStage::Attack_, AnyArg("攻击坐标", "A1")))
     {}
 
     // 剩余连发次数
     int repeated[2];
+    // 本回合使用了侦察技能
+    bool scout[2] = {false, false};
 
     virtual void OnStageBegin() override
     {
@@ -571,8 +579,37 @@ class AttackStage : public SubGameStage<>
 
     virtual CheckoutErrCode OnStageOver() override
     {
+        if (Main().board[0].alive > 0 && Main().board[1].alive > 0) {
+            // ？要害模式回合结算
+            bool scout_success = false;
+            for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
+                if (scout[pid]) {
+                    scout[pid] = false;
+                    int scout_count = Main().board[!pid].Scout();
+                    if (scout_count > 0) {
+                        Global().Boardcast() << At(pid) << " 使用侦察技能\n"
+                                             << Markdown(Main().GetAllMap(0, 0, GAME_OPTION(要害))) << "\n"
+                                             << "成功侦察到已打击区域的 " << scout_count << " 个要害，获得额外一回合行动机会，导弹已重新填充。";
+                        scout_success = true;
+                        repeated[pid] = GAME_OPTION(连发);
+                        Global().ClearReady(pid);
+                    } else {
+                        Global().Boardcast() << At(pid) << " 使用侦察技能\n"
+                                             << Markdown(Main().GetAllMap(0, 0, GAME_OPTION(要害))) << "\n"
+                                             << "但是在已打击区域并未发现任何要害，未能获得额外回合。";
+                    }
+                }
+            }
+            // 侦察成功继续本回合
+            if (scout_success) {
+                Global().StartTimer(GAME_OPTION(进攻时限));
+                return StageErrCode::CONTINUE;
+            }
+        }
+
+        // 回合结束
         Global().Boardcast() << Markdown(Main().GetAllMap(0, 0, GAME_OPTION(要害)));
-        // 重置上回合打击位置
+        // 重置本回合打击位置
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             for(int i = 1; i <= Main().board[pid].sizeX; i++) {
                 for(int j = 1; j <= Main().board[pid].sizeY; j++) {
@@ -615,14 +652,12 @@ class AttackStage : public SubGameStage<>
 
         // 首要害坐标添加
         bool first_crucial = false;
-        if (result == "2" && GAME_OPTION(要害) == 2 && Main().board[!pid].firstX == -1) {
+        if (result == "2" && GAME_OPTION(要害) == 2 && Main().board[!pid].shown_crucials.empty()) {
             string coordinate = str;
             Main().board[!pid].CheckCoordinate(coordinate);
-            Main().board[!pid].firstX = coordinate[0] - 'A' + 1;
-            Main().board[!pid].firstY = coordinate[1] - '0'; 
-            if (coordinate.length() == 3) {
-                Main().board[!pid].firstY = (coordinate[1] - '0') * 10 + coordinate[2] - '0';
-            }
+            int firstX = coordinate[0] - 'A' + 1;
+            int firstY = coordinate.length() == 2 ? coordinate[1] - '0' : (coordinate[1] - '0') * 10 + coordinate[2] - '0';
+            Main().board[!pid].shown_crucials.push_back({firstX, firstY});
             first_crucial = true;
         }
         
@@ -642,7 +677,7 @@ class AttackStage : public SubGameStage<>
             }
         }
         else if (result == "1" ||
-                (result == "2" && GAME_OPTION(要害) == 1) ||
+                (result == "2" && (GAME_OPTION(要害) == 1 || GAME_OPTION(要害) == 3)) ||
                 (result == "2" && GAME_OPTION(要害) == 2 && !first_crucial))
         {
             if (Main().board[!pid].alive == 0 && GAME_OPTION(要害) > 0) {
@@ -674,8 +709,29 @@ class AttackStage : public SubGameStage<>
             sender << Main().boss.BOSS_SpecialPlanes(Main().board, str);
             return StageErrCode::READY;
         }
-        Global().Boardcast() << "[错误] 发生了不可预料的错误，请联系管理员：Error return value";
+        Global().Boardcast() << "[错误] 发生了不可预料的错误，请联系管理员：未知的攻击行动返回值 " << result;
         return StageErrCode::FAILED;
+    }
+
+    AtomReqErrCode Scout_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        if (GAME_OPTION(要害) != 3) {
+            reply() << "[错误] 本局游戏未启用侦察技能";
+            return StageErrCode::FAILED;
+        }
+        if (Global().IsReady(pid)) {
+            reply() << "您本回合已行动完成，请等待对手操作";
+            return StageErrCode::FAILED;
+        }
+        if (Main().scout_used[pid]) {
+            reply() << "[错误] 侦察技能已被使用，每局对战仅限一次";
+            return StageErrCode::FAILED;
+        }
+
+        scout[pid] = true;
+        Main().scout_used[pid] = true;
+        reply() << "您使用了侦察技能：将在本回合结束时侦察已打击的所有位置！";
+        return StageErrCode::OK;
     }
 
     AtomReqErrCode AddMark_(const PlayerID pid, const bool is_public, MsgSenderBase& reply, const std::string& str, const int64_t direction)
