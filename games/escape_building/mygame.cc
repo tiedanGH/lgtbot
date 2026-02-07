@@ -356,6 +356,7 @@ class RoundStage : public SubGameStage<>
         // 杀手无法安装弹射装置，强制平局
         if (Main().police_floor > 2 && hostage_available.empty()) {
             Global().SetReady(0); Global().SetReady(1);
+            Main().player_scores_[0] = Main().player_scores_[1] = -1;
             Global().Boardcast() << "[提示] 杀手已无可安装弹射装置的楼层，且当前未抵达 2 楼，满足平局特殊条件，游戏结束！";
             return;
         }
