@@ -18,22 +18,24 @@
 ### 特殊规则
 - 允许飞机重叠：若规则允许飞机重叠时，飞机的机身可任意数量重叠，机头不可与机身重叠
 - 仅首“要害”公开：在该规则下，每个玩家命中过1次机头以后，之后再次命中其他机头时，仅告知命中，不提示命中要害，且不具有额外一回合
-- 无“要害”提示：在该规则下，命中机头时，仅告知命中，不再提示命中要害，且不具有额外一回合。
+- 无“要害”提示：在该规则下，命中机头时，仅告知命中，不再提示命中要害，且不具有额外一回合
+- ？要害模式：无要害提示但每人有一次“侦察”机会，可以在回合结束后侦察所有已打击位置是否为要害，若其中有要害，则获得一个额外回合
 
 ### 地图图例
 <table style="text-align:center; margin:auto; height:125px">
     <tr>
-        <td style="background-color:#ECECEC; width:35px; border:1px solid black">　</td><td style="border:1px solid black">未被打击区域</td>
-        <td style="background-color:#E0FFE0; width:35px; border:1px solid black"><span style="font-size:x-large;">+</span></td><td style="border:1px solid black">未被打击机身</td>
-        <td style="background-color:#E0FFE0; width:35px; border:1px solid black"><span style="font-size:x-large; color:#FF0000;">★</span></td><td style="border:1px solid black">未被打击飞机头</td>
+        <td class=cell style="background:#ECECEC;">　</td><td>未被打击区域</td>
+        <td class=cell style="background:#E0FFE0;">+</td><td>未被打击机身</td>
+        <td class=cell style="background:#E0FFE0;"><span style="color:#F00;">★</span></td><td>未被打击飞机头</td>
     </tr>
     <tr>
-        <td style="background-color:#B0E0FF; width:35px; border:1px solid black">　</td><td style="border:1px solid black">已被打击空地</td>
-        <td style="background-color:#FFA0A0; width:35px; border:1px solid black"><span style="font-size:x-large;">+</span></td><td style="border:1px solid black">已被打击机身</td>
-        <td style="background-color:#000000; width:35px; border:1px solid black"><span style="font-size:x-large; color:#FF0000;">★</span></td><td style="border:1px solid black">已被打击飞机头</td>
+        <td class=cell style="background:#B0E0FF;">　</td><td>已被打击空地</td>
+        <td class=cell style="background:#FFA0A0;">+</td><td>已被打击机身</td>
+        <td class=cell style="background:#000000;"><span style="color:#F00;">★</span></td><td>已被打击飞机头</td>
     </tr>
     <tr>
-        <td style="background-color:#A0FFA0; width:35px; border:1px solid black"><span style="font-size:x-large;">-</span></td><td style="border:1px solid black">侦察点：空地</td>
-        <td style="background-color:#FF6868; width:35px; border:1px solid black"><span style="font-size:x-large;">+</span></td><td style="border:1px solid black">侦察点：机身</td>
+        <td class=cell style="background:#A0FFA0;">-</td><td>侦察点：空地</td>
+        <td class=cell style="background:#FF6868;">+</td><td>侦察点：机身</td>
     </tr>
 </table>
+<style>.cell {width:35px; height:35px; font-size:x-large;} table td {border: 1px solid #000;}</style>

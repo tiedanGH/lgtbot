@@ -78,8 +78,8 @@ public:
 
 	// 是否为准备回合
 	int prepare;
-	// 保存首要害坐标
-	int firstX, firstY;
+	// 保存需要展示机头的坐标
+	vector<pair<int, int>> shown_crucials;
 
 	// 计算自定义形状相关参数
 	void CustomizeShape(const vector<string> shape) {
@@ -156,7 +156,7 @@ public:
 	}
 	
 	// 图形界面
-	string Getmap(const int show_planes, const int crucial_mode)
+	string GetMap(const int show_planes, const int crucial_mode)
 	{
 		// 初始化 
 		for(int i = 0; i <= sizeX + 2; i++)
@@ -211,11 +211,14 @@ public:
 		{
 	 		for(int i = 1; i <= sizeX; i++)
 	 		{
+				bool is_shown_crucial = std::find(shown_crucials.begin(), shown_crucials.end(), std::make_pair(i, j)) != shown_crucials.end();
+				bool hide_crucial = (!is_shown_crucial && crucial_mode > 0);
+
 			 	grid[i][j] += "<td style=\"background-color:#";
 			 	
 			 	// 背景色
 				if (show_planes || map[i][j][0] > 0) {
-					if (map[i][j][1] == 2 && !show_planes && (crucial_mode == 1 || (!(firstX == i && firstY == j) && crucial_mode == 2))) {
+					if (map[i][j][1] == 2 && !show_planes && hide_crucial) {
 						grid[i][j] += color[map[i][j][0]][1];
 					} else {
 						grid[i][j] += color[map[i][j][0]][map[i][j][1]];
@@ -236,10 +239,9 @@ public:
 					m = "<font size=7>-</font>";
 				} else {
 					if ((show_planes || map[i][j][0] > 0) &&
-						!(((crucial_mode == 1 || (!(firstX == i && firstY == j) && crucial_mode == 2))) && mark[i][j] == 200 &&
-						map[i][j][0] != 2 && !(map[i][j][0] == 1 && map[i][j][1] >= 3)))
+						(!hide_crucial || mark[i][j] != 200 || map[i][j][0] == 2 || (map[i][j][0] == 1 && map[i][j][1] >= 3)))
 					{
-						if (map[i][j][1] == 2 && !show_planes && (crucial_mode == 1 || (!(firstX == i && firstY == j) && crucial_mode == 2))) {
+						if (map[i][j][1] == 2 && !show_planes && hide_crucial) {
 							m = icon[this_turn[i][j]][1];
 						} else {
 							m = icon[this_turn[i][j]][map[i][j][1]];
@@ -501,6 +503,22 @@ public:
 			return "3";
 		}
 		return "Empty Return";
+	}
+
+	// 结算侦察技能
+	int Scout()
+	{
+		int scout_count = 0;
+		for(int i = 1; i <= sizeX; i++) {
+			for(int j = 1; j <= sizeY; j++) {
+				// 如果已被打击且是机头
+				if (map[i][j][0] > 0 && map[i][j][1] == 2) {
+					scout_count++;
+					shown_crucials.push_back({i, j});
+				}
+			}
+		}
+		return scout_count;
 	}
 
 	// 添加飞机标记
