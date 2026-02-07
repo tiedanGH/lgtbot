@@ -23,7 +23,7 @@ const GameProperties k_properties {
     .description_ = "选择不同的社会身份，通过博弈与欺骗争夺分数",
 };
 uint64_t MaxPlayerNum(const CustomOptions& options) { return 0; } // 0 indicates no max-player limits
-uint32_t Multiple(const CustomOptions& options) { return 0; } // the default score multiple for the game, 0 for a testing game, 1 for a formal game, 2 or 3 for a long formal game
+uint32_t Multiple(const CustomOptions& options) { return 1; } // the default score multiple for the game, 0 for a testing game, 1 for a formal game, 2 or 3 for a long formal game
 const MutableGenericOptions k_default_generic_options{
     .is_formal_{false},
 };
@@ -415,7 +415,7 @@ string MainStage::GetStatusBoard() {
 }
 
 void RoundStage::calc() {
-    int N = Main().Alive_() / 2;
+    int N = Main().Alive_() > 3 ? Main().Alive_() / 2 : 2;
 
     int M_count = 0, C_count = 0, P_count = 0, B_count = 0;
     for (int pid = 0; pid < Global().PlayerNum(); pid++) {
