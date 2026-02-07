@@ -58,10 +58,11 @@ static const std::array<std::vector<int32_t>, comb::k_direct_max> k_points{
 
 struct Player
 {
-    Player(std::string resource_path) : score_(0), line_count_(0), comb_(new comb::Comb(std::move(resource_path))) {}
+    Player(std::string resource_path) : score_(0), line_count_(0), is_leave_(false), comb_(new comb::Comb(std::move(resource_path))) {}
     Player(Player&&) = default;
     int32_t score_;
     int32_t line_count_;
+    bool is_leave_;
     std::unique_ptr<comb::Comb> comb_;
 };
 
@@ -164,7 +165,8 @@ class RoundStage : public SubGameStage<>
     RoundStage(MainStage& main_stage, const uint64_t round, const comb::AreaCard& card)
             : StageFsm(main_stage, "第" + std::to_string(round) + "回合",
                 MakeStageCommand(*this, "设置数字", &RoundStage::Set_, ArithChecker<uint32_t>(0, 19, "数字")),
-                MakeStageCommand(*this, "查看本回合开始时蜂巢情况，可用于图片重发", &RoundStage::Info_, VoidChecker("赛况")))
+                MakeStageCommand(*this, "查看本回合开始时蜂巢情况，可用于图片重发", &RoundStage::Info_, VoidChecker("赛况"),
+                    OptionalDefaultChecker<BoolChecker>(true, "图片", "文字")))
             , card_(card)
             , comb_html_(main_stage.CombHtml("## 第 " + std::to_string(round) + " 回合"))
     {}
@@ -183,16 +185,26 @@ class RoundStage : public SubGameStage<>
             if (!Global().IsReady(pid)) {
                 auto& player = Main().players_[pid];
                 const auto [idx, result] = player.comb_->SeqFill(card_);
-                auto sender = Global().Boardcast();
-                sender << At(pid) << "因为超时未做选择，自动填入空位置 " << idx;
                 if (result.point_ > 0) {
-                    sender << "，意外收获 " << result.point_ << " 点积分";
                     player.score_ += result.point_;
                     player.line_count_ += result.line_;
+                }
+                if (!player.is_leave_) {
+                    auto sender = Global().Boardcast();
+                    sender << At(pid) << "因为超时未做选择，自动填入空位置 " << idx;
+                    if (result.point_ > 0) {
+                        sender << "，意外收获 " << result.point_ << " 点积分";
+                    }
                 }
             }
         }
         Global().HookUnreadyPlayers();
+    }
+
+    virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override
+    {
+        Main().players_[pid].is_leave_ = true;
+        return StageErrCode::CONTINUE;
     }
 
     virtual CheckoutErrCode OnStageTimeout() override
@@ -242,9 +254,13 @@ class RoundStage : public SubGameStage<>
         return StageErrCode::READY;
     }
 
-    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply, const bool show_image)
     {
-        SendInfo(reply);
+        if (show_image) {
+            SendInfo(reply);
+        } else {
+            reply() << "本回合砖块为 " << card_.ImageName();
+        }
         return StageErrCode::OK;
     }
 
