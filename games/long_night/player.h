@@ -160,13 +160,24 @@ struct Move {
     int direct;
     Sound sound;
     vector<string> propagation; // 声音向其他所有玩家的传播方向（私信完整赛况）
-    pair<string, bool> content; // true（移动失败结束回合）/ false（移动成功结束回合）
+    // string extra_pub_content;   // 移动时的额外公屏信息（暂不使用）
+    pair<string, bool> extra_pri_content;   // 移动时的额外私信信息（私信完整赛况）
+    pair<string, bool> content; // true（带移动方向）/ false（不带移动方向）
     string style;
 
     Move(int direct, Sound sound, pair<string, bool> content)
         : direct(direct), sound(sound), content(content) {}
     Move(Sound sound, pair<string, bool> content, string style)
         : direct(-1), sound(sound), content(content), style(style) {}
+    Move(pair<string, bool> extra_pri_content, string style)
+        : direct(-1), sound(Sound::NONE), extra_pri_content(extra_pri_content), style(style) {}
+
+    void UpdateExtraPriContent(const string& content, const bool has_dir, const string& style)
+    {
+        this->extra_pri_content.first = content;
+        this->extra_pri_content.second = has_dir;
+        this->style = style;
+    }
 };
 
 class RoundMove
@@ -181,7 +192,7 @@ class RoundMove
     size_t size() const { return round_move.size(); }
     Move& operator[](size_t idx) { return round_move[idx]; }
 
-    string GetMoveRecord(const int query_pid, const bool is_html = false) const
+    string GetMoveRecord(const int query_pid, const bool is_public, const bool is_html = false) const
     {
         string result;
 
@@ -198,9 +209,15 @@ class RoundMove
                 size_t j = i, count = 0;
                 while (j < N) {
                     const Move& next = round_move[j];
-                    if (next.direct == mv.direct && next.sound == Sound::NONE && next.content.first.empty()) {
+                    // 忽略判断：非自己查看或公屏预览，合并方向时需跳过[无方向]的私信隐藏信息
+                    if (!next.extra_pri_content.first.empty() && !next.extra_pri_content.second && (query_pid != -1 || is_public)) {
+                        j++; continue;
+                    }
+                    // 计数判断：方向相同、无声响、非[无方向]content信息、无私信隐藏信息或私信隐藏信息[含有方向]
+                    if (next.direct == mv.direct && next.sound == Sound::NONE && next.content.first.empty() &&
+                        (next.extra_pri_content.first.empty() || next.extra_pri_content.second)) {
                         count++; j++;
-                    } else break;
+                    } else break;   // 计数失败则达到可合并尽头
                 }
                 if (count >= 3) {
                     if (is_html) {
@@ -212,20 +229,20 @@ class RoundMove
                     continue;
                 }
             }
-            result += formatSingle(mv, query_pid, is_html);
+            result += formatSingle(mv, query_pid, is_public, is_html);
             i++;
         }
         return result;
     }
 
   private:
-    static string formatSingle(const Move& mv, const int query_pid, const bool is_html)
+    static string formatSingle(const Move& mv, const int query_pid, const bool is_public, const bool is_html)
     {
         string d = dirSymbol(mv.direct);
 
-        // 查询pid非-1，获取私信完整赛况声响方向
+        // 查询pid非-1（非自己），获取私信完整赛况声响方向
         string sound_d;
-        if (mv.sound != Sound::NONE && query_pid != -1) {
+        if (mv.sound != Sound::NONE && query_pid != -1 && !is_public) {
             if (query_pid < mv.propagation.size()) {
                 sound_d = "(" + mv.propagation[query_pid] + ")";
             } else {
@@ -243,12 +260,27 @@ class RoundMove
             if (is_html) {
                 return mv.content.second
                     ? "<span class=\"move hit\">(" + d + mv.content.first + ")</span>"  // 撞墙
-                    : "<span class=\"move " + mv.style + "\">" +  mv.content.first + "</span>"; // 回合结束
+                    : "<span class=\"move " + mv.style + "\">" + mv.content.first + "</span>"; // 回合结束
             }
             return mv.content.second ? "(" + d + mv.content.first + ")" : mv.content.first;
         }
         else { // 普通移动
-            return is_html ? "<span class=\"move normal\">" + d + "</span>" : d;
+            if (!mv.extra_pri_content.first.empty()) {
+                if (query_pid == -1 && !is_public) {
+                    // 私信额外内容（仅查询自己-1）
+                    if (is_html) {
+                        return mv.extra_pri_content.second
+                            ? "<span class=\"move " + mv.style + "\">" + d + mv.extra_pri_content.first + "</span>"  // 带方向信息
+                            : "<span class=\"move " + mv.style + "\">" + mv.extra_pri_content.first + "</span>";   // 不带方向信息
+                    }
+                    return mv.content.second ? "[" + d + mv.extra_pri_content.first + "]" : "[" + mv.extra_pri_content.first + "]";
+                } else {
+                    string direct_str = is_html ? "<span class=\"move normal\">" + d + "</span>" : d;
+                    return mv.content.second ? direct_str : "";
+                }
+            } else {
+                return is_html ? "<span class=\"move normal\">" + d + "</span>" : d;
+            }
         }
     }
 
@@ -305,14 +337,17 @@ class Player
     PlayerAchievement achievement;    
 
     void NewStepRecord(const Direct direct, const string& end = "") { move_record.push_back({static_cast<int>(direct), Sound::NONE, {end, true}}); }
-    void NewContentRecord(const string& content, const string& style= "end") { move_record.push_back({Sound::NONE, {content, false}, style}); }
+    void NewContentRecord(const string& content, const string& style = "end") { move_record.push_back({Sound::NONE, {content, false}, style}); }
     void ClearMoveRecord() { move_record.clear(); }
 
     void UpdateSoundRecord(const Sound sound) { if (!move_record.empty()) move_record.back().sound = sound; }
     void AddSoundPropagation(const string& direct_str) { if (!move_record.empty()) move_record.back().propagation.push_back(direct_str); }
     void UpdateEndRecord(const string& content) { if (!move_record.empty()) move_record.back().content = {content, true}; }
 
-    string GetAllMoveRecord(const int query_pid, const bool is_html = true) const
+    void NewExtraPriContent(const string& content, const string& style) { if (!move_record.empty()) move_record.push_back({{content, false}, style}); }
+    void UpdateExtraPriContent(const string& content, const string& style) { if (!move_record.empty()) move_record.back().UpdateExtraPriContent(content, true, style); }
+
+    string GetAllMoveRecord(const int query_pid, const int is_public, const bool is_html = true) const
     {
         string record;
         for (size_t round = 0; round < all_record.size(); round++) {
@@ -322,7 +357,7 @@ class Player
             } else {
                 record += "【第 " + to_string(round + 1) + " 回合】\n";
             }
-            record += all_record[round].GetMoveRecord(query_pid, is_html);
+            record += all_record[round].GetMoveRecord(query_pid == pid ? -1 : query_pid, is_public, is_html);  // -1代表是自己查询
         }
         return record;
     }
@@ -384,6 +419,37 @@ R"(<style>
     background-size: 80px 80px, 100% 100%;
     backdrop-filter: blur(2px);
     box-shadow: 0 1px 2px rgba(179, 216, 255, 0.5);
+}
+.heat-wave {
+    border: 1px solid #ff9a9a;
+    background:
+        radial-gradient(
+            circle at 50% 50%,
+            rgba(255,255,255,0.35) 0%,
+            rgba(255,180,180,0.25) 40%,
+            rgba(255,120,120,0.15) 70%,
+            transparent 100%
+        ),
+        repeating-linear-gradient(
+            45deg,
+            #ffd6d6,
+            #ffd6d6 6px,
+            #ffc2c2 6px,
+            #ffc2c2 12px
+        );
+    box-shadow: 0 0 4px rgba(255,120,120,0.6);
+    filter: saturate(1.05);
+}
+.heat-core {
+    border: 1px solid #d96b6b;
+    background:
+        radial-gradient(
+            circle at 50% 50%,
+            #ffb3b3 0%,
+            #f07a7a 60%,
+            #d85c5c 100%
+        );
+    box-shadow: 0 0 6px rgba(220,100,100,0.5);
 }
 .hit {
     border: 1px dashed #c44;

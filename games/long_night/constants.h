@@ -1,4 +1,27 @@
 
+#pragma once
+
+#include <regex>
+#include <span>
+
+/* ========== constants ========== */
+inline constexpr int GRID_SIZE = 50;
+inline constexpr int WALL_SIZE = 10;
+
+inline constexpr std::string_view num[10] = {"⓪", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"};
+inline constexpr std::string_view dir_cn[4] = {"上", "下", "左", "右"};
+inline constexpr int k_DX_Direct[4] = {-1, 1, 0, 0};
+inline constexpr int k_DY_Direct[4] = {0, 0, -1, 1};
+
+inline constexpr std::string_view mode_str[7] = {"自定义", "经典", "狂野", "幻变", "疯狂", "按钮", "陷阱"};
+
+inline constexpr int HIDE_LIMIT = 4;
+
+inline constexpr int EXTRATIMECRAD_COUNT = 3;
+inline constexpr int EXTRATIMECRAD_TIME = 60;
+
+
+/* ========== enum class ========== */
 // 方向
 enum class Direct {
     UP,
@@ -43,30 +66,60 @@ enum class Wall {
     DOOROPEN,
 };
 
-const int GRID_SIZE = 50;
-const int WALL_SIZE = 10;
+// BOSS
+enum class BossType {
+    NONE,
+    MINOTAUR,
+    BANGBANG,
+};
 
-const map<string, Direct> direction_map = {
+
+/* ========== Game Option enum class ========== */
+enum class BlockMode {
+    CUSTOM,
+    CLASSIC,
+    WILD,
+    TWIST,
+    CRAZY,
+    BUTTON,
+    TRAP,
+};
+
+enum class SpecialEvent {
+    NONE,
+    RANDOM,
+    LAZYGARDENER,
+    OVERGROWTH,
+    RAINSTORY,
+};
+
+enum class Target {
+    PREVIOUS,
+    NEXT,
+};
+
+enum class HideMode {
+    NONE,
+    TURN,
+    STEP,
+};
+
+enum class Texture {
+    CLASSIC,
+    RETRO,
+};
+
+
+/* ========== utils ========== */
+inline const std::map<std::string, Direct> direction_map = {
     {"上", Direct::UP}, {"U", Direct::UP}, {"s", Direct::UP},
 	{"下", Direct::DOWN}, {"D", Direct::DOWN}, {"x", Direct::DOWN},
 	{"左", Direct::LEFT}, {"L", Direct::LEFT}, {"z", Direct::LEFT},
 	{"右", Direct::RIGHT}, {"R", Direct::RIGHT}, {"y", Direct::RIGHT},
 };
 
-const string dir_cn[4] = {"上", "下", "左", "右"};
-
-int k_DX_Direct[4] = {-1, 1, 0, 0};
-int k_DY_Direct[4] = {0, 0, -1, 1};
-
-const string num[10] = {"⓪", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"};
-
-const int HIDE_LIMIT = 4;
-
-const int EXTRATIMECRAD_COUNT = 3;
-const int EXTRATIMECRAD_TIME = 60;
-
 // 图片名称
-string GetGridImage(const GridType type)
+inline std::string GetGridImage(const GridType type)
 {
     switch (type) {
         case GridType::EMPTY:   return "empty.png";
@@ -81,7 +134,7 @@ string GetGridImage(const GridType type)
     }
 }
 
-string GetAttachImage(const AttachType type)
+inline std::string GetAttachImage(const AttachType type)
 {
     switch (type) {
         case AttachType::EMPTY:     return "transparent.png";
@@ -92,7 +145,7 @@ string GetAttachImage(const AttachType type)
     }
 }
 
-string GetWallImage(const Wall wall, const string& direction)
+inline std::string GetWallImage(const Wall wall, const std::string& direction)
 {
     switch (wall) {
         case Wall::EMPTY:       return "empty_" + direction + ".png";
@@ -104,7 +157,7 @@ string GetWallImage(const Wall wall, const string& direction)
 }
 
 // 相反方向
-Direct opposite(Direct dir)
+inline Direct opposite(Direct dir)
 {
     switch (dir) {
         case Direct::UP: return Direct::DOWN;
@@ -116,7 +169,7 @@ Direct opposite(Direct dir)
 }
 
 // 计算两点间曼哈顿距离
-int ManhattanDistance(int x1, int y1, int x2, int y2, int size)
+inline int ManhattanDistance(int x1, int y1, int x2, int y2, int size)
 {
     int dx = abs(x1 - x2);
     int dy = abs(y1 - y2);
@@ -125,8 +178,28 @@ int ManhattanDistance(int x1, int y1, int x2, int y2, int size)
     return dx + dy;
 }
 
+inline bool CompareMapId(const std::string& a, const std::string& b)
+{
+    bool a_is_digit = std::isdigit(a[0]);
+    bool b_is_digit = std::isdigit(b[0]);
+    if (a_is_digit != b_is_digit)
+        return a_is_digit;
+    if (!a_is_digit) {
+        char a_letter = std::toupper(a[0]);
+        char b_letter = std::toupper(b[0]);
+
+        if (a_letter != b_letter)
+            return a_letter < b_letter;
+
+        int a_num = std::stoi(a.substr(1));
+        int b_num = std::stoi(b.substr(1));
+        return a_num < b_num;
+    }
+    return std::stoi(a) < std::stoi(b);
+}
+
 // UTF-8字符长度
-size_t utf8CharLen(unsigned char c)
+inline size_t utf8CharLen(unsigned char c)
 {
     if ((c & 0x80) == 0x00) return 1;        // 0xxxxxxx
     if ((c & 0xE0) == 0xC0) return 2;        // 110xxxxx
@@ -136,12 +209,12 @@ size_t utf8CharLen(unsigned char c)
 }
 
 // 替换html换行为文本换行
-string replace_br_with_line(string s)
+inline std::string replace_br_with_line(std::string s)
 {
-    const string from = "<br>";
-    const string to   = "\n";
+    const std::string from = "<br>";
+    const std::string to   = "\n";
     size_t pos = 0;
-    while ((pos = s.find(from, pos)) != string::npos) {
+    while ((pos = s.find(from, pos)) != std::string::npos) {
         s.replace(pos, from.length(), to);
         pos += to.length();
     }
@@ -149,32 +222,32 @@ string replace_br_with_line(string s)
 }
 
 // 转义 html/markdown
-string esc_html(const string& input)
+inline std::string esc_html(const std::string& input)
 {
-    string result = input;
-    result = regex_replace(result, regex("&"), "&amp;");
-    result = regex_replace(result, regex("<"), "&lt;");
-    result = regex_replace(result, regex(">"), "&gt;");
-    result = regex_replace(result, regex("\""), "&quot;");
-    result = regex_replace(result, regex("'"), "&#39;");
+    std::string result = input;
+    result = regex_replace(result, std::regex("&"), "&amp;");
+    result = regex_replace(result, std::regex("<"), "&lt;");
+    result = regex_replace(result, std::regex(">"), "&gt;");
+    result = regex_replace(result, std::regex("\""), "&quot;");
+    result = regex_replace(result, std::regex("'"), "&#39;");
     return result;
 }
 
-string clean_markdown(const string& input)
+inline std::string clean_markdown(const std::string& input)
 {
-    string result = input;
-    result = regex_replace(result, regex(R"(\*)"), R"(\*)");
-    result = regex_replace(result, regex(R"(_)"), R"(\_)");
-    result = regex_replace(result, regex(R"(\[)"), R"(\[)");
-    result = regex_replace(result, regex(R"(\])"), R"(\])");
-    result = regex_replace(result, regex(R"(`)"), R"(\`)");
+    std::string result = input;
+    result = regex_replace(result, std::regex(R"(\*)"), R"(\*)");
+    result = regex_replace(result, std::regex(R"(_)"), R"(\_)");
+    result = regex_replace(result, std::regex(R"(\[)"), R"(\[)");
+    result = regex_replace(result, std::regex(R"(\])"), R"(\])");
+    result = regex_replace(result, std::regex(R"(`)"), R"(\`)");
     return result;
 }
 
 // 根据系统转换文件URL
-string ToFileUrl(const string& path)
+inline std::string ToFileUrl(const std::string& path)
 {
-    string url = path;
+    std::string url = path;
     // 兼容 Windows 反斜杠
     replace(url.begin(), url.end(), '\\', '/');
 
@@ -193,13 +266,13 @@ string ToFileUrl(const string& path)
 }
 
 /* ========== 游戏文案 ========== */
-string GetRandomHint(span<const string_view> hints)
+inline std::string GetRandomHint(std::span<const std::string_view> hints)
 {
-    return string(hints[rand() % hints.size()]);
+    return std::string(hints[rand() % hints.size()]);
 }
 
 // 撞墙提示
-const array<string_view, 31> wall_hints = {
+inline const std::array<std::string_view, 31> wall_hints = {
     "砰！你狠狠地撞在了一堵墙上！",     // 铁蛋
     "一阵剧痛传来，你撞上了一堵墙，看来这里走不通。",
     "黑暗中，你的身体撞击了一面粗糙的墙壁。",
@@ -233,14 +306,14 @@ const array<string_view, 31> wall_hints = {
     "砰！脑门和墙壁的亲密接触，证明了你对探索的执着！",     // 小葵
 };
 // 第一步撞墙提示
-const array<string_view, 4> firststep_wall_hints = {
+inline const std::array<std::string_view, 4> firststep_wall_hints = {
     "这是什么？墙壁？撞一下。\n这是什么？墙壁？撞一下。\n这是什么？墙壁？撞一下。",     // 三月七
     "你知道吗，撞击同一面墙114514次即可将其撞倒！",
     "看来有人认为自己在玩多层迷宫……别想了，这是永久墙壁。",
     "俗话说不撞南墙不回头，但有人撞了南墙也不回头。",
 };
 // 树丛提示
-const array<string_view, 12> grass_hints = {
+inline const std::array<std::string_view, 12> grass_hints = {
     "你踏入一片树丛，枯叶和树枝在脚下沙沙作响。",   // 铁蛋
     "你一脚踏入了一片树丛，树叶发出了沙沙声，仿佛某种回应。",
     "树叶微微颤动，沙沙声仿佛在轻声低语。",
@@ -255,7 +328,7 @@ const array<string_view, 12> grass_hints = {
     "沙沙，你踏入了危险的树丛。这里要是藏着一个老六，可就遭了……",   // Hyacinth
 };
 // 啪啪提示
-const array<string_view, 10> papa_hints = {
+inline const std::array<std::string_view, 10> papa_hints = {
     "你向前动了动，下半身传来了啪啪声。",   // 大萝卜姬
     "啪啪！常在迷宫走，哪有不湿鞋？是的，你踩到了某些液体。",
     "啪啪！你问踩的是什么液体？也许是我为那情人留下的泪。",
@@ -268,7 +341,7 @@ const array<string_view, 10> papa_hints = {
     "啪！你似乎有什么东西掉了进去，可惜这里并没有河神。",
 };
 // 陷阱触发提示
-const array<string_view, 5> trap_hints = {
+inline const std::array<std::string_view, 5> trap_hints = {
     "深阱垂空百尺方，足悬铁索断人肠。",     // 齐齐
     "犹似魂断垓下道，恨满胸中万古刀。",
     "你想起守株待兔的故事，只是此刻，你成为了那只兔子。",   // 纤光
@@ -276,7 +349,7 @@ const array<string_view, 5> trap_hints = {
     "恭喜🎉被特斯拉捕获，电击调教一回合",       // 特斯拉
 };
 // 热浪提示
-const array<string_view, 5> heat_wave_hints = {
+inline const std::array<std::string_view, 5> heat_wave_hints = {
     "你感受到了迎面扑来的热浪，炽热的空气仿佛要将你吞没",   // 铁蛋
     "你感受到周围弥漫着炽热的气息！",
     "！！请注意！！局部出现厄尔尼诺现象，气温异常升高，请注意做好防中暑措施。", // 纤光
@@ -284,20 +357,20 @@ const array<string_view, 5> heat_wave_hints = {
     "在这座冰冷的迷宫里，你感到一阵久违的温暖，周围似乎有明亮的光源，吸引你一探究竟…？",
 };
 // 热源进入提示
-const array<string_view, 4> heat_core_hints = {
+inline const std::array<std::string_view, 4> heat_core_hints = {
     "你的脚被高温烫伤了，刺痛让你不由得倒吸一口凉气，然而周围的空气同样炙热无比",   // 铁蛋
     "然而，光源并不总象征着安全，烈焰利用人对光明的向往，试图再次吞噬一个失落的灵魂。", // 纤光
     "oops！检测到核心温度急剧上升，即将超过阈值…准备启动自毁程序…",
     "你相信自己的铜头铁臂可以击败一切，却不知眼前的岩浆能轻易融化所有金属。",
 };
 // 热源公开提示
-const array<string_view, 3> heat_active_hints = {
+inline const std::array<std::string_view, 3> heat_active_hints = {
     "你被滚滚热浪淹没了...周围的一切都在高温中扭曲变形，只剩下火焰的深渊。",  // 铁蛋
     "哦不！你落入了巨人萝卜的火锅池里，这下你只好成为萝卜的夜宵了。",   // 纤光
     "你失败了！\nSteve试图在岩浆中游泳。",
 };
 // 炸弹爆炸提示
-const array<string_view, 8> bomb_hints = {
+inline const std::array<std::string_view, 8> bomb_hints = {
     "轰——你脚下的土地猛地炸裂，烈焰与烟尘把你吞没，眼前一片黑暗。",     // 铁蛋
     "轰隆！炸弹瞬间炸响，你被高高弹起，如同流星坠入未知深渊。",
     "炽热的冲击波把你掀起，四周的碎石与烟尘如同流星雨，你在空中划出最后的弧线。",
@@ -308,7 +381,7 @@ const array<string_view, 8> bomb_hints = {
     "你刚刚完成了一次无需火箭推进的轨道发射。遗憾的是，没有返回舱。",
 };
 // 逃生舱提示
-const array<string_view, 20> exit_hints = {
+inline const std::array<std::string_view, 20> exit_hints = {
     "你坐进了逃生舱，在启动的轰鸣声中，你想起了那句话：“不要忘了，这个世界穿透一切高墙的东西，它就在我们的内心深处，他们无法达到，也接触不到，那就是希望。”",   // 大萝卜姬
     "躺在逃生舱内，平日并不虔诚的你颤巍巍地画着十字，双手合十，嘴里念念有词。诸如什么真主阿拉耶稣基督释迦牟利急急如律令之类。前窗仿佛响应了你的号召，一阵白色闪光迅速笼罩了你。正当你诧异得到了哪位神仙的庇佑时，眼前浮现出两个大字。一个振奋人心的声音在你耳边响起：“原神，启动！”",
     "你忘记躺了多久，你只记得这里很温暖、舒适、令人安心。直到一股力量把你从舱内抽离；强光穿透了你稚嫩的眼皮；你哭了，你向世界宣告着你的降临。也许你只是此刻降生的其中之一，但在她眼里，你就是她的唯一。",
@@ -331,7 +404,7 @@ const array<string_view, 20> exit_hints = {
     "逃生舱的显示屏突然亮起一行字：'记住，黑暗只是光明的候车室。' 随着这句话，整个舱体开始散发出柔和的金色光芒，照亮了通往新世界的道路。",
 };
 // 捕捉提示
-const array<string_view, 6> catch_hints = {
+inline const std::array<std::string_view, 6> catch_hints = {
     "星光黯淡，你们的相遇，是命中注定，亦是命终注定。",     // 纤光
     "你化作一道黑影，在血月之下，无情地终结了又一条生命。",
     "你想触碰一切的真相，但在对方空洞无神的双眼中，你没能找到答案。",
@@ -340,22 +413,22 @@ const array<string_view, 6> catch_hints = {
     "感谢你为了我自愿放弃逃生资格",
 };
 // 同格树丛声响提示
-const array<string_view, 2> grass_sound_hints = {
+inline const std::array<std::string_view, 2> grass_sound_hints = {
     "你听见有人进入了你的小树丛，沙沙声很近很近；一股接一股热气扑向了你的耳朵；呼…哈……呼…哈……他好像很累的样子。积极地想，他也许没有察觉到你",   // 大萝卜姬
     "你听见有人进入了你所在的树丛，他从旁边匆匆走过，没有发现你。阴暗的想法在你心里成长起来，是让他帮你探路，还是直接干掉。甚至运气好的话，抢在前面牛了他的逃生舱……（额外探索分只有1分并逃生一事在漫漫长夜中亦有记载）",    // Hyacinth
 };
 // 同格啪啪声响提示
-const array<string_view, 2> papa_sound_hints = {
+inline const std::array<std::string_view, 2> papa_sound_hints = {
     "“啪！”你汗毛直立，有人来了。。幸好，你并没有站在中间，多疑多虑的性格给了你久违的回报。你小心翼翼地蹲了下来，尽力减少接触概率。只是黑暗中你低估了脚下液体的深度。“等他走远，再把内裤脱了吧。。”你暗暗地想。",   // 大萝卜姬
     "啪！啪！看来是有人来了。两个人，狭小的隔间，不间断地啪啪声……'淫秽的人！'你的脑海回想起了她的声音。是啊。我承认，我确实有点想她了。",
 };
 // 无逃生舱最后生还
-const array<string_view, 2> withoutE_win_hints = {
+inline const std::array<std::string_view, 2> withoutE_win_hints = {
     "我睁开了双眼，眼前的一切既熟悉又陌生。看来这次终于是我赢了。我用力地端详着周遭的一切，试图捕捉错过的几日时光的任何蛛丝马迹。“我真希望他们彻底离开了 ......”说完，我在床脚拿起了本该在枕边的剃须刀；“看来上次赢的是萝卜。”我下意识地抹了抹嘴唇。在指尖晕开的口红证实了我的猜测。我笑了。",     // 大萝卜姬
     "你醒啦？现在已经是第二天了哦。\n明媚的阳光照进迷宫，耳旁传来小鸟的叫声，一切美好的不太真实，唯有眼前冰冷的血迹，无声的诉说着昨晚的那场噩梦，而有些人，永远留在了那场梦中。\n可你，真的从中逃出来了吗？\n“地形参数设置完毕，新的循环正在重启……”",   // 纤光
 };
 // 有逃生舱但死斗取胜
-const array<string_view, 2> withE_win_hints = {
+inline const std::array<std::string_view, 2> withE_win_hints = {
     "“已经没事啦~”她温柔地从背后把你抱住，轻轻抚摸着头。“你很勇敢，这一步太不容易了。”你转过身，紧紧埋进她柔软的身体里放肆哭泣。“一切都结束了。不用再害怕了。”她低下头凑近你的耳边，“咱们回家叭…”",     // 大萝卜姬
     "多年以后，在家族背景下你在事业上取得了巨大成就。大家把你的性情大变归功于当年失踪逃生的经历。“之前那个玩世不恭的我已经死了。”你每次都这样认真回答大家。至于细节的提问嘛，失忆这个理由你很喜欢。",
 };
