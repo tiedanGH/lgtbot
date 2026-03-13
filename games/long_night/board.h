@@ -8,15 +8,15 @@ struct GetBoardOptions {
 class Board
 {
   public:
-    Board(string image_path, const int32_t image_type, const int32_t mode, const vector<string>& custom_blocks)
-        : image_path_(std::move(image_path)), image_type_(image_type), gamemode(mode), g(std::random_device{}()), unitMaps(mode, g, custom_blocks) {}
+    Board(string image_path, const Texture image_texture, const BlockMode mode, const vector<string>& custom_blocks)
+        : image_path_(std::move(image_path)), image_texture_(image_texture), block_mode(mode), g(std::random_device{}()), unitMaps(mode, g, custom_blocks) {}
 
     // 随机引擎
     std::mt19937 g;
 
     // 图片资源文件夹
     const string image_path_;
-    const int32_t image_type_;
+    const Texture image_texture_;
 
 	// 玩家
     uint32_t playerNum;
@@ -27,7 +27,7 @@ class Board
     int size = 9;
     // 地图
     vector<vector<Grid>> grid_map;
-    int gamemode;
+    BlockMode block_mode;
     int exit_num;  // 逃生舱数量
     string init_html_;
     // 区块模板
@@ -165,55 +165,69 @@ class Board
     }
 
     // 全部区块信息展示
-    string GetAllBlocksInfo(const int special, const bool bomb_mode, const int32_t test_mode = 0) const
+    string GetAllBlocksInfo(const SpecialEvent event, const bool bomb_mode, const optional<BlockMode> test_block_mode = std::nullopt) const
     {
-        int col_num = (test_mode == 1 || test_mode == 3) ? 8 : 4;
-        const vector<UnitMaps::Map>& maps = test_mode == 0 ? unitMaps.maps : (test_mode == 2 ? unitMaps.twist_maps : unitMaps.all_maps);
-        const vector<UnitMaps::Map>& exits = test_mode == 0 ? unitMaps.exits : (test_mode == 2 ? unitMaps.twist_exits : unitMaps.all_exits);
-        const vector<UnitMaps::Map>& special_maps = unitMaps.special_maps;
-        const string title = 
-            (test_mode == 0) ? "" 
-            : (test_mode == 2) ? 
-                (HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》幻变模式轮换区块</b>" HTML_FONT_TAIL) 
-                : (HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》狂野+疯狂模式全部区块</b>" HTML_FONT_TAIL);
-        bool has_special = (test_mode == 3);
+        const BlockMode test_mode = test_block_mode.value_or(BlockMode::CLASSIC);
+
+        string title = "";
+        int col_num = (test_mode == BlockMode::CRAZY) ? 8 : 4;
+        const auto& maps = [&]() -> const std::vector<UnitMaps::Map>& {
+            if (test_mode == BlockMode::CLASSIC) return unitMaps.maps;
+            if (test_mode == BlockMode::CRAZY)   return unitMaps.all_maps;
+            return unitMaps.pool_maps;
+        }();
+        const auto& exits = [&]() -> const std::vector<UnitMaps::Map>& {
+            if (test_mode == BlockMode::CLASSIC) return unitMaps.exits;
+            if (test_mode == BlockMode::CRAZY)   return unitMaps.all_exits;
+            return unitMaps.pool_exits;
+        }();
+        const auto& all_special_maps = unitMaps.all_special_maps;
+        
+        // 调试：根据模式生成完整区块预览
+        switch (test_mode) {
+            case BlockMode::TWIST:  title = HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》「幻变」模式轮换区块</b>" HTML_FONT_TAIL; break;
+            case BlockMode::CRAZY:  title = HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》「狂野」+「疯狂」模式全部区块</b>" HTML_FONT_TAIL; break;
+            case BlockMode::BUTTON: title = HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》「按钮」模式主题区块</b>" HTML_FONT_TAIL; break;
+            case BlockMode::TRAP:   title = HTML_SIZE_FONT_HEADER(6) "<b>《漫漫长夜》「陷阱」模式主题区块</b>" HTML_FONT_TAIL; break;
+            default:;
+        }
+
+        bool has_special = (test_mode == BlockMode::CRAZY);
         for (const auto& map : maps) {
             if (map.is_special) {
                 has_special = true;
             }
         }
+        SpecialEvent rain_event = event == SpecialEvent::RAINSTORY ? SpecialEvent::RAINSTORY : SpecialEvent::NONE;
 
-        int line_num = (ceil(maps.size() / (double) col_num) + ceil(exits.size() / (double) col_num)) * 2 +  + has_special * (ceil(special_maps.size() / (double) col_num) * 2 + 1);
+        int line_num = (ceil(maps.size() / (double) col_num) + ceil(exits.size() / (double) col_num)) * 2 +  + has_special * (ceil(all_special_maps.size() / (double) col_num) * 2 + 1);
         html::Table blocks(line_num, col_num);
-        blocks.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size: 25px; line-height: 1.2;\"");
+        blocks.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size: 25px; line-height: 1.1;\"");
         int row = 0;
         for (int i = 0; i < maps.size(); i++) {
-            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 25px 25px 0 25px\"").SetContent(GetSingleBlock(0, maps[i].id, special));
-            // 特殊地图不显示id
-            if (maps[i].is_special && gamemode >= 0) {
+            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 25px 25px 5px 25px\"").SetContent(GetSingleBlock(maps[i].id, false, rain_event));
+            // [疯狂模式] 特殊地图不显示id
+            if (maps[i].is_special && block_mode == BlockMode::CRAZY) {
                 blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) HTML_SIZE_FONT_HEADER(6) "<b>？？？</b>" HTML_FONT_TAIL HTML_FONT_TAIL);
             } else {
-                blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>" + maps[i].id + "<br>"
-                    HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + maps[i].title + HTML_FONT_TAIL HTML_FONT_TAIL "</b>" HTML_FONT_TAIL);
+                blocks.Get(row + 1, i % col_num).SetContent(GetMapTitleContent(maps[i].title, maps[i].id, false));
             }
             if ((i + 1) % col_num == 0 || i == maps.size() - 1) row += 2;
         }
         for (int i = 0; i < exits.size(); i++) {
-            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 0 25px\"").SetContent(GetSingleBlock(1, exits[i].id, special));
-            blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>EXIT " + exits[i].id + "<br>"
-                HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + exits[i].title + HTML_FONT_TAIL HTML_FONT_TAIL "</b>" HTML_FONT_TAIL);
+            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 5px 25px\"").SetContent(GetSingleBlock(exits[i].id, true, rain_event));
+            blocks.Get(row + 1, i % col_num).SetContent(GetMapTitleContent(exits[i].title, exits[i].id, true));
             if ((i + 1) % col_num == 0 || i == exits.size() - 1) row += 2;
         }
-        if (has_special && gamemode >= 0) {
+        if (has_special && block_mode == BlockMode::CRAZY) {
             blocks.MergeRight(row, 0, col_num);
             blocks.Get(row++, 0).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
                 .SetContent(HTML_SIZE_FONT_HEADER(6) "<b>特殊区块列表<br>" HTML_FONT_TAIL HTML_SIZE_FONT_HEADER(5) "（多传送门按照图中字母代号传送）" HTML_FONT_TAIL "</b>");
-            for (int i = 0; i < special_maps.size(); i++) {
-                blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 0 25px\"")
-                    .SetContent(GetBoard(unitMaps.FindBlockById(special_maps[i].id, false, special == 3), GetBoardOptions{.with_content = true}));
-                blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) "<b>" + special_maps[i].id + "<br>"
-                    HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + special_maps[i].title + HTML_FONT_TAIL HTML_FONT_TAIL "</b>" HTML_FONT_TAIL);
-                if ((i + 1) % col_num == 0 || i == special_maps.size() - 1) row += 2;
+            for (int i = 0; i < all_special_maps.size(); i++) {
+                blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
+                    .SetContent(GetBoard(unitMaps.FindBlockById(all_special_maps[i].id, false, SpecialEvent::NONE), GetBoardOptions{.with_content = true}));
+                blocks.Get(row + 1, i % col_num).SetContent(GetMapTitleContent(all_special_maps[i].title, all_special_maps[i].id, false));
+                if ((i + 1) % col_num == 0 || i == all_special_maps.size() - 1) row += 2;
             }
         }
 
@@ -233,7 +247,7 @@ class Board
             { GridType::ONEWAYPORTAL, "【传送门出口】玩家进入时会发出其他人听见的**啪啪声**。（出生不算）<br>传送门的单向出口，进入时不会触发传送（必须从入口进入才会传送至此处）<br>**玩家在进入同一区块的传送门入口时，传送门会转换方向，入口和出口交换位置**" },
             { GridType::TRAP, "【陷阱】陷阱隐藏在树丛中：被奇数次进入时，会发出让其他人听见的**沙沙声**（出生不算）<br>被偶数次进入时，不发出声响，并**强制玩家停止**（出生不算）" },
             { GridType::HEAT, "【热源】进入热源周围8格时，将**私信**收到热浪提示。（只有移动时才能感受到热浪）<br>当进入热源时，将**私信**收到高温烫伤提示（不会出生在热源内）<br>在整局游戏中，**当第 2 次或更多次进入热源时，会被强制停止行动**" },
-            { GridType::EXIT, "【逃生舱】逃生者使用后，**会消失**。" + (test_mode == 0 ? ("本局逃生舱数量为 **" + to_string(exit_num) + "** 个。") : "") },
+            { GridType::EXIT, "【逃生舱】逃生者使用后，**会消失**。" + (test_mode == BlockMode::CLASSIC ? ("本局逃生舱数量为 **" + to_string(exit_num) + "** 个。") : "") },
         };
 
         auto GenerateWallStyle = [&](Wall wall, const string& direction) {
@@ -244,7 +258,7 @@ class Board
         vector<UnitMaps::Map> all_maps_in_game;
         all_maps_in_game.insert(all_maps_in_game.end(), maps.begin(), maps.end());
         all_maps_in_game.insert(all_maps_in_game.end(), exits.begin(), exits.end());
-        if (has_special && gamemode >= 0) all_maps_in_game.insert(all_maps_in_game.end(), special_maps.begin(), special_maps.end());
+        if (has_special && block_mode == BlockMode::CRAZY) all_maps_in_game.insert(all_maps_in_game.end(), all_special_maps.begin(), all_special_maps.end());
 
         int legend_max_size = all_walls_info.size() + all_attachs_info.size() + all_grids_info.size() + 1;
         html::Table legend(legend_max_size, 2);
@@ -277,7 +291,7 @@ class Board
         }
         for (const auto& grid_info: all_grids_info) {
             if (UnitMaps::MapContainGridType(all_maps_in_game, grid_info.first)) {
-                if (grid_info.first == GridType::GRASS && special == 3) continue;
+                if (grid_info.first == GridType::GRASS && event == SpecialEvent::RAINSTORY) continue;
                 legend.Get(row, 0).SetContent(GetGridStyle(grid_info.first, AttachType::EMPTY, false));
                 legend.Get(row, 1).SetContent(grid_info.second);
                 row++;
@@ -287,23 +301,23 @@ class Board
         return title + blocks.ToString() + legend.ToString();
     }
 
-    string GetSingleBlock(const int type, const string& id, const int special) const
+    string GetMapTitleContent(const string& title, const string& id, const bool is_exit) const
     {
-        // 特殊地图不显示预览（自定义模式除外）
-        if (id[0] == 'S' && gamemode >= 0) {
+        return "<b>" HTML_COLOR_FONT_HEADER(#990000) HTML_SIZE_FONT_HEADER(4) + title + HTML_FONT_TAIL HTML_FONT_TAIL
+            "<br>" HTML_COLOR_FONT_HEADER(red) + (is_exit ? "EXIT " : "") + id + HTML_FONT_TAIL "</b>";
+    }
+
+    string GetSingleBlock(const string& id, const bool is_exit, const SpecialEvent event) const
+    {
+        // [疯狂模式] 特殊地图不显示预览
+        if (id[0] == 'S' && block_mode == BlockMode::CRAZY) {
             string size = to_string(GRID_SIZE * 3 + WALL_SIZE * 4) + "px";
             return "<div style=\"width:" + size + "; height:" + size + "; background:#e0e0e0;"
                 "border:2px dashed black; font-size:30px; color:#333;"
                 "display:flex; align-items:center; justify-content:center;\">"
                 "<b>特殊区块</b></div>";
         }
-        vector<vector<Grid>> grid;
-        if (type == 0) {
-            grid = unitMaps.FindBlockById(id, false, special == 3);
-        } else if (type == 1) {
-            grid = unitMaps.FindBlockById(id, true);
-        }
-        return GetBoard(grid, GetBoardOptions{.with_content = true});
+        return GetBoard(unitMaps.FindBlockById(id, is_exit, event), GetBoardOptions{.with_content = true});
     }
 
     // 获取玩家信息
@@ -364,7 +378,7 @@ class Board
     }
 
     // 完整赛况
-    string GetAllRecordHtml(const int query_pid) const
+    string GetAllRecordHtml(const int query_pid, const int is_public) const
     {
         const char* style = R"(
 <style>
@@ -417,7 +431,7 @@ class Board
             record_html += "</div>";
 
             record_html += "<div class='player-record'>";
-            record_html += players[pid].GetAllMoveRecord(query_pid == pid ? -1 : query_pid);
+            record_html += players[pid].GetAllMoveRecord(query_pid, is_public);
             record_html += "</div>";
 
             record_html += "</div>";
@@ -427,7 +441,7 @@ class Board
             record_html += "<div class='boss'>";
             record_html += "<div class='boss-title'><b>[BOSS] " + boss.GetBossName() + " " + boss.GetBossIcon() + "</b></div>";
             record_html += "<div class='boss-record'>";
-            record_html += boss.GetBossRecord(query_pid);
+            record_html += boss.GetBossRecord(query_pid, is_public);
             record_html += "</div>";
             record_html += "</div>";
         }
@@ -444,7 +458,7 @@ class Board
         return style + record_html;
     }
 
-    string GetAllRecordString(const int query_pid) const
+    string GetAllRecordString(const int query_pid, const int is_public) const
     {
         string record_string;
         // 玩家记录
@@ -452,12 +466,12 @@ class Board
             record_string += "[" + to_string(pid) + "号]" + players[pid].name;
             if (players[pid].out == 1) record_string += "【已出局】";
             if (players[pid].out == 2) record_string += "【逃生舱撤离】";
-            record_string += "\n" + players[pid].GetAllMoveRecord(query_pid == pid ? -1 : query_pid, false) + "\n";
+            record_string += "\n" + players[pid].GetAllMoveRecord(query_pid, is_public, false) + "\n";
         }
         // BOSS 记录
         if (boss.Enable()) {
             record_string += "[BOSS] " + boss.GetBossName() + " " + boss.GetBossIcon();
-            record_string += boss.GetBossRecord(query_pid, false) + "\n";
+            record_string += boss.GetBossRecord(query_pid, is_public, false) + "\n";
         }
         // 额外信息
         if (!all_extra_record.empty()) {
@@ -636,14 +650,14 @@ class Board
     }
 
     // 地区声响
-    Sound GetSound(const Grid& grid, const bool water_mode) const
+    Sound GetSound(const Grid& grid, const SpecialEvent event) const
     {
         switch(grid.Type()) {
             case GridType::GRASS:   return Sound::SHASHA;
             case GridType::WATER:   return Sound::PAPA;
             case GridType::ONEWAYPORTAL:
             case GridType::PORTAL:  return Sound::PAPA;
-            case GridType::TRAP:    return grid.TrapStatus() ? Sound::NONE : (water_mode ? Sound::PAPA : Sound::SHASHA);
+            case GridType::TRAP:    return grid.TrapStatus() ? Sound::NONE : (event == SpecialEvent::RAINSTORY ? Sound::PAPA : Sound::SHASHA);
             default: return Sound::NONE;
         }
     }
@@ -815,20 +829,20 @@ class Board
     }
 
     // 捕捉顺位变更
-    void UpdatePlayerTarget(const bool next)
+    void UpdatePlayerTarget(const Target type)
     {
         for (PlayerID pid = 0; pid < playerNum; ++pid) {
             if (players[pid].out > 0) continue;
-            PlayerID target = next ? (pid + 1) % playerNum : (playerNum + pid - 1) % playerNum;
+            PlayerID target = type == Target::NEXT ? (pid + 1) % playerNum : (playerNum + pid - 1) % playerNum;
             while (players[target].out > 0 && target != pid) {
                 players[target].target = -1;
-                target = next ? (target + 1) % playerNum : (playerNum + target - 1) % playerNum;
+                target = type == Target::NEXT ? (target + 1) % playerNum : (playerNum + target - 1) % playerNum;
             }
             players[pid].target = target;
         }
     }
 
-    string MapGenerate(const vector<string>& map_str) const
+    string MapPreview(const vector<string>& map_str) const
     {
         vector<vector<Grid>> grid_map;
         grid_map.resize(size);
@@ -847,9 +861,9 @@ class Board
                 map_id = str;
             }
             if (is_exit) {
-                unitMaps.SetExitBlock(unitMaps.origin_pos[i].first, unitMaps.origin_pos[i].second, grid_map, map_id, false);
+                unitMaps.SetExitBlock(unitMaps.origin_pos[i].first, unitMaps.origin_pos[i].second, grid_map, map_id, SpecialEvent::NONE);   // 预览时需取用原始地图
             } else {
-                unitMaps.SetMapBlock(unitMaps.origin_pos[i].first, unitMaps.origin_pos[i].second, grid_map, map_id, false);
+                unitMaps.SetMapBlock(unitMaps.origin_pos[i].first, unitMaps.origin_pos[i].second, grid_map, map_id, SpecialEvent::NONE);    // 预览时需取用原始地图
             }
         }
         FixAdjacentWalls(grid_map);
@@ -857,12 +871,12 @@ class Board
         return GetBoard(grid_map, GetBoardOptions{.with_content = true});
     }
 
-    int ExitCount() const
+    int TypeCount(const GridType type) const
     {
         int count = 0;
         for (int x = 0; x < size; x++) {
             for (int y = 0; y < size; y++) {
-                if (grid_map[x][y].Type() == GridType::EXIT) {
+                if (grid_map[x][y].Type() == type) {
                     count++;
                 }
             }
@@ -879,8 +893,36 @@ class Board
         std::shuffle(maps.begin(), maps.end(), g);
         std::shuffle(exits.begin(), exits.end(), g);
 
-        const int selected_map_num = gamemode >= 0 ? unitMaps.pos.size() - exit_num : maps.size();
-        const int selected_exit_num = gamemode >= 0 ? exit_num : exits.size();
+        int total_pos = unitMaps.pos.size();
+        int selected_map_num = 0;
+        int selected_exit_num = 0;
+
+        if (block_mode != BlockMode::CUSTOM) {
+            // 非自定义模式
+            selected_map_num = total_pos - exit_num;
+            selected_exit_num = exit_num;
+        } else {
+            // 自定义模式
+            int map_count = maps.size();
+            int exit_count = exits.size();
+            if (exit_count < exit_num) {
+                // 情况1：逃生舱数量不足exit_num，使用全部逃生舱
+                selected_exit_num = exit_count;
+                selected_map_num = std::min(map_count, total_pos - selected_exit_num);
+            } else {
+                int required_map_num = total_pos - exit_num;
+                if (map_count >= required_map_num) {
+                    // 情况2：区块数量充足，exit_num个逃生舱
+                    selected_exit_num = exit_num;
+                    selected_map_num = required_map_num;
+                } else {
+                    // 情况3：区块不足，使用全部普通区块
+                    selected_map_num = map_count;
+                    selected_exit_num = total_pos - selected_map_num;
+                    selected_exit_num = std::min(selected_exit_num, exit_count);
+                }
+            }
+        }
 
         vector<UnitMaps::Map> selected;
         for (int i = 0; i < selected_map_num; i++) {
@@ -893,9 +935,9 @@ class Board
 
         for (int i = 0; i < unitMaps.pos.size(); i++) {
             if (selected[i].is_exit) {
-                unitMaps.SetExitBlock(unitMaps.pos[i].first, unitMaps.pos[i].second, grid_map, selected[i].id, true);
+                unitMaps.SetExitBlock(unitMaps.pos[i].first, unitMaps.pos[i].second, grid_map, selected[i].id, SpecialEvent::RANDOM);   // 此处特殊事件仅用于调用原始地图
             } else {
-                unitMaps.SetMapBlock(unitMaps.pos[i].first, unitMaps.pos[i].second, grid_map, selected[i].id, true);
+                unitMaps.SetMapBlock(unitMaps.pos[i].first, unitMaps.pos[i].second, grid_map, selected[i].id, SpecialEvent::RANDOM);    // 此处特殊事件仅用于调用原始地图
             }
             // 记录特殊地图坐标（暂不使用）
             // if (selected[i].is_special) {
@@ -1221,9 +1263,9 @@ class Board
 
     string GetImageTypeFolder() const
     {
-        switch (image_type_) {
-            case 0: return "classic/";
-            case 1: return "retro/";
+        switch (image_texture_) {
+            case Texture::CLASSIC:  return "classic/";
+            case Texture::RETRO:    return "retro/";
             default: return "";
         }
     }

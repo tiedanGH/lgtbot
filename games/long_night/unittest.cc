@@ -28,6 +28,39 @@ GAME_TEST(2, leave_test2)
     ASSERT_SCORE(0, -300);
 }
 
+GAME_TEST(3, all_active_stop1)
+{
+    START_GAME();
+
+    ASSERT_PUB_MSG(CONTINUE, 0, "停止");
+    ASSERT_PUB_MSG(CONTINUE, 1, "停止");
+    ASSERT_PUB_MSG(CHECKOUT, 2, "停止");
+
+    ASSERT_SCORE(0, 0, 0);
+}
+
+GAME_TEST(3, all_active_stop2)
+{
+    START_GAME();
+
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_PUB_MSG(CHECKOUT, 2, "停止");
+
+    ASSERT_SCORE(0, 0, 0);
+}
+
+GAME_TEST(3, all_active_stop3)
+{
+    START_GAME();
+
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_TIMEOUT(CONTINUE);
+    ASSERT_TIMEOUT(CHECKOUT);
+
+    ASSERT_SCORE(0, 0, 0);
+}
+
 } // namespace GAME_MODULE_NAME
 
 } // namespace game

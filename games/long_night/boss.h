@@ -1,25 +1,4 @@
 
-enum class BossType {
-    NONE,
-    MINOTAUR,
-    BANGBANG,
-};
-
-// BOSS暴君
-// 1、每回合开始时，boss将公开本回合需要玩家遵守的“铁律”。若有玩家不遵守，则成为被boss追逐的目标。
-// 2、若不遵守玩家为复数，则选择距离最近的。若已有追逐目标时产生新的不遵守玩家，则转移目标。
-// 3、boss的速度初始为7，随回合+1。
-// 4、第一回合的铁律随机池：
-// ①禁足：移动小于等于1步。
-// ②活动：移动大于等于1步。
-// 5、除第一回合的铁律随机池：
-// ①噤声：不得发出声音。
-// ②仁爱：不得杀生。
-// ③牢笼：不得逃生（等于没有规则，违反此条规则，boss会无能狂怒）。
-// ④活动：移动大于等于2-5步（随回合增长）。
-// ⑤禁足：移动小于等于2-5步（随机）
-// 6、默认规则：暴君可被玩家点杀，暴君在下回合开始时复活，并且以弑君者为追捕目标。若玩家弑君并逃生或存活最后可获得成就“弑君者”
-
 class Boss
 {
   public:
@@ -65,7 +44,7 @@ class Boss
 
     string GetBossIcon() const
     {
-        if (Is(BossType::MINOTAUR)) return "👹";
+        if (Is(BossType::MINOTAUR)) return "🐮";
         if (Is(BossType::BANGBANG)) return "💣";
         return "⚠️";
     }
@@ -79,13 +58,13 @@ class Boss
         }
     }
 
-    string GetBossRecord(const int query_pid, const bool is_html = true) const
+    string GetBossRecord(const int query_pid, const bool is_public, const bool is_html = true) const
     {
         string result;
 
         for (const auto& mv : boss_all_record) {
             string sound_d;
-            if (mv.sound != Sound::NONE && query_pid != -1) {
+            if (mv.sound != Sound::NONE && !is_public) {
                 if (query_pid < mv.propagation.size()) {
                     sound_d = "[" + mv.propagation[query_pid] + "]";
                 } else {
@@ -106,9 +85,9 @@ class Boss
     }
 
     // BOSS初始化
-    void BossInitialize(const int type_num)
+    void BossInitialize(const BossType type)
     {
-        this->type = ToBossType(type_num);
+        this->type = type;
         if (Is(BossType::MINOTAUR)) this->steps = 0;
         if (Is(BossType::BANGBANG)) this->steps = rand() % 3 + 3;
         BossSpawn();
@@ -214,7 +193,4 @@ class Boss
 
     bool Enable() const { return this->type != BossType::NONE; }
     bool Is(BossType type) const { return this->type == type; }
-
-  private:
-    static BossType ToBossType(int value) { return static_cast<BossType>(value); }
 };

@@ -3,13 +3,14 @@ class UnitMaps {
   public:
     const int k_map_num = 12;
     const int k_exit_num = 4;
+    const int k_special_num = 2;
 
     vector<pair<int, int>> pos = {
         {0, 0}, {0, 3}, {0, 6},
         {3, 0}, {3, 3}, {3, 6},
         {6, 0}, {6, 3}, {6, 6},
     };
-    vector<pair<int, int>> origin_pos;
+    vector<pair<int, int>> origin_pos = pos;
 
     struct Map {
         vector<vector<Grid>> block;
@@ -65,12 +66,12 @@ class UnitMaps {
         {Map36(), "36", "旋转门B", GridType::EMPTY, AttachType::BUTTON},
         {Map37(), "37", "会客厅", GridType::GRASS, AttachType::BUTTON},
         {Map38(), "38", "公共厕所", GridType::WATER, AttachType::BUTTON},
-        {Map39(), "39", "卫生间A", GridType::TRAP, AttachType::BUTTON},
-        {Map40(), "40", "卫生间B", GridType::TRAP, AttachType::BUTTON},
+        {Map39(), "39", "女卫生间", GridType::TRAP, AttachType::BUTTON},
+        {Map40(), "40", "男卫生间", GridType::TRAP, AttachType::BUTTON},
         {Map41(), "41", "红石迷宫A", GridType::GRASS, AttachType::BUTTON},
         {Map42(), "42", "红石迷宫B", GridType::GRASS, AttachType::BUTTON},
-        // {Map31(), "31", "未命名", GridType::PORTAL},
-        // {Map32(), "32", "未命名", GridType::PORTAL},
+        // {Map31(), "31", "单向门A", GridType::PORTAL},
+        // {Map32(), "32", "单向门B", GridType::PORTAL},
     };
     vector<Map> all_exits = {
         {Exit1(), "1", "逃生长廊A", true, GridType::EMPTY},
@@ -86,64 +87,79 @@ class UnitMaps {
         {Exit11(), "11", "隐蔽逃生通道A", true, GridType::EMPTY, AttachType::BUTTON},
         {Exit12(), "12", "隐蔽逃生通道B", true, GridType::EMPTY, AttachType::BUTTON},
     };
-    vector<Map> special_maps = {
-        {SMap1(), "S1", "实验场", GridType::HEAT, AttachType::EMPTY, true},
-        {SMap2(), "S2", "原子空间", GridType::PORTAL, AttachType::EMPTY, true},
-        {SMap3(), "S3", "原子阱", GridType::PORTAL, AttachType::EMPTY, true},
-        {SMap4(), "S4", "黑洞", GridType::PORTAL, AttachType::EMPTY, true},
+    vector<Map> all_special_maps = {
+        {MapS1(), "S1", "实验场", GridType::HEAT, AttachType::EMPTY, true},
+        {MapS2(), "S2", "原子空间", GridType::PORTAL, AttachType::EMPTY, true},
+        {MapS3(), "S3", "原子阱", GridType::PORTAL, AttachType::EMPTY, true},
+        {MapS4(), "S4", "黑洞", GridType::PORTAL, AttachType::EMPTY, true},
     };
 
-    const vector<string> twist_maps_id = {
-        "2", "3", "4", "6", "7", "8", "11", "12",
-        "17", "18", "21", "22", "23", "24", "25", "26",
+    const vector<string> twist_mode_ids = {
+        "2", "3", "4", "6",
+        "7", "8", "11", "12",
+        "17", "18", "21", "22",
+        "23", "24", "25", "26",
         "37", "38", "39", "40",
+        "E1", "E2", "E3", "E4",
+        "E9", "E10",
     };
-    const vector<string> twist_exits_id = {
-        "1", "2", "3", "4",
-        "9", "10"
+    const vector<string> button_mode_ids = {
+        "2", "6", "3", "7",
+        "4", "8", "9", "10",
+        "21", "22", "25", "26",
+        "27", "37", "33", "34",
+        "35", "36", "39", "40",
+        "E1", "E2", "E3", "E4",
+        "E11", "E12",
     };
-    vector<Map> twist_maps;
-    vector<Map> twist_exits;
+    const vector<string> trap_mode_ids = {
+        "2", "6", "9", "10",
+        "19", "20", "21", "22",
+        "23", "24", "25", "27",
+        "31", "32", "39", "40",
+        "16", "S3",
+        "E1", "E2", "E3", "E4",
+        "E9", "E10",
+    };
+    vector<Map> pool_maps;
+    vector<Map> pool_exits;
 
     vector<Map> maps;
     vector<Map> exits;
+    vector<Map> special_maps;
 
     UnitMaps() = default;
 
-    UnitMaps(const int32_t mode, std::mt19937& gen, const vector<string>& custom_blocks): g(std::make_unique<std::mt19937>(gen))
+    UnitMaps(const BlockMode mode, std::mt19937& gen, const vector<string>& custom_blocks): g(std::make_unique<std::mt19937>(gen))
     {
-        if (mode == 0) {
-            // 标准
+        if (mode == BlockMode::CLASSIC) {
+            // 经典-CLASSIC
             maps.insert(maps.end(), all_maps.begin(), all_maps.begin() + k_map_num);
             exits.insert(exits.end(), all_exits.begin(), all_exits.begin() + k_exit_num);
-        } else if (mode == 1) {
-            // 狂野
+        } else if (mode == BlockMode::TWIST) {
+            // 幻变-TWIST
+            SampleBlockPoolsFromIds(twist_mode_ids);
+        } else if (mode == BlockMode::WILD) {
+            // 狂野-WILD
             std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), k_map_num, *g);
             SampleExits(all_exits, k_exit_num / 2);
-        } else if (mode == 2) {
-            // 幻变
-            for (const auto& m : all_maps) {
-                if (std::find(twist_maps_id.begin(), twist_maps_id.end(), m.id) != twist_maps_id.end()) {
-                    twist_maps.push_back(m);
-                }
-            }
-            for (const auto& m : all_exits) {
-                if (std::find(twist_exits_id.begin(), twist_exits_id.end(), m.id) != twist_exits_id.end()) {
-                    twist_exits.push_back(m);
-                }
-            }
-            std::sample(twist_maps.begin(), twist_maps.end(), std::back_inserter(maps), k_map_num, *g);
-            SampleExits(twist_exits, k_exit_num / 2);
-        } else if (mode == 3) {
-            // 疯狂
-            std::sample(special_maps.begin(), special_maps.end(), std::back_inserter(maps), 2, *g);
-            std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), k_map_num - 2, *g);
+        } else if (mode == BlockMode::CRAZY) {
+            // 疯狂-CRAZY
+            std::sample(all_special_maps.begin(), all_special_maps.end(), std::back_inserter(special_maps), k_special_num, *g);
+            maps.insert(maps.end(), special_maps.begin(), special_maps.end());
+            std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), k_map_num - k_special_num, *g);
             SampleExits(all_exits, k_exit_num / 2);
+        } else if (mode == BlockMode::BUTTON) {
+            // 按钮-BUTTON
+            SampleBlockPoolsFromIds(button_mode_ids);
+        } else if (mode == BlockMode::TRAP) {
+            // 陷阱-TRAP
+            SampleBlockPoolsFromIds(trap_mode_ids);
         } else {
-            // 自定义
+            // 自定义-CUSTOM
             for (const auto& block : custom_blocks) {
-                if (auto it = std::find_if(special_maps.begin(), special_maps.end(), [&](const Map& m) { return m.id == block; });
-                    it != special_maps.end()) {
+                if (auto it = std::find_if(all_special_maps.begin(), all_special_maps.end(), [&](const Map& m) { return m.id == block; });
+                    it != all_special_maps.end()) {
                     maps.push_back(*it);
                 }
                 const bool is_exit = !block.empty() && block[0] == 'E';
@@ -155,7 +171,31 @@ class UnitMaps {
                 }
             }
         }
-        origin_pos = pos;
+    }
+
+    void SampleBlockPoolsFromIds(const vector<string>& mode_ids)
+    {
+        pool_maps.clear();
+        pool_exits.clear();
+        for (const auto& map_id : mode_ids) {
+            const bool is_exit = !map_id.empty() && map_id[0] == 'E';
+            const bool is_special = !map_id.empty() && map_id[0] == 'S';
+            const std::string id = is_exit ? map_id.substr(1) : map_id;
+
+            const auto& source = is_exit ? all_exits : (is_special ? all_special_maps : all_maps);
+            auto it = std::find_if(source.begin(), source.end(), [&id](const Map& m) { return m.id == id; });
+
+            if (it != source.end()) {
+                if (is_exit) pool_exits.push_back(*it);
+                else pool_maps.push_back(*it);
+            }
+        }
+
+        std::sample(pool_maps.begin(), pool_maps.end(), std::back_inserter(maps), k_map_num, *g);
+        SampleExits(pool_exits, k_exit_num / 2);
+
+        std::sort(maps.begin(), maps.end(), [](const Map& a, const Map& b) { return CompareMapId(a.id, b.id); });
+        std::sort(exits.begin(), exits.end(), [](const Map& a, const Map& b) { return CompareMapId(a.id, b.id); });
     }
 
     void SampleExits(const vector<Map>& exits_pool, const int k_exit_pair)
@@ -174,28 +214,38 @@ class UnitMaps {
         }
     }
 
-    vector<vector<Grid>> FindBlockById(const string id, const bool is_exit, const bool special = false) const
+    vector<vector<Grid>> FindBlockById(const string& id, bool is_exit, SpecialEvent event) const
     {
-        auto special_it = std::find_if(special_maps.begin(), special_maps.end(), [id](const Map& map) { return map.id == id; });
-        if (special_it != special_maps.end()) return special_it->block;
+        const bool has_event = event != SpecialEvent::NONE;
 
-        const vector<Map>& search_list = is_exit ? (special ? exits : all_exits) : (special ? maps : all_maps);
-        auto it = std::find_if(search_list.begin(), search_list.end(), [id](const Map& map) { return map.id == id; });
-        if (it != search_list.end()) return it->block;
-    
+        const auto& special_list = has_event ? special_maps : all_special_maps;
+        if (const Map* map = FindMapById(special_list, id))
+            return map->block;
+
+        const auto& normal_list = is_exit
+            ? (has_event ? exits : all_exits)
+            : (has_event ? maps : all_maps);
+        if (const Map* map = FindMapById(normal_list, id))
+            return map->block;
+
         return InitializeMapTemplate();
     }
 
-    bool IsBlockExist(const string id, const bool is_exit) const
+    bool IsBlockExist(const string& id, bool is_exit) const
     {
-        auto special_it = std::find_if(special_maps.begin(), special_maps.end(), [id](const Map& map) { return map.id == id; });
-        if (special_it != special_maps.end()) return true;
+        if (FindMapById(all_special_maps, id))
+            return true;
 
-        const vector<Map>& search_list = is_exit ? all_exits : all_maps;
-        auto it = std::find_if(search_list.begin(), search_list.end(), [id](const Map& map) { return map.id == id; });
-        if (it != search_list.end()) return true;
+        const auto& list = is_exit ? all_exits : all_maps;
+        return FindMapById(list, id) != nullptr;
+    }
 
-        return false;
+    const Map* FindMapById(const vector<Map>& maps, const string& id) const
+    {
+        auto it = std::find_if(maps.begin(), maps.end(),
+            [&id](const Map& map) { return map.id == id; });
+
+        return it != maps.end() ? &(*it) : nullptr;
     }
 
     static bool MapContainGridType(const vector<Map>& maps, const GridType& type)
@@ -234,17 +284,24 @@ class UnitMaps {
         return false;
     }
 
-    // 特殊事件详情
-    static string ShowSpecialEvent(const int type)
+    static SpecialEvent GetRandomSpecialEvent()
     {
-        if (type == 1) {
-            return "[特殊事件]【怠惰的园丁】树丛将在其区块内随机位置生成（有可能生成在中间）";
-        } else if (type == 2) {
-            return "[特殊事件]【营养过剩】树丛和陷阱将额外向随机1个方向再次生成1个树丛（不可隔墙生长）";
-        } else if (type == 3) {
-            return "[特殊事件]【雨天小故事】地图中所有树丛变成水洼，陷阱会发出啪啪声";
-        } else {
-            return "无";
+        static constexpr std::array events = {
+            SpecialEvent::LAZYGARDENER,
+            SpecialEvent::OVERGROWTH,
+            SpecialEvent::RAINSTORY,
+        };
+        return events[rand() % events.size()];
+    }
+
+    // 特殊事件详情
+    static string ShowSpecialEvent(const SpecialEvent event)
+    {
+        switch (event) {
+            case SpecialEvent::LAZYGARDENER: return "[特殊事件]【怠惰的园丁】树丛将在其区块内随机位置生成（有可能生成在中间）";
+            case SpecialEvent::OVERGROWTH:   return "[特殊事件]【营养过剩】树丛和陷阱将额外向随机1个方向再次生成1个树丛（不可隔墙生长）";
+            case SpecialEvent::RAINSTORY:    return "[特殊事件]【雨天小故事】地图中所有树丛变成水洼，陷阱会发出啪啪声";
+            default:                         return "[特殊事件]【无】";
         }
     }
 
@@ -279,9 +336,10 @@ class UnitMaps {
 
         MarkMaps(all_maps);
         MarkMaps(all_exits);
-        MarkMaps(special_maps);
+        MarkMaps(all_special_maps);
         ProcessMaps(maps);
         ProcessMaps(exits);
+        ProcessMaps(special_maps);
     }
 
     // 特殊事件2——营养过剩：树丛和陷阱将额外向随机1个方向再次生成1个树丛
@@ -324,9 +382,10 @@ class UnitMaps {
 
         MarkMaps(all_maps);
         MarkMaps(all_exits);
-        MarkMaps(special_maps);
+        MarkMaps(all_special_maps);
         ProcessMaps(maps);
         ProcessMaps(exits);
+        ProcessMaps(special_maps);
     }
 
     // 特殊事件3——雨天小故事：地图中所有树丛变成水洼
@@ -346,6 +405,7 @@ class UnitMaps {
         ProcessMaps(maps);
         ProcessMaps(exits);
         ProcessMaps(special_maps);
+        ProcessMaps(all_special_maps);
     }
 
     // 大地图区块位置随机
@@ -381,14 +441,14 @@ class UnitMaps {
         origin_pos = pos;
     }
 
-    void SetMapBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string& map_id, const bool special) const
+    void SetMapBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string& map_id, const SpecialEvent event) const
     {
-        SetBlock(x, y, grid_map, FindBlockById(map_id, false, special));
+        SetBlock(x, y, grid_map, FindBlockById(map_id, false, event));
     }
 
-    void SetExitBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string& exit_id, const bool special) const
+    void SetExitBlock(const int x, const int y, vector<vector<Grid>>& grid_map, const string& exit_id, const SpecialEvent event) const
     {
-        SetBlock(x, y, grid_map, FindBlockById(exit_id, true, special));
+        SetBlock(x, y, grid_map, FindBlockById(exit_id, true, event));
     }
 
   private:
@@ -1163,17 +1223,17 @@ class UnitMaps {
             { 1,  0, Direct::DOWN},
         });
 
-        map[0][0].SetWall(Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY);
+        map[0][0].SetWall(Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[0][1].SetWall(Wall::DOOR, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
         map[0][2].SetWall(Wall::EMPTY, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
 
-        map[1][0].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::NORMAL, Wall::EMPTY);
+        map[1][0].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::NORMAL, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::NORMAL, Wall::NORMAL, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::EMPTY, Wall::NORMAL);
+        map[1][2].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::EMPTY, Wall::NORMAL).SetGrowable(true);
 
         map[2][0].SetWall(Wall::DOOR, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
         map[2][1].SetWall(Wall::NORMAL, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY);
-        map[2][2].SetWall(Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -1193,15 +1253,15 @@ class UnitMaps {
         map[2][2].SetType(GridType::WATER);
 
         map[0][0].SetWall(Wall::NORMAL, Wall::DOOR, Wall::EMPTY, Wall::DOOROPEN);
-        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOR);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOR).SetGrowable(true);
         map[0][2].SetWall(Wall::NORMAL, Wall::DOOROPEN, Wall::DOOR, Wall::EMPTY);
 
-        map[1][0].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         map[2][0].SetWall(Wall::DOOROPEN, Wall::NORMAL, Wall::EMPTY, Wall::DOOR);
-        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOR, Wall::DOOROPEN);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOR, Wall::DOOROPEN).SetGrowable(true);
         map[2][2].SetWall(Wall::DOOR, Wall::NORMAL, Wall::DOOROPEN, Wall::EMPTY);
 
         return map;
@@ -1222,11 +1282,11 @@ class UnitMaps {
 
         map[1][0].SetWall(Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY, Wall::DOOR);
         map[1][1].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::DOOR, Wall::DOOROPEN);
-        map[1][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY);
+        map[1][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY).SetGrowable(true);
 
         map[2][0].SetWall(Wall::DOOROPEN, Wall::NORMAL, Wall::NORMAL, Wall::DOOR);
-        map[2][1].SetWall(Wall::DOOROPEN, Wall::EMPTY, Wall::DOOR, Wall::EMPTY);
-        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][1].SetWall(Wall::DOOROPEN, Wall::EMPTY, Wall::DOOR, Wall::EMPTY).SetGrowable(true);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -1240,17 +1300,17 @@ class UnitMaps {
             { 1, -1, Direct::UP}, { 1, -1, Direct::RIGHT},
         });
 
-        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[0][1].SetWall(Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY, Wall::DOOR);
+        map[0][0].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY, Wall::DOOR).SetGrowable(true);
         map[0][2].SetWall(Wall::NORMAL, Wall::DOOR, Wall::DOOR, Wall::NORMAL);
 
         map[1][0].SetWall(Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY, Wall::DOOR);
         map[1][1].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::DOOR, Wall::DOOROPEN);
-        map[1][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY);
+        map[1][2].SetWall(Wall::DOOR, Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY).SetGrowable(true);
 
         map[2][0].SetWall(Wall::DOOROPEN, Wall::NORMAL, Wall::NORMAL, Wall::DOOROPEN);
         map[2][1].SetWall(Wall::DOOR, Wall::EMPTY, Wall::DOOROPEN, Wall::EMPTY);
-        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
+        map[2][2].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
         return map;
     }
@@ -1265,17 +1325,17 @@ class UnitMaps {
             { 1,  1, Direct::UP}, { 1,  1, Direct::DOWN}, { 1,  1, Direct::LEFT}, { 1,  1, Direct::RIGHT},
         });
 
-        map[0][0].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::DOOR, Wall::DOOROPEN);
-        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOR);
-        map[0][2].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::DOOR, Wall::DOOROPEN);
+        map[0][0].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::DOOR, Wall::DOOROPEN).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOR).SetGrowable(true);
+        map[0][2].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::DOOR, Wall::DOOROPEN).SetGrowable(true);
 
-        map[1][0].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::DOOROPEN, Wall::DOOR);
-        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOR, Wall::DOOROPEN);
-        map[2][2].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN, Wall::DOOR);
+        map[2][0].SetWall(Wall::DOOROPEN, Wall::DOOR, Wall::DOOROPEN, Wall::DOOR).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOR, Wall::DOOROPEN).SetGrowable(true);
+        map[2][2].SetWall(Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN, Wall::DOOR).SetGrowable(true);
 
         return map;
     }
@@ -1290,17 +1350,17 @@ class UnitMaps {
             { 1,  1, Direct::UP}, { 1,  1, Direct::DOWN}, { 1,  1, Direct::LEFT}, { 1,  1, Direct::RIGHT},
         });
 
-        map[0][0].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN);
-        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOROPEN);
-        map[0][2].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN);
+        map[0][0].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN).SetGrowable(true);
+        map[0][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOROPEN).SetGrowable(true);
+        map[0][2].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN).SetGrowable(true);
 
-        map[1][0].SetWall(Wall::DOOR, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+        map[1][0].SetWall(Wall::DOOR, Wall::DOOR, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
         map[1][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::EMPTY, Wall::EMPTY);
-        map[1][2].SetWall(Wall::DOOR, Wall::DOOR, Wall::EMPTY, Wall::EMPTY);
+        map[1][2].SetWall(Wall::DOOR, Wall::DOOR, Wall::EMPTY, Wall::EMPTY).SetGrowable(true);
 
-        map[2][0].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN);
-        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOROPEN);
-        map[2][2].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN);
+        map[2][0].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN).SetGrowable(true);
+        map[2][1].SetWall(Wall::EMPTY, Wall::EMPTY, Wall::DOOROPEN, Wall::DOOROPEN).SetGrowable(true);
+        map[2][2].SetWall(Wall::DOOR, Wall::DOOR, Wall::DOOROPEN, Wall::DOOROPEN).SetGrowable(true);
 
         return map;
     }
@@ -1639,7 +1699,7 @@ class UnitMaps {
     }
 
     /* ========== 特殊地图 ========== */
-    static vector<vector<Grid>> SMap1()
+    static vector<vector<Grid>> MapS1()
     {
         auto map = InitializeMapTemplate();
         map[0][0].SetType(GridType::WATER);
@@ -1667,7 +1727,7 @@ class UnitMaps {
         return map;
     }
 
-    static vector<vector<Grid>> SMap2()
+    static vector<vector<Grid>> MapS2()
     {
         auto map = InitializeMapTemplate();
         map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2).SetContent("A");
@@ -1691,7 +1751,7 @@ class UnitMaps {
         return map;
     }
 
-    static vector<vector<Grid>> SMap3()
+    static vector<vector<Grid>> MapS3()
     {
         auto map = InitializeMapTemplate();
         map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2).SetContent("A");
@@ -1715,7 +1775,7 @@ class UnitMaps {
         return map;
     }
 
-    static vector<vector<Grid>> SMap4()
+    static vector<vector<Grid>> MapS4()
     {
         auto map = InitializeMapTemplate();
         map[0][0].SetType(GridType::PORTAL).SetPortal(2, 2).SetContent("A");
