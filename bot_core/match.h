@@ -9,13 +9,14 @@
 #include <map>
 #include <set>
 #include <bitset>
+#include <memory>
 #include <variant>
+#include <vector>
 
 #include "utility/msg_checker.h"
 
 #include "bot_core/match_base.h"
 #include "bot_core/msg_sender.h"
-#include "bot_core/timer.h"
 #include "bot_core/game_handle.h"
 #include "bot_core/bot_ctx.h"
 #include "bot_core/db_manager.h"
@@ -32,6 +33,7 @@ class PrivateMatch;
 class GroupMatch;
 class DiscussMatch;
 class MatchManager;
+class MatchChildClient;
 
 template <typename ...Ts>
 class Overload : public Ts...
@@ -50,7 +52,7 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
 
     Match(BotCtx& bot, const MatchID id, GameHandle& game_handle, GameHandle::Options options,
             const UserID host_uid, const std::optional<GroupID> gid);
-    ~Match() = default;
+    ~Match();
 
     virtual MsgSenderBase& BoardcastMsgSender() override;
     virtual MsgSenderBase& BoardcastAiInfoMsgSender() override;
@@ -105,6 +107,10 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
 
     std::string BriefInfo() const;
 
+    void ReleaseGameChildIfOver();
+
+    friend class MatchChildClient;
+
    private:
     struct ParticipantUser
     {
@@ -140,12 +146,13 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
     }
 
     std::string BriefInfo_() const;
-    void OnGameOver_();
     void Help_(MsgSenderBase& reply, const bool text_mode);
-    void Routine_();
     std::string OptionInfo_() const;
+    void ApplyChildPlayerState(const PlayerID pid, const std::string& state);
+    void ApplyChildGameOverFromScores(const std::string& scores_json);
     void KickForConfigChange_();
     void Unbind_();
+    void UnbindMatchSide_();
     void Terminate_();
     bool Has_(const UserID uid) const;
     std::string HostUserName_() const;
@@ -165,35 +172,6 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
     const std::optional<GroupID> gid_;
     std::atomic<State> state_{State::NOT_STARTED};
 
-    struct TimerController
-    {
-      public:
-        void Start(Match& match, uint64_t sec, void* alert_arg, void(*alert_cb)(void*, uint64_t));
-
-        void Stop(const Match& match);
-
-      private:
-        std::shared_ptr<bool> timer_is_over_; // must before match because atom stage will call StopTimer
-        std::unique_ptr<Timer> timer_;
-
-#ifdef TEST_BOT
-      public:
-        std::mutex before_handle_timeout_mutex_;
-        std::condition_variable before_handle_timeout_cv_;
-        bool before_handle_timeout_{false};
-#endif
-    };
-
-#ifdef TEST_BOT
-  public:
-#endif
-
-    TimerController timer_cntl_;
-
-#ifdef TEST_BOT
-  private:
-#endif
-
     // options
     struct Options
     {
@@ -209,8 +187,8 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
     };
     Options options_;
 
-    // game
-    GameHandle::main_stage_ptr main_stage_{nullptr, [](const lgtbot::game::MainStageBase*) {}};
+    std::unique_ptr<MatchChildClient> game_child_;
+    std::vector<std::string> applied_options_log_;
 
     // user info
     std::map<UserID, ParticipantUser> users_;

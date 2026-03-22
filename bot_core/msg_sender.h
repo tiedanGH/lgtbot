@@ -16,13 +16,16 @@
 #include "bot_core/image.h"
 #include "bot_core/bot_core.h"
 
-class PlayerID;
-class UserID;
-class GroupID;
 class Match;
 
 template <typename IdType> struct At { IdType id_; };
 template <typename IdType> struct Name { IdType id_; };
+
+template <typename IdType>
+At(IdType) -> At<IdType>;
+template <typename IdType>
+Name(IdType) -> Name<IdType>;
+
 struct Image { std::string path_; };
 struct Markdown { std::string_view data_; uint32_t width_ = 600; };
 
