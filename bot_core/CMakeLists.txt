@@ -58,9 +58,18 @@ find_package(gflags REQUIRED)
 list(APPEND THIRD_PARTIES gflags)
 
 add_library(bot_core_static STATIC ${SOURCE_FILES})
-target_link_libraries(bot_core_static ${THIRD_PARTIES})
+target_link_libraries(bot_core_static lgtbot_match_parent ${THIRD_PARTIES})
+add_dependencies(bot_core_static match_game_runner)
+target_compile_definitions(bot_core_static PRIVATE
+  MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
+)
+
 add_library(bot_core SHARED ${SOURCE_FILES})
-target_link_libraries(bot_core ${THIRD_PARTIES})
+target_link_libraries(bot_core lgtbot_match_parent ${THIRD_PARTIES})
+add_dependencies(bot_core match_game_runner)
+target_compile_definitions(bot_core PRIVATE
+  MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
+)
 
 if (WITH_TEST)
   enable_testing()
@@ -73,7 +82,11 @@ if (WITH_TEST)
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/stage_utility.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/player_ready_masker.cc
     ${SOURCE_FILES})
-  target_link_libraries(test_bot ${THIRD_PARTIES})
+  target_link_libraries(test_bot lgtbot_match_parent ${THIRD_PARTIES})
+  add_dependencies(test_bot match_game_runner)
+  target_compile_definitions(test_bot PRIVATE
+    MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
+  )
   target_compile_definitions(test_bot PUBLIC
     GAME_ACHIEVEMENT_FILENAME="test_bot.cc"
     GAME_OPTION_FILENAME="test_bot.cc"

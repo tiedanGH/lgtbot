@@ -63,6 +63,7 @@ if (WITH_TEST)
 endif()
 
 if (WITH_CORE)
+  add_subdirectory(match_process)
   add_subdirectory(bot_core)
 endif()
 

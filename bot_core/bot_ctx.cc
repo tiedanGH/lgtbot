@@ -10,11 +10,12 @@
 
 #ifdef _WIN32
 #include <windows.h>
-#elif __linux__
+#elif defined(__linux__) || defined(__APPLE__)
 #include <dirent.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #define HINSTANCE void*
 #define GetProcAddress dlsym
 #define FreeLibrary dlclose
@@ -67,8 +68,8 @@ static auto FillAchievements(const std::span<const lgtbot::game::GameAchievement
 
 static void LoadGame(HINSTANCE mod, GameHandleMap& game_handles)
 {
-    if (!mod) {
-#ifdef __linux__
+        if (!mod) {
+#if defined(__linux__) || defined(__APPLE__)
         ErrorLog() << "Load mod failed: " << dlerror();
 #else
         ErrorLog() << "Load mod failed";
@@ -79,7 +80,7 @@ static void LoadGame(HINSTANCE mod, GameHandleMap& game_handles)
     {
         const auto proc = GetProcAddress(mod, name);
         if (!proc) {
-#ifdef __linux__
+#if defined(__linux__) || defined(__APPLE__)
             std::cerr << dlerror() << std::endl;
 #endif
             throw std::runtime_error(std::string("load proc ") + name + " from module failed");
@@ -143,7 +144,7 @@ static std::variant<GameHandleMap, const char*> LoadGameModules(const char* cons
     } while (FindNextFile(dir_handle, &dir_data));
     FindClose(dir_handle);
     InfoLog() << "Load module count: " << game_handles.size();
-#elif __linux__
+#elif defined(__linux__) || defined(__APPLE__)
     DIR* d = opendir(games_path);
     if (!d) {
         return "LoadGameModules: open directory failed";
@@ -154,9 +155,14 @@ static std::variant<GameHandleMap, const char*> LoadGameModules(const char* cons
             WarnLog() << "Not the game directory, skip: " << dp->d_name;
             continue;
         }
-        const auto lib_name = std::string(games_path) + "/" + dp->d_name + "/libgame.so";
+#if defined(__APPLE__)
+        const char lib_leaf[] = "libgame.dylib";
+#else
+        const char lib_leaf[] = "libgame.so";
+#endif
+        const auto lib_name = std::string(games_path) + "/" + dp->d_name + "/" + lib_leaf;
         if (access(lib_name.c_str(), F_OK) != 0) {
-            WarnLog() << "Cannot find libgame.so, skip: " << dp->d_name;
+            WarnLog() << "Cannot find " << lib_leaf << ", skip: " << dp->d_name;
         } else {
             LoadGame(dlopen(lib_name.c_str(), RTLD_LAZY), game_handles);
         }

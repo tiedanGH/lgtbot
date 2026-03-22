@@ -22,7 +22,38 @@
 #include "bot_core/match_manager.h"
 #include "bot_core/score_calculation.h"
 #include "bot_core/options.h"
+#include "match_process/match_child_client.h"
 #include "nlohmann/json.hpp"
+
+#include <cstdlib>
+
+#ifndef MATCH_GAME_RUNNER_PATH
+#define MATCH_GAME_RUNNER_PATH "match_game_runner"
+#endif
+
+namespace {
+
+std::filesystem::path ResolveRunnerExe()
+{
+    if (const char* const e = std::getenv("LGTBOT_MATCH_RUNNER")) {
+        return e;
+    }
+    return std::filesystem::path(MATCH_GAME_RUNNER_PATH);
+}
+
+std::filesystem::path GameLibraryPath(const BotCtx& bot, const GameHandle& gh)
+{
+    const auto base = std::filesystem::absolute(bot.game_path()) / gh.Info().module_name_;
+#if defined(_WIN32)
+    return base / "libgame.dll";
+#elif defined(__APPLE__)
+    return base / "libgame.dylib";
+#else
+    return base / "libgame.so";
+#endif
+}
+
+} // namespace
 
 Match::Match(BotCtx& bot, const MatchID mid, GameHandle& game_handle, GameHandle::Options options,
         const UserID host_uid, const std::optional<GroupID> gid)
@@ -54,6 +85,8 @@ Match::Match(BotCtx& bot, const MatchID mid, GameHandle& game_handle, GameHandle
 
     EmplaceUser_(host_uid);
 }
+
+Match::~Match() = default;
 
 bool Match::Has_(const UserID uid) const { return users_.find(uid) != users_.end(); }
 
@@ -130,18 +163,6 @@ ErrCode Match::SetFormal(const UserID uid, MsgSenderBase& reply, const bool is_f
     return EC_OK;
 }
 
-static ErrCode ConverErrCode(const StageErrCode& stage_errcode)
-{
-    switch (stage_errcode) {
-    case StageErrCode::OK: return EC_GAME_REQUEST_OK;
-    case StageErrCode::CHECKOUT: return EC_GAME_REQUEST_CHECKOUT;
-    case StageErrCode::FAILED: return EC_GAME_REQUEST_FAILED;
-    case StageErrCode::CONTINUE: return EC_GAME_REQUEST_CONTINUE;
-    case StageErrCode::NOT_FOUND: return EC_GAME_REQUEST_NOT_FOUND;
-    default: return EC_GAME_REQUEST_UNKNOWN;
-    }
-}
-
 ErrCode Match::Request(const UserID uid, const std::optional<GroupID> gid, const std::string& msg,
                        MsgSender& reply)
 {
@@ -160,20 +181,19 @@ ErrCode Match::Request(const UserID uid, const std::optional<GroupID> gid, const
     if (MsgReader reader(msg); help_cmd_.CallIfValid(reader, reply)) {
         return EC_GAME_REQUEST_OK;
     }
-    if (main_stage_) {
+    if (state_ == State::IS_STARTED) {
         const auto pid = it->second.pid_;
-        assert(state_ == State::IS_STARTED);
         if (players_[pid].state_ == Player::State::ELIMINATED) {
             reply() << "[错误] 您已经被淘汰，无法执行游戏请求";
             return EC_MATCH_ELIMINATED;
         }
-        const auto stage_rc = main_stage_->HandleRequest(msg.c_str(), pid, gid.has_value(), reply);
-        if (stage_rc == StageErrCode::NOT_FOUND) {
+        assert(game_child_);
+        const ErrCode rc = game_child_->SendExecute(*this, pid, gid.has_value(), msg, reply);
+        if (rc == EC_GAME_REQUEST_NOT_FOUND) {
             reply() << "[错误] 未预料的游戏指令，您可以通过「帮助」（不带" META_COMMAND_SIGN "号）查看所有支持的游戏指令\n"
                         "若您想执行元指令，请尝试在请求前加「" META_COMMAND_SIGN "」，或通过「" META_COMMAND_SIGN "帮助」查看所有支持的元指令";
         }
-        Routine_();
-        return ConverErrCode(stage_rc);
+        return rc;
     }
     if (uid != host_uid_) {
         reply() << "[错误] 您并非房主，没有变更游戏设置的权限，房主是" << HostUserName_();
@@ -184,6 +204,7 @@ ErrCode Match::Request(const UserID uid, const std::optional<GroupID> gid, const
                     "若您想执行元指令，请尝试在请求前加「" META_COMMAND_SIGN "」，或通过「" META_COMMAND_SIGN "帮助」查看所有支持的元指令";
         return EC_GAME_REQUEST_NOT_FOUND;
     }
+    applied_options_log_.push_back(msg);
     KickForConfigChange_();
     reply() << "设置成功！目前配置：" << OptionInfo_() << "\n\n" << BriefInfo_();
     return EC_GAME_REQUEST_OK;
@@ -233,14 +254,47 @@ ErrCode Match::GameStart(const UserID uid, MsgSenderBase& reply)
     }
     options_.generic_options_.user_num_ = static_cast<uint32_t>(users_.size());
 
-    // make main stage
-    assert(main_stage_ == nullptr);
-    if (!(main_stage_ = game_handle_.MakeMainStage(reply, *options_.game_options_, options_.generic_options_, *this))) {
+    game_child_ = std::make_unique<MatchChildClient>(ResolveRunnerExe(), GameLibraryPath(bot_, game_handle_));
+    if (!game_child_->ok()) {
+        reply() << "[错误] 开始失败：无法启动游戏子进程";
+        game_child_.reset();
+        return EC_MATCH_UNEXPECTED_CONFIG;
+    }
+    if (!game_child_->SendInit(options_.resource_holder_.resource_dir_, options_.resource_holder_.saved_image_dir_,
+                GET_OPTION_VALUE(*bot_.option().Lock(), 计时公开提示), options_.generic_options_.bench_computers_to_player_num_,
+                options_.generic_options_.is_formal_)) {
+        reply() << "[错误] 开始失败：子进程初始化失败";
+        game_child_.reset();
+        return EC_MATCH_UNEXPECTED_CONFIG;
+    }
+    for (const auto& line : applied_options_log_) {
+        if (!game_child_->SendSetOption(line)) {
+            reply() << "[错误] 开始失败：无法同步游戏设置到子进程";
+            game_child_.reset();
+            return EC_MATCH_UNEXPECTED_CONFIG;
+        }
+    }
+    nlohmann::json players_for_child = nlohmann::json::array();
+    for (const auto& pl : players_) {
+        nlohmann::json cell;
+        if (const auto* const cid = std::get_if<ComputerID>(&pl.id_)) {
+            cell["computer"] = true;
+            cell["computer_id"] = cid->Get();
+        } else {
+            const auto& uid = std::get<UserID>(pl.id_);
+            cell["computer"] = false;
+            cell["user_id"] = uid.GetStr();
+            cell["display_name"] = bot_.GetUserName(uid.GetCStr(), gid_.has_value() ? gid_->GetCStr() : nullptr);
+            cell["avatar"] = bot_.GetUserAvatar(uid.GetCStr(), 0);
+        }
+        players_for_child.push_back(std::move(cell));
+    }
+    if (!game_child_->SendStart(*this, MatchId(), static_cast<uint32_t>(users_.size()), players_for_child)) {
         reply() << "[错误] 开始失败：不符合游戏参数的预期";
+        game_child_.reset();
         return EC_MATCH_UNEXPECTED_CONFIG;
     }
 
-    // start main stage
     state_ = State::IS_STARTED;
     BoardcastAtAll() << "游戏开始，您可以使用「帮助」命令（不带" META_COMMAND_SIGN "号），查看可执行命令";
     BoardcastAiInfo() << nlohmann::json{
@@ -248,8 +302,6 @@ ErrCode Match::GameStart(const UserID uid, MsgSenderBase& reply)
             { "state", "started" },
             { "players", std::move(players_json_array) },
         }.dump();
-    main_stage_->HandleStageBegin();
-    Routine_(); // computer act first
 
     return EC_OK;
 }
@@ -306,7 +358,7 @@ ErrCode Match::Leave(const UserID uid, MsgSenderBase& reply, const bool force)
         match_manager().UnbindMatch(uid);
         reply() << "退出成功";
         Boardcast() << "玩家 " << At(uid) << " 中途退出了游戏，他将不再参与后续的游戏进程";
-        assert(main_stage_);
+        assert(game_child_);
         assert(it->second.state_ != ParticipantUser::State::LEFT);
         it->second.state_ = ParticipantUser::State::LEFT;
         if (std::ranges::all_of(users_, [](const auto& user) { return user.second.state_ == ParticipantUser::State::LEFT; })) {
@@ -314,8 +366,7 @@ ErrCode Match::Leave(const UserID uid, MsgSenderBase& reply, const bool force)
             MatchLog_(InfoLog()) << "All users left the game";
             Terminate_();
         } else {
-            main_stage_->HandleLeave(it->second.pid_);
-            Routine_();
+            game_child_->SendLeave(it->second.pid_);
         }
     } else {
         reply() << "[错误] 退出失败：游戏已经开始，若仍要退出游戏，请使用「" META_COMMAND_SIGN "退出 强制」命令";
@@ -416,107 +467,16 @@ bool Match::SwitchHost()
 }
 
 // REQUIRE: should be protected by mutex_
-void Match::TimerController::Start(Match& match, const uint64_t sec, void* alert_arg,
-        void(*alert_cb)(void*, uint64_t))
+void Match::StartTimer(const uint64_t /*sec*/, void* /*alert_arg*/, void (*/*alert_cb*/)(void*, uint64_t))
 {
-    static const uint64_t kMinAlertSec = 10;
-    if (sec == 0) {
-        return;
-    }
-    Stop(match);
-    timer_is_over_ = std::make_shared<bool>(false);
-
-    // We must store a timer_is_over because it may be reset to true when new timer begins.
-    const auto timeout_handler = [this, timer_is_over = timer_is_over_, match_wk = match.weak_from_this()](const uint64_t /*sec*/)
-        {
-            // Handle a reference because match may be removed from match_manager if timeout cause game over.
-            auto match = match_wk.lock();
-            if (!match) {
-                return; // match is released
-            }
-#ifdef TEST_BOT
-            {
-                std::lock_guard<std::mutex> l(before_handle_timeout_mutex_);
-                before_handle_timeout_ = true;
-            }
-            before_handle_timeout_cv_.notify_all();
-
-#endif
-            // Timeout event should not be triggered during request handling, so we need lock here.
-            // timer_is_over also should protected in lock. Otherwise, a rquest may be handled after checking timer_is_over and before timeout_timer lock match.
-            std::lock_guard<std::mutex> l(match->mutex_);
-
-#ifdef TEST_BOT
-            {
-                std::lock_guard<std::mutex> l(before_handle_timeout_mutex_);
-                before_handle_timeout_ = false;
-            }
-#endif
-            // If stage has been finished by other request, timeout event should not be triggered again, so we check stage_is_over_ here.
-            // Should NOT use this->timer_is_over_ here which may be belong to a new timer.
-            if (!*timer_is_over) {
-                match->MatchLog_(DebugLog()) << "Timer timeout";
-                match->main_stage_->HandleTimeout();
-                match->Routine_();
-            } else {
-                match->MatchLog_(WarnLog()) << "Timer timeout but timer has been already over";
-            }
-        };
-
-    const auto alert_handler =
-        [alert_cb, alert_arg, timer_is_over = timer_is_over_, match_wk = match.weak_from_this()](const uint64_t alert_sec)
-        {
-            auto match = match_wk.lock();
-            if (!match) {
-                match->MatchLog_(WarnLog()) << "Timer alert but match is released sec=" << alert_sec;
-                return; // match is released
-            }
-            std::lock_guard<std::mutex> l(match->mutex_);
-            if (!*timer_is_over) {
-                match->MatchLog_(DebugLog()) << "Timer alert sec=" << alert_sec;
-                alert_cb(alert_arg, alert_sec);
-            } else {
-                match->MatchLog_(WarnLog()) << "Timer alert but timer has been already over sec=" << alert_sec;
-            }
-        };
-
-    Timer::TaskSet timeup_tasks;
-    if (kMinAlertSec > sec / 2) {
-        // time is short, we need not alert
-        timeup_tasks.emplace_front(sec, timeout_handler);
-    } else {
-        timeup_tasks.emplace_front(kMinAlertSec, timeout_handler);
-        uint64_t sum_alert_sec = kMinAlertSec;
-        for (uint64_t alert_sec = kMinAlertSec; sum_alert_sec < sec / 2; sum_alert_sec += alert_sec, alert_sec *= 2) {
-            timeup_tasks.emplace_front(alert_sec, alert_handler);
-        }
-        timeup_tasks.emplace_front(sec - sum_alert_sec, g_empty_func);
-    }
-    timer_ = std::make_unique<Timer>(std::move(timeup_tasks)); // start timer
+    MatchLog_(WarnLog()) << "StartTimer ignored on host Match (timer runs in game subprocess)";
 }
 
-// This function can be invoked event if timer is not started.
-// REQUIRE: should be protected by mutex_
-// RETURN: the remain milliseconds. The valud of zero indicates that the timer has already been over.
-void Match::TimerController::Stop(const Match& match)
-{
-    assert(!((timer_is_over_ == nullptr) ^ (timer_ == nullptr)));
-    if (timer_is_over_ == nullptr) {
-        match.MatchLog_(WarnLog()) << "Timer stop but timer has been already over";
-        return;
-    }
-    *timer_is_over_ = true;
-    timer_is_over_ = nullptr;
-    timer_ = nullptr;
-    match.MatchLog_(DebugLog()) << "Timer stop";
-}
+void Match::StopTimer() {}
 
-void Match::StartTimer(const uint64_t sec, void* alert_arg, void(*alert_cb)(void*, uint64_t))
-{
-    return timer_cntl_.Start(*this, sec, alert_arg, alert_cb);
-}
+void Match::Eliminate(const PlayerID /*pid*/) { MatchLog_(WarnLog()) << "Eliminate ignored on host Match"; }
 
-void Match::StopTimer() { return timer_cntl_.Stop(*this); }
+void Match::Hook(const PlayerID /*pid*/) { MatchLog_(WarnLog()) << "Hook ignored on host Match"; }
 
 void Match::Eliminate(const PlayerID pid)
 {
@@ -618,10 +578,35 @@ std::string Match::OptionInfo_() const
     return result;
 }
 
-void Match::OnGameOver_()
+void Match::ApplyChildPlayerState(const PlayerID pid, const std::string& state)
+{
+    if (pid.Get() >= players_.size()) {
+        return;
+    }
+    if (state == "eliminated") {
+        if (std::exchange(players_[pid.Get()].state_, Player::State::ELIMINATED) != Player::State::ELIMINATED) {
+            is_in_deduction_ = std::ranges::all_of(players_, [](const Player& p)
+                    {
+                        return std::get_if<ComputerID>(&p.id_) || p.state_ == Player::State::ELIMINATED;
+                    });
+            MatchLog_(InfoLog()) << "Eliminate player pid=" << pid << " is_in_deduction=" << Bool2Str(is_in_deduction_);
+        }
+    } else if (state == "hooked") {
+        players_[pid.Get()].state_ = Player::State::HOOKED;
+    } else if (state == "active") {
+        players_[pid.Get()].state_ = Player::State::ACTIVE;
+    }
+}
+
+void Match::ApplyChildGameOverFromScores(const std::string& scores_json)
 {
     if (state_ == State::IS_OVER) {
-        MatchLog_(WarnLog()) << "OnGameOver_ but has already been over";
+        MatchLog_(WarnLog()) << "ApplyChildGameOverFromScores but has already been over";
+        return;
+    }
+    const auto scores = nlohmann::json::parse(scores_json, nullptr, false);
+    if (!scores.is_array()) {
+        MatchLog_(ErrorLog()) << "ApplyChildGameOverFromScores: bad scores json";
         return;
     }
     std::vector<std::pair<UserID, int64_t>> user_game_scores;
@@ -629,16 +614,17 @@ void Match::OnGameOver_()
     {
         auto sender = Boardcast();
         sender << "游戏结束，公布分数：\n";
-        for (PlayerID pid = 0; pid < static_cast<uint32_t>(players_.size()); ++pid) {
-            const auto score = main_stage_->PlayerScore(pid);
+        for (const auto& row : scores) {
+            const auto pid = PlayerID{row.at("pid").get<uint32_t>()};
+            const auto score = row.at("score").get<int64_t>();
             sender << At(pid) << " " << score << "\n";
             const auto id = ConvertPid(pid);
             if (const auto pval = std::get_if<UserID>(&id); pval) {
                 user_game_scores.emplace_back(*pval, score);
-                const char* const* const achievements = main_stage_->VerdictateAchievements(pid);
-                for (const char* const* achievement_name_p = achievements; *achievement_name_p; ++achievement_name_p) {
-                    user_achievements.emplace_back(*pval, *achievement_name_p);
-                    MatchLog_(InfoLog()) << "User get achievement uid=" << *pval << " achievement=" << *achievement_name_p;
+                for (const auto& an : row.at("achievements")) {
+                    const std::string ach_name = an.get<std::string>();
+                    user_achievements.emplace_back(*pval, ach_name);
+                    MatchLog_(InfoLog()) << "User get achievement uid=" << *pval << " achievement=" << ach_name;
                 }
             }
         }
@@ -648,9 +634,9 @@ void Match::OnGameOver_()
         std::sort(user_game_scores.begin(), user_game_scores.end(),
                 [](const auto& _1, const auto& _2) { return _1.second > _2.second; });
 
-        static const auto show_score = [](const char* const name, const auto score)
+        static const auto show_score = [](const char* const name, const auto sc)
             {
-                return std::string("[") + name + (score > 0 ? "+" : "") + std::to_string(score) + "] ";
+                return std::string("[") + name + (sc > 0 ? "+" : "") + std::to_string(sc) + "] ";
             };
         if (user_game_scores.size() <= 1) {
             sender << "\n\n游戏结果不记录：因为玩家数小于 2";
@@ -687,56 +673,39 @@ void Match::OnGameOver_()
         }
 #endif
     }
-    state_ = State::IS_OVER; // is necessary because other thread may own a match reference
+    state_ = State::IS_OVER;
     game_handle_.IncreaseActivity(users_.size());
     MatchLog_(InfoLog()) << "Match is over normally";
-    Terminate_();
+    UnbindMatchSide_();
 }
 
 void Match::Help_(MsgSenderBase& reply, const bool text_mode)
 {
-    std::string outstr;
-    if (main_stage_) {
-        outstr += "## 阶段信息\n\n";
-        outstr += main_stage_->StageInfoC();
-        outstr += "\n\n";
+    if (game_child_) {
+        std::string remote;
+        if (!game_child_->FetchHelp(*this, text_mode, remote)) {
+            reply() << "[错误] 无法从游戏进程获取帮助信息";
+            return;
+        }
+        std::string outstr = "## 当前可使用的游戏命令\n\n### 查看信息\n1. " + help_cmd_.Info(true /* with_example */, !text_mode /* with_html_color */);
+        outstr += "\n";
+        outstr += remote;
+        if (text_mode) {
+            reply() << outstr;
+        } else {
+            reply() << Markdown(outstr);
+        }
+        return;
     }
-    outstr += "## 当前可使用的游戏命令";
+    std::string outstr = "## 当前可使用的游戏命令";
     outstr += "\n\n### 查看信息";
     outstr += "\n1. " + help_cmd_.Info(true /* with_example */, !text_mode /* with_html_color */);
-    if (main_stage_) {
-        outstr += main_stage_->CommandInfoC(text_mode);
-    } else {
-        outstr += "\n\n ### 配置选项";
-        outstr += options_.game_options_->Info(true, !text_mode);
-    }
+    outstr += "\n\n ### 配置选项";
+    outstr += options_.game_options_->Info(true, !text_mode);
     if (text_mode) {
         reply() << outstr;
     } else {
         reply() << Markdown(outstr);
-    }
-}
-
-void Match::Routine_()
-{
-    if (main_stage_->IsOver()) {
-        OnGameOver_();
-        return;
-    }
-    const uint64_t computer_num = players_.size() - users_.size();
-    uint64_t ok_count = 0;
-    for (uint64_t pid = 0; !main_stage_->IsOver() && ok_count < computer_num; pid = (pid + 1) % players_.size()) {
-        if (!std::get_if<ComputerID>(&players_[pid].id_)) {
-            continue;
-        }
-        if (players_[pid].state_ == Player::State::ELIMINATED || StageErrCode::OK == main_stage_->HandleComputerAct(pid, false)) {
-            ++ok_count;
-        } else {
-            ok_count = 0;
-        }
-    }
-    if (main_stage_->IsOver()) {
-        OnGameOver_();
     }
 }
 
@@ -791,7 +760,7 @@ ErrCode Match::Terminate(const bool is_force)
     }
 }
 
-void Match::Terminate_()
+void Match::UnbindMatchSide_()
 {
     for (auto& [uid, user_info] : users_) {
         if (user_info.state_ != ParticipantUser::State::LEFT) {
@@ -803,6 +772,19 @@ void Match::Terminate_()
             { "match_id", MatchId() },
             { "state", "finished" },
         }.dump();
+}
+
+void Match::Terminate_()
+{
+    game_child_.reset();
+    UnbindMatchSide_();
+}
+
+void Match::ReleaseGameChildIfOver()
+{
+    if (state_ == State::IS_OVER) {
+        game_child_.reset();
+    }
 }
 
 void Match::KickForConfigChange_()
