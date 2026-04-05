@@ -118,9 +118,9 @@ void PlayerReadyMasker::Inactivate_(const size_t index, const ActiveState new_ac
 std::string PlayerReadyMasker::StateToString_(const PlayerReadyMasker::State state)
 {
     constexpr const char* k_active_state_strs[] = {
-        [static_cast<std::underlying_type_t<ActiveState>>(ActiveState::ACTIVE)] = "",
-        [static_cast<std::underlying_type_t<ActiveState>>(ActiveState::TEMPORARILY_INACTIVE)] = ", temp_inactive",
-        [static_cast<std::underlying_type_t<ActiveState>>(ActiveState::PERMANENTLY_INACTIVE)] = ", inactive",
+        /* ACTIVE */               "",
+        /* TEMPORARILY_INACTIVE */ ", temp_inactive",
+        /* PERMANENTLY_INACTIVE */ ", inactive",
     };
     return "ready: " + std::to_string(state.is_ready_) +
         k_active_state_strs[static_cast<std::underlying_type_t<ActiveState>>(state.active_state_)];

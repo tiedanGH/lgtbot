@@ -496,7 +496,7 @@ class DetectStage : public SubGameStage<>
         return StageErrCode::CHECKOUT;
     }
 
-    virtual CheckoutErrCode OnStageTimeout()
+    virtual CheckoutErrCode OnStageTimeout() override
     {
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             if (!Main().GetPlayers()[pid].has_been_witch_) {
@@ -576,7 +576,7 @@ class ActStage : public SubGameStage<>
         return StageErrCode::CHECKOUT;
     }
 
-    virtual CheckoutErrCode OnStageOver()
+    virtual CheckoutErrCode OnStageOver() override
     {
         TryReverseAction_();
         return StageErrCode::CHECKOUT;
@@ -858,6 +858,8 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
             case Occupation::兰斯洛特:
                 sender << "\n\n- 场上有两名分别位于不同阵营的【兰斯洛特】——";
                 switch (GAME_OPTION(兰斯洛特模式)) {
+                    case LancelotMode::disable:
+                        break;
                     case LancelotMode::implicit_three_rounds:
                         sender << "从第三次任务开始，每次任务开始前，会翻出一张兰斯洛特转换卡，如果翻出了「转换」标识，则你和另一名【兰斯洛特】的阵营对换";
                         break;
@@ -873,6 +875,8 @@ void MainStage::FirstStageFsm(SubStageFsmSetter setter)
                             }
                         }
                 }
+                break;
+            default:
                 break;
         }
         if (players_[pid].can_assassin_) {

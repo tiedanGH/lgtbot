@@ -101,7 +101,7 @@ struct SyncMahjongOption
 
 template <size_t PlayerNum>
     requires (PlayerNum == 3 || PlayerNum == 4)
-static constexpr std::array<BaseTile, k_tile_type_num> k_dora_sign_to_dora = []()
+static const std::array<BaseTile, k_tile_type_num> k_dora_sign_to_dora = []()
     {
         std::array<BaseTile, k_tile_type_num> result;
         auto fill_result = [&](const BaseTile start, const BaseTile end)
@@ -216,6 +216,8 @@ class SyncMahjongGamePlayer
                 case ActionState::NOTIFIED_RON:
                     Ron(); // may be failed
                     break;
+                default:
+                    break;
             }
         }
     }
@@ -234,6 +236,8 @@ class SyncMahjongGamePlayer
             case ActionState::AFTER_CHI_PON:
                 KiriInternal_(false /*is_tsumo*/, false /*richii*/, *hand_.begin());
                 hand_.erase(hand_.begin());
+                break;
+            default:
                 break;
         }
         state_ = ActionState::ROUND_OVER;

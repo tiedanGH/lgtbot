@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <set>
+#include <utility>
 #include <variant>
 #include <random>
 #include <algorithm>
@@ -32,10 +33,10 @@ const GameProperties k_properties {
 uint64_t MaxPlayerNum(const CustomOptions& options) { return 9; } // 0 indicates no max-player limits
 uint32_t Multiple(const CustomOptions& options) { return 3; } // the default score multiple for the game, 0 for a testing game, 1 for a formal game, 2 or 3 for a long formal game
 const MutableGenericOptions k_default_generic_options{
-    .is_formal_{false},
+    .is_formal_ = false,
 };
 
-const char* const k_role_rules[Occupation::Count()] = {
+const char* const k_role_rules[Occupation::Count()] {
     // killer team
     [static_cast<uint32_t>(Occupation(Occupation::杀手))] = R"EOF(【杀手 | 杀手阵营】
 - 开局时知道【杀手】的代号，但不知道代号与职位的对应关系
@@ -60,7 +61,7 @@ const char* const k_role_rules[Occupation::Count()] = {
         - 如果伤害是 10，则可以指定 1 或 2 个代号
     - 【侦探】侦查的结果，是攻击指令中**最靠前**的角色，例如：当刺客执行「攻击 B A C 5」时，侦探侦查到的结果是「攻击 B」)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::双子（邪）))] = R"EOF(【双子 | 平民/杀手阵营
+    /* static_cast<uint32_t>(Occupation(Occupation::双子_邪)) */ R"EOF(【双子 | 平民/杀手阵营
 - 场上有两位【双子】，分别在「杀手阵营」和「平民阵营」，每位【双子】都知道双方的代号和阵营
 - 【双子】不能成为【双子】攻击的目标，包括自己
 - 如果【双子】中的一方死亡，另一方存活，则从下一回合起，存活方将加入死亡方的阵营（如果【双子】的死亡导致游戏结束，则存活方阵营**不发生**改变）)EOF",
@@ -82,53 +83,53 @@ const char* const k_role_rules[Occupation::Count()] = {
     - 每种伤害值 N 只能使用一次)EOF",
 
     // civilian team
-    [static_cast<uint32_t>(Occupation(Occupation::平民))] = R"EOF(【平民 | 平民阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::平民)) */ R"EOF(【平民 | 平民阵营】
 - 无特殊能力)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::圣女))] = R"EOF(【圣女 | 平民阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::圣女)) */ R"EOF(【圣女 | 平民阵营】
 - 不允许连续两回合使用「攻击 <代号>」指令，不受治愈次数的限制
 - 攻击「平民阵营」角色不扣除 HP)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::侦探))] = R"EOF(【侦探 | 平民阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::侦探)) */ R"EOF(【侦探 | 平民阵营】
 - 特殊技能「侦查 <代号>」：
     - 首回合不允许使用，且不允许连续两回合使用，此外次数不限
     - 当前回合结束时，将被私信告知指定角色的行动**种类**和行动**目标**（HP 具体数值保密），结果只可能有三种：「攻击 <代号>」、「治愈 <代号>」或「其它」（除攻击和治愈外的其它行动，包括 pass 等）
     - 可对死亡的角色使用（参见【恶灵】）
     - 侦查到的结果**取决于角色的行动指令**（*例如，有角色 A 打算攻击【杀手】B，结果本回合【替身】C 使用了挡刀技能，尽管实际扣除 HP 的是 C，但【侦探】侦查到的结果却是「A 攻击 B」*）)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::灵媒))] = R"EOF(【灵媒 | 平民阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::灵媒)) */ R"EOF(【灵媒 | 平民阵营】
 - 特殊技能「通灵 <代号>」：
     - 一局内仅限一次，被指定的角色**需已死亡**
     - 当前回合结束时，会被私信告知该角色的职位，若为【恶灵】，则他下回合起**失去行动能力**)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::守卫))] = R"EOF(【守卫 | 平民阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::守卫)) */ R"EOF(【守卫 | 平民阵营】
 - 特殊技能「盾反 <代号> <血量> (<代号> <血量>)...」：
     - 预测指定的 1 或 2 名角色下一回合的血量（如「盾反 A 70 B 50」），若预测其中某名角色成功，且该角色不是【替身】挡刀的目标，则当前回合**攻击**该角色造成的减 HP 效果会被转移到**伤害来源**身上（视为对这名角色**盾反成功**）
     - 次数不限，但不允许相邻两回合指定同一名角色
     - 当前回合结束时，会被私信告知对那些角色盾反成功)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::双子（正）))] = R"EOF(【双子 | 平民/杀手阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::双子_正)) */ R"EOF(【双子 | 平民/杀手阵营】
 - 场上有两位【双子】，分别在「杀手阵营」和「平民阵营」，每位【双子】都知道双方的代号和阵营
 - 【双子】不能成为【双子】攻击的目标，包括自己
 - 如果【双子】中的一方死亡，另一方存活，则从下一回合起，存活方将加入死亡方的阵营（如果【双子】的死亡导致游戏结束，则存活方阵营**不发生**改变）)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::骑士))] = R"EOF(【骑士 | 平民阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::骑士)) */ R"EOF(【骑士 | 平民阵营】
 - 游戏开始时【骑士】的中之人会被公布
 - 【骑士】不知道自己的代号
 - 当【骑士】攻击某名自己外的角色时，若也恰好受到该角色的攻击，则该角色的攻击伤害为 0，且【骑士】可以知晓该情况)EOF",
 
     // special team
-    [static_cast<uint32_t>(Occupation(Occupation::初版内奸))] = R"EOF(【初版内奸 | 第三方阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::初版内奸)) */ R"EOF(【初版内奸 | 第三方阵营】
 - 当 **【初版内奸】死亡**时，【初版内奸】失败
 - 开局时知道【杀手】和所有【平民】的代号，但不知道代号与职位的对应关系
 - 【杀手】死亡后的下一回合，【初版内奸】可执行「攻击 <代号> 25」和「治愈 <代号> 15」的行动指令)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::内奸))] = R"EOF(【内奸 | 第三方阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::内奸)) */ R"EOF(【内奸 | 第三方阵营】
 - 当 **【内奸】死亡**时，【内奸】失败
 - 开局时知道【杀手】的中之人和所有【平民】的中之人
 - 【杀手】死亡后的下一回合，【内奸】可执行「攻击 <代号> 25」和「治愈 <代号> 15」的行动指令)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::特工))] = R"EOF(【特工 | 第三方阵营】
+    /* static_cast<uint32_t>(Occupation(Occupation::特工)) */ R"EOF(【特工 | 第三方阵营】
 - 当「平民阵营」和「杀手阵营」同时满足失败条件时，【特工】取得单独胜利，否则【特工】失败（达到最大回合限制时，【特工】也会失败）
 - 无法使用「攻击 <代号>」
 - 当某角色死亡时，你获知他当前所在阵营
@@ -143,7 +144,7 @@ const char* const k_role_rules[Occupation::Count()] = {
     - 使用该技能的前提条件是对这些角色累积了隐藏伤害
     - 该技能效果等同于 <攻击 代号 血量 (<代号> <血量>)...>，即 <释放> 造成的伤害可以被挡刀或盾反，【侦探】侦查的结果，是指令中**最靠前**的角色，例如：当特工执行「释放 B A C」时，侦探侦查到的结果是「攻击 B」)EOF",
 
-    [static_cast<uint32_t>(Occupation(Occupation::人偶))] = R"EOF(【人偶 | NPC】
+    /* static_cast<uint32_t>(Occupation(Occupation::人偶)) */ R"EOF(【人偶 | NPC】
 - 不会做出任何行动)EOF",
 
 };
@@ -208,7 +209,7 @@ bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const Gener
         return false;
     }
     for (const auto occupation : std::initializer_list<Occupation>
-            {Occupation::替身, Occupation::初版内奸, Occupation::内奸, Occupation::守卫, Occupation::双子（邪）, Occupation::双子（正）}) {
+            {Occupation::替身, Occupation::初版内奸, Occupation::内奸, Occupation::守卫, Occupation::双子_邪, Occupation::双子_正}) {
         if (std::ranges::count(occupation_list, occupation) > 1) {
             reply() << "[错误] 身份列表中" << occupation << "个数不允许大于 1，请修正配置";
             return false;
@@ -647,7 +648,7 @@ class RoleManager
             }
         }
         assert(false);
-        return *static_cast<RoleBase*>(nullptr);
+        std::unreachable();
     }
 
     RoleBase* GetRole(const Occupation occupation)
@@ -1156,8 +1157,8 @@ class MainStage : public MainGameStage<>
                     other_role->SetAllowHeavyCure(true);
                     Global().Tell(*other_role->PlayerId()) << "杀手已经死亡，您获得了造成 " << k_heavy_hurt_hp
                             << " 点伤害和治愈 " << k_heavy_cure_hp << " 点 HP 的权利";
-                } else if (((role.GetOccupation() == Occupation::双子（正） && (other_role = role_manager_.GetRole(Occupation::双子（邪）))) ||
-                            (role.GetOccupation() == Occupation::双子（邪） && (other_role = role_manager_.GetRole(Occupation::双子（正）))))
+                } else if (((role.GetOccupation() == Occupation::双子_正 && (other_role = role_manager_.GetRole(Occupation::双子_邪))) ||
+                            (role.GetOccupation() == Occupation::双子_邪 && (other_role = role_manager_.GetRole(Occupation::双子_正))))
                         && other_role->GetHp() > 0) { // cannot use IsAlive() because the is_alive_ field may have not been updated
                     other_role->SetNextRoundTeam(role.GetTeam());
                     Global().Tell(*other_role->PlayerId()) << "另一位双子死亡，您下一回合的阵营变更为：" << role.GetTeam() << "阵营";
@@ -1360,7 +1361,7 @@ class MainStage : public MainGameStage<>
                     {Occupation::杀手, Occupation::恶灵, Occupation::守卫, Occupation::平民, Occupation::初版内奸},
                 });
         case 6: return make_roles(std::initializer_list<std::initializer_list<Occupation>>{
-                    {Occupation::杀手, Occupation::刺客, Occupation::双子（邪）, Occupation::双子（正）, Occupation::侦探, Occupation::圣女},
+                    {Occupation::杀手, Occupation::刺客, Occupation::双子_邪, Occupation::双子_正, Occupation::侦探, Occupation::圣女},
                 });
         case 7: return make_roles(std::initializer_list<std::initializer_list<Occupation>>{
                     {Occupation::杀手, Occupation::替身, Occupation::侦探, Occupation::圣女, Occupation::平民, Occupation::平民, Occupation::内奸},
@@ -1747,7 +1748,7 @@ class KillerRole : public RoleBase
         is_allowed_heavy_cure_ = true;
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         if (!private_info_.empty()) {
             return private_info_;
@@ -1767,7 +1768,7 @@ class BodyDoubleRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         if (main_stage.Global().PlayerNum() > 5) {
             if (GET_OPTION_VALUE(main_stage.Global().Options(), 身份互通)) {
@@ -1795,7 +1796,7 @@ class GhostRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         if (main_stage.Global().PlayerNum() > 5) {
             if (GET_OPTION_VALUE(main_stage.Global().Options(), 身份互通)) {
@@ -1816,7 +1817,7 @@ class AssassinRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         if (main_stage.Global().PlayerNum() > 5) {
             if (GET_OPTION_VALUE(main_stage.Global().Options(), 身份互通)) {
@@ -1878,7 +1879,7 @@ class WitchRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         if (main_stage.Global().PlayerNum() > 5) {
             if (GET_OPTION_VALUE(main_stage.Global().Options(), 身份互通)) {
@@ -2086,15 +2087,15 @@ class TwinRole : public RoleBase
 {
   public:
     TwinRole(const uint64_t pid, const Token token, const RoleOption& option, const uint64_t role_num, RoleManager& role_manager)
-        : RoleBase(pid, token, Occupation::Condition(k_is_killer_team, Occupation::双子（邪）, Occupation::双子（正）),
+        : RoleBase(pid, token, Occupation::Condition(k_is_killer_team, Occupation::双子_邪, Occupation::双子_正),
                 Team::Condition(k_is_killer_team, Team::杀手, Team::平民), option, role_manager)
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         return RoleBase::PrivateInfo(main_stage) + "，" +
-            TokenInfoForRoles(role_manager_, std::array<Occupation, 2>{Occupation::双子（正）, Occupation::双子（邪）}) +
+            TokenInfoForRoles(role_manager_, std::array<Occupation, 2>{Occupation::双子_正, Occupation::双子_邪}) +
             "，您当前属于" + GetTeam().ToString() + "阵营";
     }
 
@@ -2102,7 +2103,7 @@ class TwinRole : public RoleBase
     {
         for (const auto& token_hp : action.token_hps_) {
             const auto occupation = role_manager_.GetRole(std::get<Token>(token_hp)).GetOccupation();
-            if (occupation == Occupation::双子（正） || occupation == Occupation::双子（邪）) {
+            if (occupation == Occupation::双子_正 || occupation == Occupation::双子_邪) {
                 reply() << "攻击失败：您无法对自己和另一名双子进行攻击";
                 return false;
             }
@@ -2119,7 +2120,7 @@ class KnightRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         return std::string("您的职业是「") + GetOccupation().ToString() + "」，不知道自己的代号";
     }
@@ -2133,7 +2134,7 @@ class FirstVersionTraitorRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         return RoleBase::PrivateInfo(main_stage) + "，" +
             TokenInfoForRoles(role_manager_, std::array<Occupation, 2>{Occupation::杀手, Occupation::平民});
@@ -2148,7 +2149,7 @@ class TraitorRole : public RoleBase
     {
     }
 
-    virtual std::string PrivateInfo(const MainStage& main_stage) const
+    virtual std::string PrivateInfo(const MainStage& main_stage) const override
     {
         return RoleBase::PrivateInfo(main_stage) + "，" + main_stage.PlayerInfoForRole(role_manager_, Occupation::杀手) + "，" +
             main_stage.PlayerInfoForRole(role_manager_, Occupation::平民);
@@ -2171,7 +2172,7 @@ class AgentRole : public RoleBase
         return false;
     }
 
-    virtual bool Act(const AssignHiddenDamangeAction& action, MsgSenderBase& reply, StageUtility& utility)
+    virtual bool Act(const AssignHiddenDamangeAction& action, MsgSenderBase& reply, StageUtility& utility) override
     {
         int32_t sum_hp = 0;
         for (const auto& [token, hp] : action.token_hps_) {
@@ -2199,7 +2200,7 @@ class AgentRole : public RoleBase
         return true;
     }
 
-    virtual bool Act(const FlushHiddenDamangeAction& action, MsgSenderBase& reply, StageUtility& utility)
+    virtual bool Act(const FlushHiddenDamangeAction& action, MsgSenderBase& reply, StageUtility& utility) override
     {
         for (const auto& token : action.tokens_) {
             if (hidden_damages_[token.id_] == 0) {
@@ -2234,7 +2235,7 @@ class AgentRole : public RoleBase
     std::vector<int32_t> hidden_damages_;
 };
 
-MainStage::RoleMaker MainStage::k_role_makers_[Occupation::Count()] = {
+MainStage::RoleMaker MainStage::k_role_makers_[Occupation::Count()] {
     // killer team
     [static_cast<uint32_t>(Occupation(Occupation::杀手))] = &MainStage::MakeRole_<KillerRole>,
     [static_cast<uint32_t>(Occupation(Occupation::替身))] = &MainStage::MakeRole_<BodyDoubleRole>,
@@ -2244,17 +2245,17 @@ MainStage::RoleMaker MainStage::k_role_makers_[Occupation::Count()] = {
     [static_cast<uint32_t>(Occupation(Occupation::魔女))] = &MainStage::MakeRole_<WitchRole>,
     [static_cast<uint32_t>(Occupation(Occupation::囚犯))] = &MainStage::MakeRole_<PrisonerRole>,
     // civilian team
-    [static_cast<uint32_t>(Occupation(Occupation::平民))] = &MainStage::MakeRole_<CivilianRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::圣女))] = &MainStage::MakeRole_<GoddessRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::侦探))] = &MainStage::MakeRole_<DetectiveRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::灵媒))] = &MainStage::MakeRole_<SorcererRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::守卫))] = &MainStage::MakeRole_<GuardRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::双子（正）))] = &MainStage::MakeRole_<TwinRole<false>>,
-    [static_cast<uint32_t>(Occupation(Occupation::骑士))] = &MainStage::MakeRole_<KnightRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::平民)) */ &MainStage::MakeRole_<CivilianRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::圣女)) */ &MainStage::MakeRole_<GoddessRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::侦探)) */ &MainStage::MakeRole_<DetectiveRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::灵媒)) */ &MainStage::MakeRole_<SorcererRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::守卫)) */ &MainStage::MakeRole_<GuardRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::双子_正)) */ &MainStage::MakeRole_<TwinRole<false>>,
+    /* static_cast<uint32_t>(Occupation(Occupation::骑士)) */ &MainStage::MakeRole_<KnightRole>,
     // special team
-    [static_cast<uint32_t>(Occupation(Occupation::初版内奸))] = &MainStage::MakeRole_<FirstVersionTraitorRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::内奸))] = &MainStage::MakeRole_<TraitorRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::特工))] = &MainStage::MakeRole_<AgentRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::初版内奸)) */ &MainStage::MakeRole_<FirstVersionTraitorRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::内奸)) */ &MainStage::MakeRole_<TraitorRole>,
+    /* static_cast<uint32_t>(Occupation(Occupation::特工)) */ &MainStage::MakeRole_<AgentRole>,
 };
 
 auto* MakeMainStage(MainStageFactory factory) { return factory.Create<MainStage>(); }

@@ -32,7 +32,7 @@ const GameProperties k_properties {
 uint64_t MaxPlayerNum(const CustomOptions& options) { return 2; }// 0 indicates no max-player limits
 uint32_t Multiple(const CustomOptions& options) { return 2; }
 const MutableGenericOptions k_default_generic_options{
-    .is_formal_{false},
+    .is_formal_ = false,
 };
 const std::vector<RuleCommand> k_rule_commands = {};
 

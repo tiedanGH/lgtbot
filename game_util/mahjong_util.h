@@ -15,6 +15,7 @@
 #include "Mahjong/Table.h"
 
 #include "utility/html.h"
+#include "utility/random.h"
 
 static auto operator<=>(const Tile& _1, const Tile& _2)
 {
@@ -321,7 +322,7 @@ static std::string YakusHtml(const std::string& image_path, const Tile& tile, co
         if (std::ranges::find(except_yakus, yaku) != except_yakus.end()) {
             continue;
         }
-        if (newline = !newline) {
+        if ((newline = !newline)) {
             table.AppendRow();
         }
         const uint32_t offset = newline ? 0 : 2;
@@ -358,18 +359,8 @@ inline void ShuffleTiles(const TilesOption& option, std::array<Tile, k_tile_type
     }
 
     // shuffle tiles
-    std::variant<std::random_device, std::seed_seq> rd;
-    std::mt19937 g([&]
-        {
-            if (option.seed_.empty()) {
-                auto& real_rd = rd.emplace<std::random_device>();
-                return std::mt19937(real_rd());
-            } else {
-                auto& real_rd = rd.emplace<std::seed_seq>(option.seed_.begin(), option.seed_.end());
-                return std::mt19937(real_rd);
-            }
-        }());
-    std::shuffle(tiles.begin(), tiles.end(), g);
+    auto g = MakeRng(option.seed_);
+    SeededShuffle(tiles.begin(), tiles.end(), g);
 }
 
 } // namespace mahjong

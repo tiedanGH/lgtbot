@@ -48,10 +48,10 @@ struct Coordinate
     int32_t y_;
 };
 
-template <Direct direct> const Coordinate k_direct_step;
-template <> const Coordinate k_direct_step<Direct::TOP_LEFT>{1, 1};
-template <> const Coordinate k_direct_step<Direct::VERT>{0, 2};
-template <> const Coordinate k_direct_step<Direct::TOP_RIGHT>{-1, 1};
+template <Direct direct> constexpr Coordinate k_direct_step{0, 0};
+template <> constexpr Coordinate k_direct_step<Direct::TOP_LEFT>{1, 1};
+template <> constexpr Coordinate k_direct_step<Direct::VERT>{0, 2};
+template <> constexpr Coordinate k_direct_step<Direct::TOP_RIGHT>{-1, 1};
 
 class AreaCard
 {

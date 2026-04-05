@@ -91,7 +91,7 @@ bool MatchChildClient::SendSetOption(const std::string& text)
     return resp.is_object() && resp.value("ok", false);
 }
 
-bool MatchChildClient::SendStart(Match& /*match*/, const uint64_t match_id, const uint32_t user_num, const nlohmann::json& players_json)
+bool MatchChildClient::SendStart(Match& match, const uint64_t match_id, const uint32_t user_num, const nlohmann::json& players_json)
 {
     nlohmann::json j;
     j["op"] = "start";
@@ -101,12 +101,26 @@ bool MatchChildClient::SendStart(Match& /*match*/, const uint64_t match_id, cons
     if (!WriteJson(j)) {
         return false;
     }
-    std::string raw;
-    if (!ReadJsonFrame(child_out_, raw)) {
-        return false;
+    for (;;) {
+        std::string raw;
+        if (!ReadJsonFrame(child_out_, raw)) {
+            return false;
+        }
+        const auto frame = nlohmann::json::parse(raw, nullptr, false);
+        if (!frame.is_object()) {
+            continue;
+        }
+        const std::string op = frame.value("op", "");
+        if (op == "post") {
+            ApplyPost(match, frame);
+        } else if (op == "player_state") {
+            ApplyPlayerState(match, frame);
+        } else if (op == "game_over") {
+            ApplyGameOver(match, frame);
+        } else if (op == "ack") {
+            return frame.value("ok", false);
+        }
     }
-    const auto resp = nlohmann::json::parse(raw, nullptr, false);
-    return resp.is_object() && resp.value("ok", false);
 }
 
 void MatchChildClient::ApplyPost(Match& match, const nlohmann::json& j) const
@@ -218,17 +232,31 @@ ErrCode MatchChildClient::SendExecute(Match& match, const PlayerID player_id, co
     }
 }
 
-bool MatchChildClient::SendLeave(const PlayerID player_id)
+bool MatchChildClient::SendLeave(Match& match, const PlayerID player_id)
 {
     if (!WriteJson(nlohmann::json{{"op", "leave"}, {"player_id", player_id.Get()}})) {
         return false;
     }
-    std::string raw;
-    if (!ReadJsonFrame(child_out_, raw)) {
-        return false;
+    for (;;) {
+        std::string raw;
+        if (!ReadJsonFrame(child_out_, raw)) {
+            return false;
+        }
+        const auto frame = nlohmann::json::parse(raw, nullptr, false);
+        if (!frame.is_object()) {
+            continue;
+        }
+        const std::string op = frame.value("op", "");
+        if (op == "post") {
+            ApplyPost(match, frame);
+        } else if (op == "player_state") {
+            ApplyPlayerState(match, frame);
+        } else if (op == "game_over") {
+            ApplyGameOver(match, frame);
+        } else if (op == "ack") {
+            return frame.value("ok", false);
+        }
     }
-    const auto resp = nlohmann::json::parse(raw, nullptr, false);
-    return resp.is_object() && resp.value("ok", false);
 }
 
 bool MatchChildClient::FetchHelp(Match& match, const bool text_mode, std::string& text_out)

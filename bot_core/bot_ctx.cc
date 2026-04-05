@@ -88,7 +88,8 @@ static void LoadGame(HINSTANCE mod, GameHandleMap& game_handles)
         return proc;
     };
     try {
-        const lgtbot::game::GameInfo game_info = reinterpret_cast<lgtbot::game::GameInfo(*)()>(load_proc("GetGameInfo"))();
+        lgtbot::game::GameInfo game_info;
+        reinterpret_cast<void(*)(lgtbot::game::GameInfo*)>(load_proc("GetGameInfo"))(&game_info);
 
         GameHandle::BasicInfo basic_info = *game_info.properties_;
         basic_info.module_name_ = game_info.module_name_;
@@ -118,7 +119,7 @@ static void LoadGame(HINSTANCE mod, GameHandleMap& game_handles)
 }
 
 // TODO: use std::expect
-static std::variant<GameHandleMap, const char*> LoadGameModules(const char* const games_path)
+std::variant<GameHandleMap, const char*> BotCtx::LoadGameModules(const char* const games_path)
 {
     GameHandleMap game_handles;
     if (games_path == nullptr) {

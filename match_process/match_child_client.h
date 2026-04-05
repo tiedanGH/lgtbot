@@ -37,7 +37,7 @@ class MatchChildClient
 
     [[nodiscard]] ErrCode SendExecute(Match& match, const PlayerID player_id, const bool is_public, const std::string& text, MsgSender& reply);
 
-    [[nodiscard]] bool SendLeave(const PlayerID player_id);
+    [[nodiscard]] bool SendLeave(Match& match, const PlayerID player_id);
 
     [[nodiscard]] bool FetchHelp(Match& match, const bool text_mode, std::string& text_out);
 

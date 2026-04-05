@@ -80,9 +80,9 @@ Match::Match(BotCtx& bot, const MatchID mid, GameHandle& game_handle, GameHandle
                 lgtbot::game::MutableGenericOptions{std::move(options.generic_options_)}
             },
           }
+        , applied_options_log_(std::move(options.applied_log_))
         , group_sender_(gid.has_value() ? std::optional<MsgSender>(bot.MakeMsgSender(*gid_, this)) : std::nullopt)
 {
-
     EmplaceUser_(host_uid);
 }
 
@@ -295,6 +295,11 @@ ErrCode Match::GameStart(const UserID uid, MsgSenderBase& reply)
         return EC_MATCH_UNEXPECTED_CONFIG;
     }
 
+    if (state_ == State::IS_OVER) {
+        // Game ended immediately during start (e.g. single-user mode with instant finish)
+        game_child_.reset();
+        return EC_OK;
+    }
     state_ = State::IS_STARTED;
     BoardcastAtAll() << "游戏开始，您可以使用「帮助」命令（不带" META_COMMAND_SIGN "号），查看可执行命令";
     BoardcastAiInfo() << nlohmann::json{
@@ -366,7 +371,7 @@ ErrCode Match::Leave(const UserID uid, MsgSenderBase& reply, const bool force)
             MatchLog_(InfoLog()) << "All users left the game";
             Terminate_();
         } else {
-            game_child_->SendLeave(it->second.pid_);
+            (void)game_child_->SendLeave(*this, it->second.pid_);
         }
     } else {
         reply() << "[错误] 退出失败：游戏已经开始，若仍要退出游戏，请使用「" META_COMMAND_SIGN "退出 强制」命令";

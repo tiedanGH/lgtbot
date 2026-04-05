@@ -102,7 +102,7 @@ class AnyArg : public MsgArgChecker<std::string>
         }
         return reader.NextArg();
     }
-    virtual std::string ArgString(const std::string& value) const { return value; }
+    virtual std::string ArgString(const std::string& value) const override { return value; }
 
    private:
     const std::string format_info_;
@@ -142,7 +142,7 @@ class BoolChecker : public MsgArgChecker<bool>
             return std::nullopt;
         }
     }
-    virtual std::string ArgString(const bool& value) const { return value ? true_str_ : false_str_; }
+    virtual std::string ArgString(const bool& value) const override { return value ? true_str_ : false_str_; }
 
    private:
     const std::string true_str_;
@@ -171,7 +171,7 @@ class AlterChecker : public MsgArgChecker<T>
     {
         return arg_map_.empty() ? "（错误，可选项为空）" : arg_map_.begin()->first;
     }
-    virtual std::optional<T> Check(MsgReader& reader) const
+    virtual std::optional<T> Check(MsgReader& reader) const override
     {
         if (!reader.HasNext()) {
             return std::nullopt;
@@ -180,7 +180,7 @@ class AlterChecker : public MsgArgChecker<T>
         const auto it = arg_map_.find(s);
         return it == arg_map_.end() ? std::optional<T>() : it->second;
     }
-    virtual std::string ArgString(const T& value) const
+    virtual std::string ArgString(const T& value) const override
     {
         for (const auto& [k, v] : arg_map_) {
             if (v == value) {
@@ -232,7 +232,7 @@ class ArithChecker : public MsgArgChecker<T>
     virtual std::string EscapedFormatInfo() const override { return escaped_format_info_; }
     virtual std::string ColoredFormatInfo() const override { return colored_format_info_; }
     virtual std::string ExampleInfo() const override { return std::to_string(min_ == max_ ? min_ : min_ + 1); }
-    virtual std::optional<T> Check(MsgReader& reader) const
+    virtual std::optional<T> Check(MsgReader& reader) const override
     {
         if (!reader.HasNext()) {
             return std::nullopt;
@@ -249,7 +249,7 @@ class ArithChecker : public MsgArgChecker<T>
             return {};
         }
     }
-    virtual std::string ArgString(const T& value) const { return std::to_string(value); }
+    virtual std::string ArgString(const T& value) const override { return std::to_string(value); }
 
   private:
     static std::string FormatInfoInternal_(const std::string& meaning, const T min, const T max)
@@ -286,7 +286,7 @@ class BasicChecker : public MsgArgChecker<T>
     virtual std::string EscapedFormatInfo() const override { return escaped_format_info_; }
     virtual std::string ColoredFormatInfo() const override { return colored_format_info_; }
     virtual std::string ExampleInfo() const override { return example_info_; }
-    virtual std::optional<T> Check(MsgReader& reader) const
+    virtual std::optional<T> Check(MsgReader& reader) const override
     {
         if (!reader.HasNext()) {
             return std::nullopt;
@@ -297,7 +297,7 @@ class BasicChecker : public MsgArgChecker<T>
             return std::nullopt;
         };
     }
-    virtual std::string ArgString(const T& value) const
+    virtual std::string ArgString(const T& value) const override
     {
         std::stringstream ss;
         ss << value;
@@ -368,7 +368,7 @@ class RepeatableCheckerBase : public MsgArgChecker<std::vector<typename Checker:
         return ret;
     }
 
-    virtual std::string ArgString(const std::vector<typename Checker::arg_type>& value_vec) const
+    virtual std::string ArgString(const std::vector<typename Checker::arg_type>& value_vec) const override
     {
         if (value_vec.empty()) {
             return "";
@@ -475,7 +475,7 @@ class OptionalChecker : public MsgArgChecker<std::optional<typename Checker::arg
             return std::nullopt;
         }
     }
-    virtual std::string ArgString(const std::optional<typename Checker::arg_type>& value) const
+    virtual std::string ArgString(const std::optional<typename Checker::arg_type>& value) const override
     {
         return value.has_value() ? checker_.ArgString(*value) : "";
     }
@@ -513,7 +513,7 @@ class OptionalDefaultChecker : public MsgArgChecker<typename Checker::arg_type>
             return std::nullopt;
         }
     }
-    virtual std::string ArgString(const Checker::arg_type& value) const { return checker_.ArgString(value); }
+    virtual std::string ArgString(const Checker::arg_type& value) const override { return checker_.ArgString(value); }
 
   private:
     const Checker::arg_type default_value_;
@@ -543,7 +543,7 @@ class BatchChecker : public MsgArgChecker<std::tuple<typename Checkers::arg_type
         std::tuple<typename Checkers::arg_type...> ret;
         return Check_(ret, reader) ? std::optional{ret} : std::nullopt;;
     }
-    virtual std::string ArgString(const std::tuple<typename Checkers::arg_type...>& value) const
+    virtual std::string ArgString(const std::tuple<typename Checkers::arg_type...>& value) const override
     {
         return ArgString_(value);
     }
@@ -613,7 +613,7 @@ class EnumChecker : public MsgArgChecker<Enum>
         return Check(reader.NextArg());
     }
     virtual std::optional<Enum> Check(const std::string& str) const { return Enum::Parse(str); }
-    virtual std::string ArgString(const Enum& value) const { return value.ToString(); }
+    virtual std::string ArgString(const Enum& value) const override { return value.ToString(); }
 
   private:
     static std::string FormatInfoInternal_()
@@ -668,7 +668,7 @@ class FlagsChecker : public MsgArgChecker<typename Enum::BitSet>
         }
         return ret;
     }
-    virtual std::string ArgString(const Enum::BitSet& value) const
+    virtual std::string ArgString(const Enum::BitSet& value) const override
     {
         std::string result;
         for (const auto e : Enum::Members()) {

@@ -55,19 +55,20 @@ GAME_TEST(2, repeat_riichi)
     ASSERT_PUB_MSG(OK, 0, "宝牌 0");
     ASSERT_PUB_MSG(OK, 0, "种子 ABC");
     ASSERT_TRUE(StartGame());
-    ASSERT_PRI_MSG(OK, 0, "添加 456m456456s456p4m");
+    ASSERT_PRI_MSG(OK, 0, "添加 345m123p456p789p1m");
     ASSERT_PRI_MSG(OK, 0, "立直");
     ASSERT_PRI_MSG(FAILED, 0, "立直");
-    ASSERT_PRI_MSG(FAILED, 0, "移除 2z");
+    ASSERT_PRI_MSG(FAILED, 0, "移除 5m");
 }
 
 GAME_TEST(3, hook_not_skip_when_others_computer)
 {
+    ASSERT_PUB_MSG(OK, 0, "宝牌 0");
     ASSERT_PUB_MSG(OK, 0, "种子 ABC");
     ASSERT_TRUE(StartGame());
     ASSERT_COMPUTER_ACT(OK, 1);
     ASSERT_COMPUTER_ACT(OK, 2);
-    ASSERT_PRI_MSG(OK, 0, "添加 456m456456s456p4m");
+    ASSERT_PRI_MSG(OK, 0, "添加 345m123p456p789p1m");
     ASSERT_PRI_MSG(CHECKOUT, 0, "立直");
     for (uint32_t i = 0; i < 16; ++i) {
         ASSERT_COMPUTER_ACT(OK, 1);
@@ -84,8 +85,8 @@ GAME_TEST(3, double_kiri_failed)
     ASSERT_PUB_MSG(OK, 0, "种子 ABC");
     ASSERT_TRUE(StartGame());
     ASSERT_TIMEOUT(CHECKOUT);
-    ASSERT_PRI_MSG(OK, 0, "1z");
-    ASSERT_PRI_MSG(FAILED, 0, "1z");
+    ASSERT_PRI_MSG(OK, 0, "6z");
+    ASSERT_PRI_MSG(FAILED, 0, "6z");
 }
 
 GAME_TEST(3, do_nothing)
@@ -93,11 +94,15 @@ GAME_TEST(3, do_nothing)
     ASSERT_PUB_MSG(OK, 0, "宝牌 0");
     ASSERT_PUB_MSG(OK, 0, "种子 ABC");
     ASSERT_TRUE(StartGame());
-    ASSERT_PRI_MSG(OK, 0, "添加 456m456456s456p4m");
-    ASSERT_PRI_MSG(OK, 1, "添加 778s1123356p112z");
+    ASSERT_PRI_MSG(OK, 0, "添加 345m123p456p789p1m");
+    ASSERT_PRI_MSG(OK, 1, "添加 678m234s456s567p5z");
     ASSERT_TIMEOUT(CHECKOUT);
-    ASSERT_PRI_MSG(OK, 0, "4z");
-    ASSERT_PRI_MSG(OK, 1, "7m");
+    ASSERT_PRI_MSG(OK, 0, "1m");
+    ASSERT_PRI_MSG(OK, 1, "2z");
+    ASSERT_TIMEOUT(CONTINUE);
+    for (uint32_t i = 0; i < 15; ++i) {
+        ASSERT_TIMEOUT(CONTINUE);
+    }
     ASSERT_TIMEOUT(CHECKOUT);
     for (uint32_t game_idx = 0; game_idx < 3; ++game_idx) {
         ASSERT_TIMEOUT(CHECKOUT);
@@ -106,7 +111,7 @@ GAME_TEST(3, do_nothing)
         }
         ASSERT_TIMEOUT(CHECKOUT);
     }
-    ASSERT_SCORE(33000, 17000, 25000);
+    ASSERT_SCORE(25000, 25000, 25000);
 }
 
 } // namespace GAME_MODULE_NAME

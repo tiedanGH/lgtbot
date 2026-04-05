@@ -79,8 +79,7 @@ TEST_F(TestMahjong17Steps, get_init_hand_tiles)
 TEST_F(TestMahjong17Steps, add_tile_to_hand_exceed)
 {
     const auto& tiles = table_.players_[0].yama_;
-    auto it = tiles.begin();
-    for (uint32_t i = 0; i < 13; ++i, ++it) {
+    for (uint32_t i = 0; i < 13; ++i) {
         EXPECT_TRUE(table_.AddToHand(0, tiles.begin()->to_simple_string())) << table_.ErrorStr();
     }
     EXPECT_EQ(21, table_.players_[0].yama_.size());

@@ -9,7 +9,7 @@ if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 file(GLOB GAME_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/*)
 
@@ -18,8 +18,8 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../)
 if (WITH_GLOG)
   find_package(glog REQUIRED)
   add_definitions(-DWITH_GLOG)
-  if (CMAKE_SYSTEM_NAME MATCHES "Windows")
-    list(APPEND GAME_THIRD_PARTIES glog) # bot_core has already link glog
+  if (NOT CMAKE_SYSTEM_NAME MATCHES "Linux")
+    list(APPEND GAME_THIRD_PARTIES glog::glog)
   endif()
 endif()
 
@@ -27,6 +27,11 @@ foreach (GAME_DIR ${GAME_DIRS})
   if (IS_DIRECTORY ${GAME_DIR})
 
     string(REGEX REPLACE ".*/\(.*\)" "\\1" GAME ${GAME_DIR})
+
+    if (NOT EXISTS ${GAME_DIR}/mygame.cc)
+      message("Skipping incomplete game ${GAME} in ${GAME_DIR} (no mygame.cc)")
+      continue()
+    endif()
 
     message("Found game ${GAME} in ${GAME_DIR}")
 
@@ -37,11 +42,20 @@ foreach (GAME_DIR ${GAME_DIRS})
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       COMMAND ${CMAKE_COMMAND} -E make_directory ${GAME_OUTPUT_PATH})
 
-    add_custom_target(resource_dir_${GAME} ALL
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      COMMAND ${CMAKE_COMMAND} -E make_directory ${GAME_DIR}/resource
-      COMMAND ${CMAKE_COMMAND} -E copy_directory ${GAME_DIR}/resource ${GAME_RESOURCE_PATH}
-      COMMAND ${CMAKE_COMMAND} -E copy ${GAME_DIR}/icon.png ${GAME_OUTPUT_PATH}/icon.png)
+    if (APPLE)
+      add_custom_target(resource_dir_${GAME} ALL
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${GAME_DIR}/resource
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${GAME_DIR}/resource ${GAME_RESOURCE_PATH}
+        COMMAND ${CMAKE_COMMAND} -E copy ${GAME_DIR}/icon.png ${GAME_OUTPUT_PATH}/icon.png
+        COMMAND ${CMAKE_COMMAND} -E copy ${GAME_DIR}/rule.md ${GAME_OUTPUT_PATH}/rule.md)
+    else()
+      add_custom_target(resource_dir_${GAME} ALL
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${GAME_DIR}/resource
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${GAME_DIR}/resource ${GAME_RESOURCE_PATH}
+        COMMAND ${CMAKE_COMMAND} -E copy ${GAME_DIR}/icon.png ${GAME_OUTPUT_PATH}/icon.png)
+    endif()
 
     set(SOURCE_FILES
       ${GAME_DIR}/mygame.cc
@@ -125,7 +139,7 @@ foreach (GAME_DIR ${GAME_DIRS})
         GAME_MODULE_NAME=${GAME}
         TEST_BOT)
       target_include_directories(test_game_${GAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${GAME})
-      target_link_libraries(test_game_${GAME} glog gflags GTest::GTest GTest::Main ${GAME_THIRD_PARTIES})
+      target_link_libraries(test_game_${GAME} glog::glog gflags GTest::GTest GTest::Main ${GAME_THIRD_PARTIES})
       target_compile_definitions(test_game_${GAME} PUBLIC TEST_BOT)
       add_test(NAME test_game_${GAME} COMMAND test_game_${GAME} --resource_dir "${GAME_RESOURCE_PATH}")
 
@@ -137,7 +151,7 @@ foreach (GAME_DIR ${GAME_DIRS})
         GAME_MODULE_NAME=${GAME}
         TEST_BOT)
       target_include_directories(run_game_${GAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/${GAME})
-      target_link_libraries(run_game_${GAME} glog gflags ${GAME_THIRD_PARTIES})
+      target_link_libraries(run_game_${GAME} glog::glog gflags ${GAME_THIRD_PARTIES})
       target_compile_definitions(run_game_${GAME} PUBLIC TEST_BOT)
       add_test(NAME run_game_${GAME} COMMAND run_game_${GAME} --resource_dir "${GAME_RESOURCE_PATH}" --repeat=100)
 
@@ -149,7 +163,7 @@ foreach (GAME_DIR ${GAME_DIRS})
       endif()
     endif()
 
-    include(${GAME_DIR}/option.cmake)
+    include(${GAME_DIR}/option.cmake OPTIONAL)
 
   endif()
 endforeach()

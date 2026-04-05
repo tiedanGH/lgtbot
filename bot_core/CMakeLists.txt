@@ -10,7 +10,9 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -latomic")
+if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -latomic")
+endif()
 
 # generate version info
 EXECUTE_PROCESS(
@@ -76,23 +78,53 @@ if (WITH_TEST)
   find_package(GTest REQUIRED)
   list(APPEND THIRD_PARTIES GTest::GTest GTest::Main)
 
-  add_executable(test_bot
-    test_bot.cc
+  # Build test_game plugin (dylib) for test_bot
+  set(TEST_GAME_SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_game/mygame.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/game_main.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/resource_loader.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/stage.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/stage_utility.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/player_ready_masker.cc
-    ${SOURCE_FILES})
-  target_link_libraries(test_bot lgtbot_match_parent ${THIRD_PARTIES})
-  add_dependencies(test_bot match_game_runner)
-  target_compile_definitions(test_bot PRIVATE
-    MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
+    ${CMAKE_CURRENT_SOURCE_DIR}/../utility/html.cc
   )
-  target_compile_definitions(test_bot PUBLIC
-    GAME_ACHIEVEMENT_FILENAME="test_bot.cc"
-    GAME_OPTION_FILENAME="test_bot.cc"
+  # test_game_plugin is placed in a dedicated directory (test_game_plugins/test_game/)
+  # so that test_bot loads ONLY this plugin, avoiding symbol conflicts with other game plugins.
+  set(TEST_GAME_PLUGIN_PARENT_DIR ${CMAKE_BINARY_DIR}/test_game_plugins)
+  set(TEST_GAME_PLUGIN_DIR ${TEST_GAME_PLUGIN_PARENT_DIR}/test_game)
+  add_custom_target(make_test_game_plugin_dir ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${TEST_GAME_PLUGIN_DIR}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_game/rule.md ${TEST_GAME_PLUGIN_DIR}/rule.md)
+  add_library(test_game_plugin SHARED ${TEST_GAME_SOURCE_FILES})
+  add_dependencies(test_game_plugin make_test_game_plugin_dir)
+  target_compile_definitions(test_game_plugin PUBLIC
+    GAME_ACHIEVEMENT_FILENAME="${CMAKE_CURRENT_SOURCE_DIR}/test_game/achievements.h"
+    GAME_OPTION_FILENAME="${CMAKE_CURRENT_SOURCE_DIR}/test_game/options.h"
     GAME_MODULE_NAME=test_game
     TEST_BOT)
-  target_include_directories(test_bot PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}) # to include empty options.h
+  target_include_directories(test_game_plugin PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_game
+    ${CMAKE_CURRENT_SOURCE_DIR}/..)
+  if (WITH_GLOG)
+    target_link_libraries(test_game_plugin glog::glog)
+  endif()
+  set_target_properties(test_game_plugin PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${TEST_GAME_PLUGIN_DIR}
+    OUTPUT_NAME "libgame"
+    PREFIX "")
+
+  add_executable(test_bot
+    test_bot.cc
+    ${SOURCE_FILES})
+  target_link_libraries(test_bot lgtbot_match_parent ${THIRD_PARTIES})
+  add_dependencies(test_bot match_game_runner test_game_plugin)
+  target_compile_definitions(test_bot PRIVATE
+    MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
+    TEST_GAME_PLUGIN_DIR="${TEST_GAME_PLUGIN_PARENT_DIR}"
+    TEST_BOT)
+  target_include_directories(test_bot PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR})
   add_test(NAME test_bot COMMAND test_bot)
 
   add_executable(test_db test_db.cc db_manager.cc score_calculation.cc)

@@ -13,6 +13,7 @@
 #include "game_framework/stage.h"
 #include "game_framework/util.h"
 #include "utility/html.h"
+#include "utility/random.h"
 #include "game_util/alchemist.h"
 
 namespace lgtbot {
@@ -102,18 +103,7 @@ class MainStage : public MainGameStage<RoundStage>
             players_.emplace_back(Global().ResourceDir(), GAME_OPTION(模式));
         }
 
-        const std::string& seed_str = GAME_OPTION(种子);
-        std::variant<std::random_device, std::seed_seq> rd;
-        std::mt19937 g([&]
-            {
-                if (seed_str.empty()) {
-                    auto& real_rd = rd.emplace<std::random_device>();
-                    return std::mt19937(real_rd());
-                } else {
-                    auto& real_rd = rd.emplace<std::seed_seq>(seed_str.begin(), seed_str.end());
-                    return std::mt19937(real_rd);
-                }
-            }());
+        auto g = MakeRng(GAME_OPTION(种子));
 
         if (GAME_OPTION(副数) > 0) {
             for (uint32_t color_idx = 0; color_idx < GAME_OPTION(颜色); ++color_idx) {
@@ -126,11 +116,10 @@ class MainStage : public MainGameStage<RoundStage>
             for (uint32_t i = 0; i < GAME_OPTION(副数); ++i) {
                 cards_.emplace_back(std::nullopt); // add stone
             }
-            std::shuffle(cards_.begin(), cards_.end(), g);
+            SeededShuffle(cards_.begin(), cards_.end(), g);
         } else {
-            std::uniform_int_distribution<uint32_t> distrib(0, GAME_OPTION(颜色) * GAME_OPTION(点数));
             for (uint32_t i = 0; i < GAME_OPTION(回合数); ++i) {
-                const auto k = distrib(g);
+                const auto k = RandInt(g, 0, GAME_OPTION(颜色) * GAME_OPTION(点数));
                 if (k == 0) {
                     cards_.emplace_back(std::nullopt); // add stone
                 } else {
@@ -140,28 +129,27 @@ class MainStage : public MainGameStage<RoundStage>
             }
         }
 
-        std::uniform_int_distribution<uint32_t> distrib(0, game_util::alchemist::Board::k_size - 1);
         const auto set_stone = [this](const uint32_t row, const uint32_t col)
             {
                 for (auto& player : players_) {
                     player.board_->SetStone(row, col);
                 }
             };
-        const auto row_1 = distrib(g);
-        const auto col_1 = distrib(g);
-        auto row_2 = distrib(g);
-        auto col_2 = distrib(g);
+        const auto row_1 = RandInt(g, 0, game_util::alchemist::Board::k_size - 1);
+        const auto col_1 = RandInt(g, 0, game_util::alchemist::Board::k_size - 1);
+        auto row_2 = RandInt(g, 0, game_util::alchemist::Board::k_size - 1);
+        auto col_2 = RandInt(g, 0, game_util::alchemist::Board::k_size - 1);
         while (row_1 == row_2 && col_1 == col_2) {
-            row_2 = distrib(g);
-            col_2 = distrib(g);
+            row_2 = RandInt(g, 0, game_util::alchemist::Board::k_size - 1);
+            col_2 = RandInt(g, 0, game_util::alchemist::Board::k_size - 1);
         }
         set_stone(row_1, col_1);
         set_stone(row_2, col_2);
     }
 
-    virtual void FirstStageFsm(SubStageFsmSetter setter) override;
+    virtual void FirstStageFsm(StageFsm::SubStageFsmSetter setter) override;
 
-    virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
+    virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, StageFsm::SubStageFsmSetter setter) override;
 
     virtual int64_t PlayerScore(const PlayerID pid) const override
     {
@@ -188,7 +176,7 @@ class MainStage : public MainGameStage<RoundStage>
     std::vector<Player> players_;
 
   private:
-    void NewStage_(SubStageFsmSetter& setter);
+    void NewStage_(StageFsm::SubStageFsmSetter& setter);
 
     void MatchOver_();
 
@@ -216,7 +204,7 @@ class RoundStage : public SubGameStage<>
     }
 
   private:
-    CheckoutErrCode OnStageTimeout()
+    CheckoutErrCode OnStageTimeout() override
     {
         Global().HookUnreadyPlayers();
         return StageErrCode::CHECKOUT;
@@ -318,14 +306,14 @@ class RoundStage : public SubGameStage<>
     const std::string board_html_;
 };
 
-void MainStage::NewStage_(SubStageFsmSetter& setter)
+void MainStage::NewStage_(StageFsm::SubStageFsmSetter& setter)
 {
     const auto round = round_;
     const auto& card = cards_[round];
     setter.Emplace<RoundStage>(*this, ++round_, card);
 }
 
-void MainStage::FirstStageFsm(SubStageFsmSetter setter)
+void MainStage::FirstStageFsm(StageFsm::SubStageFsmSetter setter)
 {
     return NewStage_(setter);
 }
@@ -347,15 +335,15 @@ void MainStage::MatchOver_()
             Global().Achieve(pid, Achievement::纹丝不动);
         }
         if (!GAME_OPTION(模式) && players_[pid].score_ >= 12) {
-            Global().Achieve(pid, Achievement::超额完成（经典）);
+            Global().Achieve(pid, Achievement::超额完成_经典);
         }
         if (GAME_OPTION(模式) && players_[pid].score_ >= 220) {
-            Global().Achieve(pid, Achievement::超额完成（竞技）);
+            Global().Achieve(pid, Achievement::超额完成_竞技);
         }
     }
 }
 
-void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, StageFsm::SubStageFsmSetter setter)
 {
     if (round_ == GAME_OPTION(回合数)) {
         Global().Boardcast() << "游戏达到最大回合数，游戏结束";

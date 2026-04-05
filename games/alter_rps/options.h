@@ -49,7 +49,7 @@ class CardChecker : public MsgArgChecker<Card>
         return "剪刀" + arith_checker_.ExampleInfo();
     }
 
-    virtual std::optional<Card> Check(MsgReader& reader) const
+    virtual std::optional<Card> Check(MsgReader& reader) const override
     {
         if (!reader.HasNext()) {
             return std::nullopt;
@@ -67,19 +67,19 @@ class CardChecker : public MsgArgChecker<Card>
                 return arith_checker_.Check(number_str);
             };
         std::optional<int> point = 0;
-        if (point = parse_card_number("剪刀")) {
+        if ((point = parse_card_number("剪刀"))) {
             return Card{.type_ = Type::SCISSOR, .point_ = *point};
-        } else if (point = parse_card_number("石头")) {
+        } else if ((point = parse_card_number("石头"))) {
             return Card{.type_ = Type::ROCK, .point_ = *point};
-        } else if (point = parse_card_number("布")) {
+        } else if ((point = parse_card_number("布"))) {
             return Card{.type_ = Type::PAPER, .point_ = *point};
-        } else if (point = parse_card_number("空白")) {
+        } else if ((point = parse_card_number("空白"))) {
             return Card{.type_ = Type::BLANK, .point_ = *point};
         }
         return std::nullopt;
     }
 
-    virtual std::string ArgString(const Card& value) const
+    virtual std::string ArgString(const Card& value) const override
     {
         return (value.type_ == Type::ROCK ? "石头" :
                 value.type_ == Type::PAPER ? "布" :

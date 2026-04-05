@@ -17,7 +17,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../third_party)
 
 # score updater
 add_executable(score_updater ${CMAKE_CURRENT_SOURCE_DIR}/score_updater.cc ${CMAKE_CURRENT_SOURCE_DIR}/../bot_core/score_calculation.cc)
-target_link_libraries(score_updater gflags SQLite::SQLite3)
+target_link_libraries(score_updater gflags SQLite::SQLite3 glog::glog)
 
 # simulator
 set(SIMULATOR_SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/simulator.cc)

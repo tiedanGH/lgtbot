@@ -70,7 +70,7 @@ class MainStage : public MainGameStage<>
     {
     }
 
-    virtual void OnStageBegin()
+    virtual void OnStageBegin() override
     {
         Global().SetReady(1 - cur_pid());
         Global().StartTimer(GAME_OPTION(局时));
@@ -79,7 +79,7 @@ class MainStage : public MainGameStage<>
                     << "秒未行动自动判负\n格式：移动前位置 移动后位置";
     }
 
-    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply)
+    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply) override
     {
         if (pid != cur_pid()) {
             return StageErrCode::OK;
@@ -97,7 +97,7 @@ class MainStage : public MainGameStage<>
         return StageErrCode::READY;
     }
 
-    int64_t PlayerScore(const PlayerID pid) const
+    int64_t PlayerScore(const PlayerID pid) const override
     {
         return scores_[pid];
     }
@@ -160,7 +160,7 @@ class MainStage : public MainGameStage<>
         return str;
     }
 
-    virtual CheckoutErrCode OnStageOver()
+    virtual CheckoutErrCode OnStageOver() override
     {
         const auto ret = board_.LineCount();
         if (ret[1 - static_cast<uint32_t>(cur_symbol())]) {

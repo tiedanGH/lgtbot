@@ -356,7 +356,7 @@ class MainStage : public MainGameStage<RoundStage<poker::CardType::BOKAA>, Round
 
     virtual void NextStageFsm(RoundStage<poker::CardType::POKER>& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
 
-    int64_t PlayerScore(const PlayerID pid) const { return player_scores_[pid]; }
+    int64_t PlayerScore(const PlayerID pid) const override { return player_scores_[pid]; }
 
     int64_t& PlayerScoreRef(const PlayerID pid) { return player_scores_[pid]; }
 
@@ -398,24 +398,24 @@ class BetStage : public SubGameStage<>
     {
     }
 
-    void OnStageBegin()
+    void OnStageBegin() override
     {
         Global().StartTimer(GAME_OPTION(下注时间));
     }
 
-    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply)
+    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply) override
     {
         player_round_infos_[pid].RandomAct(is_first_);
         return StageErrCode::READY;
     }
 
-    CheckoutErrCode OnStageTimeout()
+    CheckoutErrCode OnStageTimeout() override
     {
         Global().HookUnreadyPlayers();
         return StageErrCode::CHECKOUT;
     }
 
-    CheckoutErrCode OnStageOver() { return StageErrCode::CHECKOUT; }
+    CheckoutErrCode OnStageOver() override { return StageErrCode::CHECKOUT; }
  
   private:
     std::string RemainCoinsInfo_(const PlayerID pid) const

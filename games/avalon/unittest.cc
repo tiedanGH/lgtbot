@@ -34,7 +34,7 @@ GAME_TEST(5, only_member_can_act)
     ASSERT_TIMEOUT(CHECKOUT);
     ASSERT_PRI_MSG(FAILED, 3, "成功");
     ASSERT_PRI_MSG(FAILED, 3, "失败");
-    CHECK_PRI_MSG(OK, 0, "成功") || CHECK_PRI_MSG(OK, 0, "失败");
+    (void)(CHECK_PRI_MSG(OK, 0, "成功") || CHECK_PRI_MSG(OK, 0, "失败"));
 }
 
 GAME_TEST(5, leader_cannot_hold_sword)
@@ -55,7 +55,7 @@ GAME_TEST(7, select_witch)
     ASSERT_PRI_MSG(CHECKOUT, 1, "3 2 1");
     ASSERT_TIMEOUT(CHECKOUT);
     for (uint32_t pid = 0; pid < 7; ++pid) {
-        CHECK_PRI_MSG(OK, pid, "失败") || CHECK_PRI_MSG(OK, pid, "成功");
+        (void)(CHECK_PRI_MSG(OK, pid, "失败") || CHECK_PRI_MSG(OK, pid, "成功"));
     }
     ASSERT_PRI_MSG(FAILED, 5, "0"); // 5 is not witch
     ASSERT_PRI_MSG(CHECKOUT, 6, "0");
@@ -63,7 +63,7 @@ GAME_TEST(7, select_witch)
     ASSERT_PRI_MSG(CHECKOUT, 2, "6 5 4");
     ASSERT_TIMEOUT(CHECKOUT);
     for (uint32_t pid = 0; pid < 7; ++pid) {
-        CHECK_PRI_MSG(OK, pid, "失败") || CHECK_PRI_MSG(OK, pid, "成功");
+        (void)(CHECK_PRI_MSG(OK, pid, "失败") || CHECK_PRI_MSG(OK, pid, "成功"));
     }
     ASSERT_PRI_MSG(FAILED, 5, "0"); // 5 is not witch
     ASSERT_PRI_MSG(FAILED, 0, "6"); // 6 has been witch

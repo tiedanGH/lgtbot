@@ -5,6 +5,7 @@
 #include "game_framework/stage.h"
 #include "game_framework/util.h"
 #include "utility/html.h"
+#include "utility/random.h"
 
 #include "game_util/poker_squares.h"
 
@@ -128,15 +129,8 @@ class MainStage : public MainGameStage<>
                 if (!shuffle) {
                     return result;
                 }
-                if (seed_sv.empty()) {
-                    std::random_device rd;
-                    std::mt19937 g(rd());
-                    std::ranges::shuffle(result, g);
-                } else {
-                    std::seed_seq seed(seed_sv.begin(), seed_sv.end());
-                    std::mt19937 g(seed);
-                    std::ranges::shuffle(result, g);
-                }
+                auto g = MakeRng(seed_sv);
+                SeededShuffle(result.begin(), result.end(), g);
                 return result;
             }();
         auto it = shuffled_indexes.begin();

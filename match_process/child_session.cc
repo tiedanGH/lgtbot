@@ -173,11 +173,12 @@ bool ChildGameSession::LoadModule(const std::string& lib_path, std::string& erro
     if (!error_out.empty()) {
         return false;
     }
-    const auto get_info = reinterpret_cast<lgtbot::game::GameInfo (*)()>(sym("GetGameInfo"));
+    const auto get_info = reinterpret_cast<void (*)(lgtbot::game::GameInfo*)>(sym("GetGameInfo"));
     if (!error_out.empty() || !get_info) {
         return false;
     }
-    const lgtbot::game::GameInfo info = get_info();
+    lgtbot::game::GameInfo info;
+    get_info(&info);
     game_title_ = info.properties_ ? info.properties_->name_ : "game";
     return true;
 }

@@ -993,11 +993,12 @@ static ErrCode set_game_option(BotCtx& bot, const UserID uid, const std::optiona
     for (const auto& option_arg : option_args) {
         option_str += " " + option_arg;
     }
-    auto locked_option = game_handle_it->second.DefaultGameOptions().Lock(); // lock until updated config to ensure atomic write
+    auto locked_option = game_handle_it->second.DefaultGameOptions().Lock();
     if (!locked_option->game_options_->SetOption(option_str.c_str())) {
         reply() << "[错误] 设置配置项失败，请通过「" META_COMMAND_SIGN "配置 " << game_name << "」确认配置项是否存在";
         return EC_INVALID_ARGUMENT;
     }
+    locked_option->applied_log_.push_back(option_str);
     reply() << "设置成功";
     bot.UpdateGameConfig(game_name, option_name, option_args);
     return EC_OK;

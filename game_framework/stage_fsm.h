@@ -270,7 +270,7 @@ class StageFsm : public internal::StageFsmTypeBaseType<Subs...>::Type
     const std::vector<Command>& Commands() const final { return commands_; }
 
   protected:
-    using TypeBase::SubStageFsmSetter;
+    using typename TypeBase::SubStageFsmSetter;
 
   private:
     std::string name_;

@@ -150,7 +150,7 @@ class MainStage : public MainGameStage<RoundStage>
         return StageErrCode::OK;
     }
 
-    void FirstStageFsm(SubStageFsmSetter setter)
+    void FirstStageFsm(SubStageFsmSetter setter) override
     {
         if (GAME_OPTION(模式) == 1) Global().Boardcast() << "[提示] 本局为 22分 模式，当手牌打完时有玩家达到 22 个牛头时，游戏才会结束";
         if (GAME_OPTION(模式) == 2) Global().Boardcast() << "[提示] 本局为 33分 模式，当手牌打完时有玩家达到 33 个牛头时，游戏才会结束";
@@ -168,7 +168,7 @@ class MainStage : public MainGameStage<RoundStage>
         setter.Emplace<RoundStage>(*this, ++round_);
     }
 
-    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         bool game_end = (GAME_OPTION(模式) == 0 && round_ == GAME_OPTION(手牌)) ||
                         (GAME_OPTION(模式) == 1 && table.CheckPlayerHead(22, players)) ||

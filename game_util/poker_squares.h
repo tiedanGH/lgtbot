@@ -223,7 +223,7 @@ class PokerSquare
     int32_t FillInOrder(const Card card)
     {
         int32_t index = 0;
-        std::ranges::any_of(std::views::iota(0, k_grid_num), [&](const int i) { return index = i, Fill(i, card); });
+        [[maybe_unused]] auto _ = std::ranges::any_of(std::views::iota(0, k_grid_num), [&](const int i) { return index = i, Fill(i, card); });
         return index;
     }
 

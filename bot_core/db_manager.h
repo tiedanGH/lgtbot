@@ -37,15 +37,15 @@ ENUM_END(TimeRange)
 #include "../utility/extend_enum.h"
 
 inline const char* const k_time_range_begin_datetimes[] = {
-    [TimeRange(TimeRange::月).ToUInt()] = "datetime('now','start of month')",
-    [TimeRange(TimeRange::年).ToUInt()] = "datetime('now','start of year')",
-    [TimeRange(TimeRange::总).ToUInt()] = "",
+    /* 月 */ "datetime('now','start of month')",
+    /* 年 */ "datetime('now','start of year')",
+    /* 总 */ "",
 };
 
 inline const char* const k_time_range_end_datetimes[] = {
-    [TimeRange(TimeRange::月).ToUInt()] = "datetime('now','start of month', '+1 month')",
-    [TimeRange(TimeRange::年).ToUInt()] = "datetime('now','start of year', '+1 year')",
-    [TimeRange(TimeRange::总).ToUInt()] = "",
+    /* 月 */ "datetime('now','start of month', '+1 month')",
+    /* 年 */ "datetime('now','start of year', '+1 year')",
+    /* 总 */ "",
 };
 
 struct MatchProfile
