@@ -167,7 +167,7 @@ class MsgSender : public MsgSenderBase
         messages_.emplace_back(std::string(path), LGTBot_MessageType::LGTBOT_MSG_IMAGE);
     }
 
-    virtual void SaveMarkdown(const char* const markdown, const uint32_t width)
+    virtual void SaveMarkdown(const char* const markdown, const uint32_t width) override
     {
         if (!image_path_) {
             return;

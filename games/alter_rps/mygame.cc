@@ -176,17 +176,17 @@ static const char* const k_non_color_fg = "#bbbbbb";
 static const char* const k_non_color_bg = "#e2e2e2";
 
 static const char* const k_color_fgs[k_card_type_num] = {
-    [static_cast<int>(Type::ROCK)] = "#e5686d",
-    [static_cast<int>(Type::PAPER)] = "#84d599",
-    [static_cast<int>(Type::SCISSOR)] = "#5ecef0",
-    [static_cast<int>(Type::BLANK)] = "black",
+    /* ROCK */    "#e5686d",
+    /* PAPER */   "#84d599",
+    /* SCISSOR */ "#5ecef0",
+    /* BLANK */   "black",
 };
 
 static const char* const k_color_bgs[k_card_type_num] = {
-    [static_cast<int>(Type::ROCK)] = "#f9d9e5",
-    [static_cast<int>(Type::PAPER)] = "#dff276",
-    [static_cast<int>(Type::SCISSOR)] = "#d2ecf4",
-    [static_cast<int>(Type::BLANK)] = "white",
+    /* ROCK */    "#f9d9e5",
+    /* PAPER */   "#dff276",
+    /* SCISSOR */ "#d2ecf4",
+    /* BLANK */   "white",
 };
 
 static void SetPointColor(html::Box& box, const int point, const char* const fg_color, const char* const bg_color, const bool with_star)
@@ -307,7 +307,7 @@ class MainStage : public MainGameStage<RoundStage>
 
     virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
 
-    int64_t PlayerScore(const PlayerID pid) const
+    int64_t PlayerScore(const PlayerID pid) const override
     {
         return players_[pid].score_;
     }

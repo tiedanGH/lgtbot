@@ -38,12 +38,10 @@ internal::MainStage* MakeMainStage(MainStageFactory factory);
 
 namespace this_module = lgtbot::game::GAME_MODULE_NAME;
 
-extern "C" {
-
 // The following functions will be loaded to bot_core by its C-format symbol name.
 // It is the most suitable way to expose the handler function to bot_core because the library will be linked in runtime.
 
-lgtbot::game::GameInfo GetGameInfo()
+extern "C" void GetGameInfo(lgtbot::game::GameInfo* game_info_out)
 {
     lgtbot::game::GameInfo game_info;
 
@@ -76,8 +74,10 @@ lgtbot::game::GameInfo GetGameInfo()
                 "\n\n可以通过以下预设指令开启不同模式的游戏：");
     game_info.rule_ = rule_str.c_str();
 
-    return game_info;
+    *game_info_out = game_info;
 }
+
+extern "C" {
 
 uint64_t MaxPlayerNum(const lgtbot::game::GameOptionsBase* const game_options)
 {

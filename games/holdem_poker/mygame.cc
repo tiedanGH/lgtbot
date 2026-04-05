@@ -91,14 +91,14 @@ struct PlayerChipInfo
 const char* Action2Str(const int action)
 {
     static constexpr const char* k_strs[] = {
-        [PlayerChipInfo::CALL] = "(Call)",
-        [PlayerChipInfo::RAISE] = "(Raise)",
-        [PlayerChipInfo::BET] = "(Bet)",
-        [PlayerChipInfo::CHECK] = "(Check)",
-        [PlayerChipInfo::ALLIN] = "(All In)",
-        [PlayerChipInfo::FOLD] = "(Fold)",
-        [PlayerChipInfo::BLIND] = "(Blind)",
-        [PlayerChipInfo::NO_ACTION] = "",
+        /* PlayerChipInfo::CALL */ "(Call)",
+        /* PlayerChipInfo::RAISE */ "(Raise)",
+        /* PlayerChipInfo::BET */ "(Bet)",
+        /* PlayerChipInfo::CHECK */ "(Check)",
+        /* PlayerChipInfo::ALLIN */ "(All In)",
+        /* PlayerChipInfo::FOLD */ "(Fold)",
+        /* PlayerChipInfo::BLIND */ "(Blind)",
+        /* PlayerChipInfo::NO_ACTION */ "",
     };
     return k_strs[action];
 }
@@ -239,7 +239,7 @@ class RaiseStage : public SubGameStage<>
         return StageErrCode::CHECKOUT;
     }
 
-    virtual CheckoutErrCode OnStageOver()
+    virtual CheckoutErrCode OnStageOver() override
     {
         FoldForUnreadyPlayers_();
         return StageErrCode::CHECKOUT;
@@ -366,7 +366,7 @@ class BetStage : public SubGameStage<>
         return StageErrCode::CHECKOUT;
     }
 
-    virtual CheckoutErrCode OnStageOver()
+    virtual CheckoutErrCode OnStageOver() override
     {
         CheckForUnreadyPlayers_();
         return StageErrCode::CHECKOUT;
@@ -596,7 +596,7 @@ class RoundStage : public SubGameStage<RaiseStage, BetStage>
         const auto& hand_info = player_hand_infos_[pid];
         s += "<font size=\"5\">";
 #define DECK_INFO_HEADER(color) HTML_ESCAPE_SPACE HTML_ESCAPE_SPACE  "<font size=\"4\"><span style=\"background-color:" #color "; text-align:center;\">" HTML_COLOR_FONT_HEADER(white) HTML_ESCAPE_SPACE
-#define DECK_INFO_TAIL HTML_ESCAPE_SPACE HTML_FONT_TAIL "</span></font>" ;
+#define DECK_INFO_TAIL HTML_ESCAPE_SPACE HTML_FONT_TAIL "</span></font>"
         if (win_info && win_info->is_winner_) {
             s += hand_info.ToHtml() + DECK_INFO_HEADER(#f3b13d) + hand_info.deck_->TypeName() + DECK_INFO_TAIL "\n\n";
         } else if (show_hand) {
@@ -710,7 +710,7 @@ class RoundStage : public SubGameStage<RaiseStage, BetStage>
 
         s += "\n\n已淘汰玩家：";
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            if ((Main().GetPlayerChipInfo(pid).bet_chips_ == 0)) {
+            if (Main().GetPlayerChipInfo(pid).bet_chips_ == 0) {
                 s += this->Global().PlayerAvatar(pid, 30);
                 s += HTML_ESCAPE_SPACE;
             }
@@ -879,13 +879,13 @@ class RoundStage : public SubGameStage<RaiseStage, BetStage>
         setter.Emplace<BetStage>(this->Main(), StateName_(), base_chips_);
     }
 
-    static constexpr const char* k_state_names_[6] = {
-        [0] = "preflop",
-        [1] = "",
-        [2] = "",
-        [3] = "flop",
-        [4] = "turn",
-        [5] = "river",
+    static constexpr const char* k_state_names_[6] {
+        /* 0 */ "preflop",
+        /* 1 */ "",
+        /* 2 */ "",
+        /* 3 */ "flop",
+        /* 4 */ "turn",
+        /* 5 */ "river",
     };
     const int32_t base_chips_;
     int32_t bet_chips_;

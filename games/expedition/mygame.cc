@@ -397,7 +397,7 @@ class MainStage : public MainGameStage<RoundStage> {
   MainStage(StageUtility&& utility);
   virtual void FirstStageFsm(SubStageFsmSetter setter) override;
   virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
-  int64_t PlayerScore(const PlayerID pid) const;
+  int64_t PlayerScore(const PlayerID pid) const override;
 
   bool JudgeOver();
   void Print();
@@ -429,7 +429,7 @@ class RoundStage : public SubGameStage<> {
     Global().StartTimer(GAME_OPTION(时限));
   }
 
-  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) {
+  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override {
     Global().Boardcast() << "玩家 " << Global().PlayerName(pid) << " 中途退出。";
     return StageErrCode::CONTINUE;
   }
@@ -504,7 +504,7 @@ MainStage::MainStage(StageUtility&& utility)
     : StageFsm(std::move(utility)), ui_(Global().PlayerNum()), turn_(0), num_player_(Global().PlayerNum()) {
   auto map_file = map_files[GAME_OPTION(地图)];
   map_name = map_names[GAME_OPTION(地图)];
-  if (map_file == "random") {
+  if (std::string_view(map_file) == "random") {
     int index = rand() % (map_files.size() - 1) + 1;
     map_file = map_files[index];
     map_name = map_names[index];

@@ -11,6 +11,7 @@
 #include "game_framework/stage.h"
 #include "game_framework/util.h"
 #include "utility/html.h"
+#include "utility/random.h"
 #include "game_util/mahjong_17_steps.h"
 
 using namespace lgtbot::game_util::mahjong;
@@ -84,18 +85,8 @@ class MainStage : public MainGameStage<TableStage>
   public:
     MainStage(StageUtility&& utility) : StageFsm(std::move(utility)), table_idx_(0)
     {
-        std::variant<std::random_device, std::seed_seq> rd;
-        std::mt19937 g([&]
-            {
-                if (GAME_OPTION(种子).empty()) {
-                    auto& real_rd = rd.emplace<std::random_device>();
-                    return std::mt19937(real_rd());
-                } else {
-                    auto& real_rd = rd.emplace<std::seed_seq>(GAME_OPTION(种子).begin(), GAME_OPTION(种子).end());
-                    return std::mt19937(real_rd);
-                }
-            }());
-        const auto offset = std::uniform_int_distribution<uint32_t>(1, Global().PlayerNum())(g);
+        auto g = MakeRng(GAME_OPTION(种子));
+        const auto offset = RandInt(g, 1, Global().PlayerNum());
         for (uint64_t pid = 0; pid < Global().PlayerNum(); ++pid) {
             players_.emplace_back((pid + offset) % Global().PlayerNum());
         }
@@ -119,7 +110,7 @@ class MainStage : public MainGameStage<TableStage>
         }
     }
 
-    int64_t PlayerScore(const PlayerID pid) const
+    int64_t PlayerScore(const PlayerID pid) const override
     {
         return players_[pid].score_;
     }
@@ -246,7 +237,7 @@ class KiriStage : public SubGameStage<>
     }
 
    private:
-    CheckoutErrCode OnStageTimeout()
+    CheckoutErrCode OnStageTimeout() override
     {
         Global().HookUnreadyPlayers();
         return CheckoutErrCode::Condition(OnOver_(), StageErrCode::CHECKOUT, StageErrCode::CONTINUE);

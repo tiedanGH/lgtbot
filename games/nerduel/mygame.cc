@@ -155,7 +155,7 @@ class MainStage : public MainGameStage<SettingStage, GuessingStage> {
                                        const CheckoutReason reason, SubStageFsmSetter setter) override;
   virtual void NextStageFsm(GuessingStage& sub_stage,
                                        const CheckoutReason reason, SubStageFsmSetter setter) override;
-  int64_t PlayerScore(const PlayerID pid) const;
+  int64_t PlayerScore(const PlayerID pid) const override;
 
   bool JudgeOver();
   void Info_() {}
@@ -180,7 +180,7 @@ class SettingStage : public SubGameStage<> {
     Global().StartTimer(GAME_OPTION(时限) + 30);
   }
 
-  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) {
+  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override {
     Main().ended_ = true;
     Main().score_[pid] = -1;
     return StageErrCode::CONTINUE;
@@ -243,7 +243,7 @@ class GuessingStage : public SubGameStage<> {
     Global().StartTimer(limit);
   }
 
-  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) {
+  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override {
     Main().ended_ = true;
     Main().score_[pid] = -1;
     return StageErrCode::CONTINUE;
@@ -271,7 +271,7 @@ class GuessingStage : public SubGameStage<> {
     auto [a, b] = get_a_b(str, Main().target_[pid]);
     Main().table_.SetEquation(str, pid, a, b);
     char tmp[128];
-    sprintf(tmp, "%s %dA%dB\n", str.c_str(), a, b);
+    snprintf(tmp, sizeof(tmp), "%s %dA%dB\n", str.c_str(), a, b);
     Main().history_[pid] += tmp;
     if (a == GAME_OPTION(等式长度)) {
       Main().ended_ = true;

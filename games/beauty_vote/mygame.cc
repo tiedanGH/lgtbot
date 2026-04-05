@@ -214,7 +214,7 @@ class RoundStage : public SubGameStage<>
                 int r = rand() % 4;
                 for (int i = (int)x - (int)(max * 0.02); i <= max; i += (int)(max * 0.01)) {
                     int c = 0;
-                    for (int j = 0; j < pid; j++) {
+                    for (int j = 0; j < (int)pid; j++) {
                         if (Main().player_select_[j] == i + r) {
                             c = 1;
                             break;
@@ -285,7 +285,7 @@ class RoundStage : public SubGameStage<>
         Main().x = round(avg * 0.8 * 100) / 100;
 
         // crash
-        int crash[Global().PlayerNum()+1] = {0};
+        std::vector<int> crash(Global().PlayerNum() + 1, 0);
         int is_crash = 0;
         if (Main().on_crash == 1) {
             for (int i = 0; i < Global().PlayerNum(); i++) {
@@ -428,7 +428,7 @@ class RoundStage : public SubGameStage<>
             b += "</td>";
         }
         char xchar[10];
-        sprintf(xchar, "%.2lf", Main().x);
+        snprintf(xchar, sizeof(xchar), "%.2lf", Main().x);
         string x = xchar;
         b += "<td bgcolor=\""+ Main().X_color +"\">" + x + "</td></tr>";
         Main().Board += b;

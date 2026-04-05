@@ -73,6 +73,8 @@ class BotCtx
     MsgSender MakeMsgSender(const UserID& user_id, Match* const match = nullptr) const;
     MsgSender MakeMsgSender(const GroupID& user_id, Match* const match = nullptr) const;
 
+    static std::variant<GameHandleMap, const char*> LoadGameModules(const char* games_path);
+
 #ifndef TEST_BOT
   private:
 #endif

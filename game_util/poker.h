@@ -88,6 +88,7 @@ ENUM_END(PatternType)
 #include <ranges>
 
 #include "utility/html.h"
+#include "utility/random.h"
 
 namespace lgtbot {
 
@@ -101,15 +102,15 @@ namespace poker {
 constexpr inline const char* GetPatternTypeName(const PatternType type)
 {
     constexpr const char* k_pattern_type_names[] = {
-        [PatternType{PatternType::HIGH_CARD}.ToUInt()] = "高牌",
-        [PatternType{PatternType::ONE_PAIR}.ToUInt()] = "一对",
-        [PatternType{PatternType::TWO_PAIRS}.ToUInt()] = "两对",
-        [PatternType{PatternType::THREE_OF_A_KIND}.ToUInt()] = "三条",
-        [PatternType{PatternType::STRAIGHT}.ToUInt()] = "顺子",
-        [PatternType{PatternType::FLUSH}.ToUInt()] = "同花",
-        [PatternType{PatternType::FULL_HOUSE}.ToUInt()] = "满堂红",
-        [PatternType{PatternType::FOUR_OF_A_KIND}.ToUInt()] = "四条",
-        [PatternType{PatternType::STRAIGHT_FLUSH}.ToUInt()] = "同花顺",
+        /* PatternType{PatternType::HIGH_CARD}.ToUInt() */ "高牌",
+        /* PatternType{PatternType::ONE_PAIR}.ToUInt() */ "一对",
+        /* PatternType{PatternType::TWO_PAIRS}.ToUInt() */ "两对",
+        /* PatternType{PatternType::THREE_OF_A_KIND}.ToUInt() */ "三条",
+        /* PatternType{PatternType::STRAIGHT}.ToUInt() */ "顺子",
+        /* PatternType{PatternType::FLUSH}.ToUInt() */ "同花",
+        /* PatternType{PatternType::FULL_HOUSE}.ToUInt() */ "满堂红",
+        /* PatternType{PatternType::FOUR_OF_A_KIND}.ToUInt() */ "四条",
+        /* PatternType{PatternType::STRAIGHT_FLUSH}.ToUInt() */ "同花顺",
     };
     static_assert(sizeof(k_pattern_type_names) / sizeof(k_pattern_type_names[0]) == PatternType::Count());
     return k_pattern_type_names[type.ToUInt()];
@@ -144,13 +145,13 @@ struct Types<CardType::BOKAA>
         {"●",  BokaaSuit::PURPLE},
         {"○",  BokaaSuit::PURPLE},
     };
-    static constexpr const char* const k_colored_suit_str[BokaaNumber::Count()] = {
+    static constexpr const char* const k_colored_suit_str[BokaaSuit::Count()] {
         [BokaaSuit(BokaaSuit::PURPLE).ToUInt()] = HTML_COLOR_FONT_HEADER(purple) "●",
         [BokaaSuit(BokaaSuit::BLUE).ToUInt()]   = HTML_COLOR_FONT_HEADER(blue) "▲",
         [BokaaSuit(BokaaSuit::RED).ToUInt()]    = HTML_COLOR_FONT_HEADER(red) "■",
         [BokaaSuit(BokaaSuit::GREEN).ToUInt()]  = HTML_COLOR_FONT_HEADER(green) "★",
     };
-    static constexpr const char* const k_suit_str[BokaaNumber::Count()] = {
+    static constexpr const char* const k_suit_str[BokaaSuit::Count()] {
         [BokaaSuit(BokaaSuit::PURPLE).ToUInt()] = "○",
         [BokaaSuit(BokaaSuit::BLUE).ToUInt()]   = "△",
         [BokaaSuit(BokaaSuit::RED).ToUInt()]    = "□",
@@ -177,13 +178,13 @@ struct Types<CardType::POKER>
         {"梅花", PokerSuit::CLUBS},
         {"♣",    PokerSuit::CLUBS},
     };
-    static constexpr const char* const k_colored_suit_str[PokerNumber::Count()] = {
+    static constexpr const char* const k_colored_suit_str[PokerSuit::Count()] {
         [PokerSuit(PokerSuit::CLUBS).ToUInt()]    = HTML_COLOR_FONT_HEADER(black) "♣",
         [PokerSuit(PokerSuit::DIAMONDS).ToUInt()] = HTML_COLOR_FONT_HEADER(red) "♦",
         [PokerSuit(PokerSuit::HEARTS).ToUInt()]   = HTML_COLOR_FONT_HEADER(red) "♥",
         [PokerSuit(PokerSuit::SPADES).ToUInt()]   = HTML_COLOR_FONT_HEADER(black) "♠",
     };
-    static constexpr const char* const k_suit_str[PokerNumber::Count()] = {
+    static constexpr const char* const k_suit_str[PokerSuit::Count()] {
         [PokerSuit(PokerSuit::CLUBS).ToUInt()]    = "♧",
         [PokerSuit(PokerSuit::DIAMONDS).ToUInt()] = "♢",
         [PokerSuit(PokerSuit::HEARTS).ToUInt()]   = "♡",
@@ -228,15 +229,8 @@ template <CardType k_type>
 std::array<Card<k_type>, k_card_num<k_type>> ShuffledPokers(const std::string_view& sv = "")
 {
     auto cards = UnshuffledPokers<k_type>();
-    if (sv.empty()) {
-        std::random_device rd;
-        std::mt19937 g(rd());
-        std::shuffle(cards.begin(), cards.end(), g);
-    } else {
-        std::seed_seq seed(sv.begin(), sv.end());
-        std::mt19937 g(seed);
-        std::shuffle(cards.begin(), cards.end(), g);
-    }
+    auto g = MakeRng(sv);
+    SeededShuffle(cards.begin(), cards.end(), g);
     return cards;
 }
 
@@ -287,7 +281,7 @@ template <typename String, typename Sender, CardType k_type>
 std::optional<typename Types<k_type>::NumberType> ParseNumber(const String& s, Sender&& sender)
 {
     std::string number_str = "_" + std::string(s);
-    number_str[1] = std::toupper(number_str[1]); // lower case is expected
+    number_str[1] = static_cast<char>(std::toupper(number_str[1])); // lower case is expected
     const auto parse_ret = Types<k_type>::NumberType::Parse(number_str);
     if (parse_ret.has_value()) {
         sender << "非预期的点数\'" << s << "\'，期望为：";

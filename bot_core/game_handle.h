@@ -97,6 +97,7 @@ class GameHandle
     {
         game_options_ptr game_options_;
         lgtbot::game::MutableGenericOptions generic_options_;
+        std::vector<std::string> applied_log_;  // options set via %配置, to be synced to subprocess
     };
 
     Options CopyDefaultGameOptions() const
@@ -105,7 +106,19 @@ class GameHandle
         return Options{
             .game_options_ = game_options_ptr(locked_options->game_options_->Copy(), internal_handler_.game_options_deleter_),
             .generic_options_ = locked_options->generic_options_,
+            .applied_log_ = locked_options->applied_log_,
         };
+    }
+
+    // Set a default option (called by %配置), records the option for subprocess sync.
+    bool SetDefaultOption(const std::string& option_str)
+    {
+        auto locked_options = default_options_.Lock();
+        if (!locked_options->game_options_->SetOption(option_str.c_str())) {
+            return false;
+        }
+        locked_options->applied_log_.push_back(option_str);
+        return true;
     }
 
     LockWrapper<Options>& DefaultGameOptions() { return default_options_; }

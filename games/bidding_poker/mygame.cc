@@ -105,7 +105,7 @@ class MainStage : public MainGameStage<k_type, MainBidStage<k_type>, RoundStage<
 
     virtual void NextStageFsm(RoundStage<k_type>& sub_stage, const CheckoutReason reason, StageFsm::SubStageFsmSetter setter) override;
 
-    int64_t PlayerScore(const PlayerID pid) const { return players_[pid].coins_ + players_[pid].bonus_coins_; }
+    int64_t PlayerScore(const PlayerID pid) const override { return players_[pid].coins_ + players_[pid].bonus_coins_; }
 
     PokerItems<k_type>& poker_items() { return poker_items_; }
     const PokerItems<k_type>& poker_items() const { return poker_items_; }
@@ -316,7 +316,7 @@ class BidStage : public SubGameStage<k_type>
         discarder_(discarder), pokers_(pokers), bidding_manager_(main_stage.players().size()), bid_count_(0)
     {}
 
-    void OnStageBegin()
+    void OnStageBegin() override
     {
         auto sender = this->Global().Boardcast();
         sender << this->Name() << "：";
@@ -339,7 +339,7 @@ class BidStage : public SubGameStage<k_type>
         this->Global().StartTimer(GAME_OPTION(投标时间));
     }
 
-    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply)
+    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply) override
     {
         const auto max_bid_coins = this->Main().players()[pid].coins_ / 4;
         if (max_bid_coins > 0) {
@@ -349,8 +349,8 @@ class BidStage : public SubGameStage<k_type>
     }
 
     // TODO: Hook unready players
-    CheckoutErrCode OnStageTimeout() { return CheckoutErrCode::Condition(BidOver_(), StageErrCode::CHECKOUT, StageErrCode::CONTINUE); }
-    CheckoutErrCode OnStageOver() { return CheckoutErrCode::Condition(BidOver_(), StageErrCode::CHECKOUT, StageErrCode::CONTINUE); }
+    CheckoutErrCode OnStageTimeout() override { return CheckoutErrCode::Condition(BidOver_(), StageErrCode::CHECKOUT, StageErrCode::CONTINUE); }
+    CheckoutErrCode OnStageOver() override { return CheckoutErrCode::Condition(BidOver_(), StageErrCode::CHECKOUT, StageErrCode::CONTINUE); }
 
   private:
     bool BidOver_()
@@ -529,7 +529,7 @@ class DiscardStage : public SubGameStage<k_type>
                 MakeStageCommand(*this, "决定本回合**所有的**弃牌", &DiscardStage::Discard_, RepeatableChecker<AnyArg>("扑克", "红3")))
     {}
 
-    void OnStageBegin()
+    void OnStageBegin() override
     {
         this->Global().Boardcast() << Markdown(InfoHtml_());
         this->Global().Boardcast() << "弃牌阶段开始，请一次性私信裁判**所有的**弃牌，当到达时间限制，或所有玩家皆选择完毕后，回合结束。"
@@ -542,7 +542,7 @@ class DiscardStage : public SubGameStage<k_type>
         }
     }
 
-    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply)
+    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, MsgSenderBase& reply) override
     {
         if (std::rand() % 2) {
             return StageErrCode::READY;
@@ -629,7 +629,7 @@ class DiscardStage : public SubGameStage<k_type>
         return StageErrCode::READY;
     }
 
-    CheckoutErrCode OnStageTimeout()
+    CheckoutErrCode OnStageTimeout() override
     {
         return StageErrCode::CHECKOUT;
     }

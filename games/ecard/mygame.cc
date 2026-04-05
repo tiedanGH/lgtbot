@@ -92,7 +92,7 @@ class MainStage : public MainGameStage<TargetStage, RoundStage>
     Table table;
 
   private:
-    void FirstStageFsm(SubStageFsmSetter setter)
+    void FirstStageFsm(SubStageFsmSetter setter) override
     {
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             table.name[pid] = Global().PlayerName(pid);
@@ -114,7 +114,7 @@ class MainStage : public MainGameStage<TargetStage, RoundStage>
         }
     }
 
-    void NextStageFsm(TargetStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(TargetStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         if (reason == CheckoutReason::BY_TIMEOUT || reason == CheckoutReason::BY_LEAVE) {
             return;
@@ -122,7 +122,7 @@ class MainStage : public MainGameStage<TargetStage, RoundStage>
         setter.Emplace<RoundStage>(*this, ++round_);
     }
 
-    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         if (reason == CheckoutReason::BY_TIMEOUT || reason == CheckoutReason::BY_LEAVE) {
             return;
@@ -310,7 +310,7 @@ class RoundStage : public SubGameStage<BitStage, GameStage>
         return StageErrCode::OK;
     }
 
-    void FirstStageFsm(SubStageFsmSetter setter)
+    void FirstStageFsm(SubStageFsmSetter setter) override
     {
         if (GAME_OPTION(模式) == 2) {
             // [人生模式]进入下注阶段
@@ -332,7 +332,7 @@ class RoundStage : public SubGameStage<BitStage, GameStage>
     }
 
     // [人生模式]阶段切换
-    void NextStageFsm(BitStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(BitStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         if (reason == CheckoutReason::BY_TIMEOUT || reason == CheckoutReason::BY_LEAVE) {
             return;
@@ -342,7 +342,7 @@ class RoundStage : public SubGameStage<BitStage, GameStage>
         setter.Emplace<GameStage>(Main(), emperor);
     }
 
-    void NextStageFsm(GameStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(GameStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         if (reason == CheckoutReason::BY_TIMEOUT || reason == CheckoutReason::BY_LEAVE) {
             return;

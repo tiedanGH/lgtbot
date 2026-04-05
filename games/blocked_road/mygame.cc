@@ -89,7 +89,7 @@ class MainStage : public MainGameStage<StartStage, RoundStage>
         return StageErrCode::OK;
     }
 
-    void FirstStageFsm(SubStageFsmSetter setter)
+    void FirstStageFsm(SubStageFsmSetter setter) override
     {
         // 随机先后手
         srand((unsigned int)time(NULL));
@@ -109,7 +109,7 @@ class MainStage : public MainGameStage<StartStage, RoundStage>
         setter.Emplace<StartStage>(*this, ++round_);
     }
 
-    void NextStageFsm(StartStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(StartStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         // 超时直接结束游戏
         if (reason == CheckoutReason::BY_TIMEOUT || reason == CheckoutReason::BY_LEAVE) {
@@ -125,7 +125,7 @@ class MainStage : public MainGameStage<StartStage, RoundStage>
         setter.Emplace<RoundStage>(*this, round_);
     }
 
-    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         currentPlayer = 1- currentPlayer;
         if ((++round_) <= GAME_OPTION(回合数) && player_scores_[0] == 0 && player_scores_[1] == 0) {

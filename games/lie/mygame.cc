@@ -168,7 +168,7 @@ class MainStage : public MainGameStage<RoundStage>
     MainStage(StageUtility&& utility);
     virtual void FirstStageFsm(SubStageFsmSetter setter) override;
     virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
-    int64_t PlayerScore(const PlayerID pid) const;
+    int64_t PlayerScore(const PlayerID pid) const override;
     MyTable& table() { return table_; }
 
    private:

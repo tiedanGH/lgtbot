@@ -13,6 +13,7 @@
 #include "game_framework/stage.h"
 #include "game_framework/util.h"
 #include "utility/html.h"
+#include "utility/random.h"
 #include "game_util/numcomb.h"
 
 namespace comb = lgtbot::game_util::numcomb;
@@ -105,14 +106,8 @@ class MainStage : public MainGameStage<RoundStage>
         }
 
         seed_str = GAME_OPTION(种子);
-        if (seed_str.empty()) {
-            std::random_device rd;
-            std::uniform_int_distribution<unsigned long long> dis;
-            seed_str = std::to_string(dis(rd));
-        }
-        std::seed_seq seed(seed_str.begin(), seed_str.end());
-        std::mt19937 g(seed);
-        std::shuffle(cards_.begin(), cards_.end(), g);
+        auto g = MakeRng(seed_str);
+        SeededShuffle(cards_.begin(), cards_.end(), g);
 
         it_ = cards_.begin();
         if (std::all_of(cards_.begin(), cards_.begin() + GAME_OPTION(跳过非癞子),
@@ -125,7 +120,7 @@ class MainStage : public MainGameStage<RoundStage>
 
     virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
 
-    int64_t PlayerScore(const PlayerID pid) const
+    int64_t PlayerScore(const PlayerID pid) const override
     {
         return players_[pid].score_;
     }

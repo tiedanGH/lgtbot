@@ -54,7 +54,7 @@ class MainStage : public MainGameStage<BuyStage, GrazingStage>
     virtual void NextStageFsm(BuyStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
     virtual void NextStageFsm(GrazingStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
 
-    int64_t PlayerScore(const PlayerID pid) const { return pasture.GetScore(); }
+    int64_t PlayerScore(const PlayerID pid) const override { return pasture.GetScore(); }
 
     Pasture pasture;
 

@@ -112,7 +112,7 @@ class MainStage : public MainGameStage<RoundStage> {
   MainStage(StageUtility&& utility);
   virtual void FirstStageFsm(SubStageFsmSetter setter) override;
   virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
-  int64_t PlayerScore(const PlayerID pid) const;
+  int64_t PlayerScore(const PlayerID pid) const override;
 
   bool JudgeOver();
 
@@ -166,7 +166,7 @@ class RoundStage : public SubGameStage<> {
     Global().StartTimer(GAME_OPTION(时限));
   }
 
-  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) {
+  virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override {
     Global().Boardcast() << "玩家 " << Global().PlayerName(pid) << " 中途退出，游戏结束。";
     Main().ended_ = true;
     Main().score_[pid] = -1;

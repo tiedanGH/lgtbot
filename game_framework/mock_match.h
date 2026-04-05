@@ -47,7 +47,7 @@ class MockMsgSender : public MsgSenderBase
         throw std::runtime_error("user should not appear in game");
     }
 
-    virtual void SavePlayer(const PlayerID& pid, const bool is_at)
+    virtual void SavePlayer(const PlayerID& pid, const bool is_at) override
     {
         if (is_at) {
             ss_ << "@" << pid;
@@ -56,13 +56,13 @@ class MockMsgSender : public MsgSenderBase
         }
     }
 
-    virtual void SaveImage(const char* const path)
+    virtual void SaveImage(const char* const path) override
     {
         std::basic_string<char> path_str(path);
             ss_ << "[image=" << std::string(path_str.begin(), path_str.end()) << "]";
     }
 
-    virtual void SaveMarkdown(const char* const markdown, const uint32_t width)
+    virtual void SaveMarkdown(const char* const markdown, const uint32_t width) override
     {
         if (image_dir_.empty()) {
             return;

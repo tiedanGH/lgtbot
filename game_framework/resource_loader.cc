@@ -23,6 +23,13 @@
 
 extern char _binary_rule_md_start[];
 
+#else
+
+#include <dlfcn.h>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+
 #endif
 
 namespace lgtbot {
@@ -69,6 +76,26 @@ const char* Rule()
 #elif __linux__
 
 const char* Rule() { return _binary_rule_md_start; }
+
+#else
+
+const char* Rule()
+{
+    static std::string rule = []() {
+        // Use dladdr to find the path of this dylib, then locate rule.md beside it
+        Dl_info info;
+        if (!dladdr(reinterpret_cast<void*>(&Rule), &info) || !info.dli_fname) {
+            return std::string("(rule not found)");
+        }
+        std::filesystem::path dylib_dir = std::filesystem::path(info.dli_fname).parent_path();
+        std::ifstream f(dylib_dir / "rule.md");
+        if (!f) return std::string("(rule not found)");
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        return ss.str();
+    }();
+    return rule.c_str();
+}
 
 #endif
 
