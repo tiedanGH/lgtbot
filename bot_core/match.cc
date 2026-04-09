@@ -626,10 +626,6 @@ void Match::StartTimer(const uint64_t /*sec*/, void* /*alert_arg*/, void (*/*ale
 
 void Match::StopTimer() {}
 
-void Match::Eliminate(const PlayerID /*pid*/) { MatchLog_(WarnLog()) << "Eliminate ignored on host Match"; }
-
-void Match::Hook(const PlayerID /*pid*/) { MatchLog_(WarnLog()) << "Hook ignored on host Match"; }
-
 void Match::Eliminate(const PlayerID pid)
 {
     if (std::exchange(players_[pid].state_, Player::State::ELIMINATED) != Player::State::ELIMINATED) {
