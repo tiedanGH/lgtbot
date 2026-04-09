@@ -173,6 +173,9 @@ typedef struct
     // The list for administor user ID, split by ',', be NULL if there are no administors.
     const char* admins_;
 
+    // The path to the config_runner executable, be NULL to use the default ("config_runner" in PATH).
+    const char* config_runner_path_;
+
     // The user defined handler which will be passed to callbacks.
     void* handler_;
 

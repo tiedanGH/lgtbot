@@ -56,12 +56,12 @@ extern const std::vector<MetaCommandGroup> admin_cmds;
 
 static uint32_t DefaultMultiple(const GameHandle& game_handle)
 {
-    return game_handle.Info().multiple_fn_(game_handle.DefaultGameOptions().Lock()->game_options_.get());
+    return game_handle.CachedMultiple();
 }
 
-static uint32_t DefaultMaxPlayer(const GameHandle& game_handle)
+static uint64_t DefaultMaxPlayer(const GameHandle& game_handle)
 {
-    return game_handle.Info().max_player_num_fn_(game_handle.DefaultGameOptions().Lock()->game_options_.get());
+    return game_handle.CachedMaxPlayer();
 }
 
 static ErrCode help_internal(BotCtx& bot, MsgSenderBase& reply, const std::vector<MetaCommandGroup>& cmd_groups,
@@ -169,11 +169,8 @@ static ErrCode show_gamelist(BotCtx& bot, const UserID uid, const std::optional<
             }
             const auto& name = p->first;
             const auto& game_handle = p->second;
-            const auto locked_options = game_handle.DefaultGameOptions().Lock();
-            const auto default_multiple =
-                locked_options->generic_options_.is_formal_ ? game_handle.Info().multiple_fn_(locked_options->game_options_.get())
-                                                            : 0;
-            const auto default_max_player = game_handle.Info().max_player_num_fn_(locked_options->game_options_.get());
+            const auto default_multiple = game_handle.CachedMultiple();
+            const auto default_max_player = game_handle.CachedMaxPlayer();
             table.AppendRow();
             table.AppendRow();
             table.MergeDown(table.Row() - 2, 0, 2);
@@ -398,17 +395,7 @@ static ErrCode show_custom_rule(BotCtx& bot, const UserID uid, const std::option
         reply() << "[错误] 查看失败：未知的游戏名，请通过「" META_COMMAND_SIGN "游戏列表」查看游戏名称";
         return EC_REQUEST_UNKNOWN_GAME;
     };
-    std::string s;
-    for (const auto& arg : args) {
-        s += arg;
-        s += " ";
-    }
-    const char* const result = it->second.Info().handle_rule_command_fn_(s.c_str());
-    if (!result) {
-        reply() << "[错误] 查看失败：未知的规则指令，请通过「" META_COMMAND_SIGN "规则 " << gamename << "」查看具体规则指令";
-        return EC_INVALID_ARGUMENT;
-    }
-    reply() << result;
+    reply() << it->second.Info().rule_;
     return EC_OK;
 }
 
@@ -459,8 +446,8 @@ static ErrCode show_game_options(BotCtx& bot, const UserID uid, const std::optio
         reply() << "[错误] 查看失败：未知的游戏名，请通过「" META_COMMAND_SIGN "游戏列表」查看游戏名称";
         return EC_REQUEST_UNKNOWN_GAME;
     };
-    const std::string outstr = std::string("### 「") + gamename + "」配置选项" +
-        it->second.DefaultGameOptions().Lock()->game_options_->Info(true, !text_mode, (ADMIN_COMMAND_SIGN "配置 " + gamename + " ").c_str());
+    const std::string outstr = std::string("### 「") + gamename + "」配置选项\n" +
+        it->second.ConfigClient().QueryOptionInfo(text_mode);
     if (text_mode) {
         reply() << outstr;
     } else {
@@ -938,7 +925,7 @@ static ErrCode set_game_default_formal(BotCtx& bot, const UserID uid, const std:
         reply() << "[错误] 查看失败：未知的游戏名，请通过「" META_COMMAND_SIGN "游戏列表」查看游戏名称";
         return EC_REQUEST_UNKNOWN_GAME;
     };
-    it->second.DefaultGameOptions().Lock()->generic_options_.is_formal_ = is_formal;
+    it->second.ConfigClient().SetDefaultFormal(is_formal);
     reply() << "设置成功，游戏默认" << (is_formal ? "开启" : "关闭") << "计分";
     bot.UpdateGameDefaultFormal(gamename, is_formal);
     return EC_OK;
@@ -993,12 +980,13 @@ static ErrCode set_game_option(BotCtx& bot, const UserID uid, const std::optiona
     for (const auto& option_arg : option_args) {
         option_str += " " + option_arg;
     }
-    auto locked_option = game_handle_it->second.DefaultGameOptions().Lock();
-    if (!locked_option->game_options_->SetOption(option_str.c_str())) {
+    uint64_t max_player = 0;
+    uint32_t multiple = 0;
+    if (!game_handle_it->second.ConfigClient().SetDefaultOption(option_str, max_player, multiple)) {
         reply() << "[错误] 设置配置项失败，请通过「" META_COMMAND_SIGN "配置 " << game_name << "」确认配置项是否存在";
         return EC_INVALID_ARGUMENT;
     }
-    locked_option->applied_log_.push_back(option_str);
+    game_handle_it->second.UpdateCachedLimits(max_player, multiple);
     reply() << "设置成功";
     bot.UpdateGameConfig(game_name, option_name, option_args);
     return EC_OK;

@@ -58,92 +58,117 @@ static std::set<UserID> SplitIdsByComma(const std::string_view& str)
 
 static auto FillAchievements(const std::span<const lgtbot::game::GameAchievement> achievements)
 {
-    std::vector<GameHandle::Achievement> result;
+    std::vector<GameHandle::BasicInfo::Achievement> result;
     std::ranges::transform(achievements, std::back_inserter(result), [](const lgtbot::game::GameAchievement& achievement)
             {
-                return GameHandle::Achievement{.name_ = achievement.name_, .description_ = achievement.description_};
+                return GameHandle::BasicInfo::Achievement{.name_ = achievement.name_, .description_ = achievement.description_};
             });
     return result;
 }
 
-static void LoadGame(HINSTANCE mod, GameHandleMap& game_handles)
+// Load a game module, extract static info, then dlclose immediately.
+// Returns false if loading failed.
+static bool LoadGame(const std::string& lib_path, const std::string& config_runner_path,
+                     const std::string& game_conf_path, GameHandleMap& game_handles)
 {
-        if (!mod) {
+#ifdef _WIN32
+    HINSTANCE mod = LoadLibrary(lib_path.c_str());
+#else
+    void* mod = dlopen(lib_path.c_str(), RTLD_NOW);
+#endif
+    if (!mod) {
 #if defined(__linux__) || defined(__APPLE__)
         ErrorLog() << "Load mod failed: " << dlerror();
 #else
         ErrorLog() << "Load mod failed";
 #endif
-        return;
+        return false;
     }
-    const auto load_proc = [&mod](const char* const name)
+
+    const auto load_proc = [&mod](const char* const name) -> void*
     {
-        const auto proc = GetProcAddress(mod, name);
-        if (!proc) {
+#ifdef _WIN32
+        void* const p = reinterpret_cast<void*>(GetProcAddress(mod, name));
+#else
+        void* const p = dlsym(mod, name);
+#endif
+        if (!p) {
 #if defined(__linux__) || defined(__APPLE__)
             std::cerr << dlerror() << std::endl;
 #endif
             throw std::runtime_error(std::string("load proc ") + name + " from module failed");
         }
-        return proc;
+        return p;
     };
+
+    struct ModGuard {
+        HINSTANCE mod;
+        ~ModGuard() { FreeLibrary(mod); }
+    } guard{mod};
+
     try {
         lgtbot::game::GameInfo game_info;
         reinterpret_cast<void(*)(lgtbot::game::GameInfo*)>(load_proc("GetGameInfo"))(&game_info);
+
+        // Get default max_player and multiple from a temporary options object
+        const auto alloc_opt = reinterpret_cast<GameHandle::game_options_allocator>(load_proc("NewGameOptions"));
+        const auto del_opt   = reinterpret_cast<GameHandle::game_options_deleter>(load_proc("DeleteGameOptions"));
+        const auto max_player_fn = reinterpret_cast<uint64_t(*)(const lgtbot::game::GameOptionsBase*)>(load_proc("MaxPlayerNum"));
+        const auto multiple_fn   = reinterpret_cast<uint32_t(*)(const lgtbot::game::GameOptionsBase*)>(load_proc("Multiple"));
+
+        std::unique_ptr<lgtbot::game::GameOptionsBase, GameHandle::game_options_deleter> tmp_opts(alloc_opt(), del_opt);
+        const uint64_t default_max_player = tmp_opts ? max_player_fn(tmp_opts.get()) : 0;
+        const uint32_t default_multiple   = tmp_opts ? multiple_fn(tmp_opts.get()) : 0;
 
         GameHandle::BasicInfo basic_info = *game_info.properties_;
         basic_info.module_name_ = game_info.module_name_;
         basic_info.rule_ = game_info.rule_;
         basic_info.achievements_ = FillAchievements(std::span(game_info.achievements_.data_, game_info.achievements_.size_));
-        basic_info.max_player_num_fn_ = reinterpret_cast<GameHandle::max_player_num_handler>(load_proc("MaxPlayerNum"));
-        basic_info.multiple_fn_ = reinterpret_cast<GameHandle::multiple_handler>(load_proc("Multiple"));
-        basic_info.handle_rule_command_fn_ = reinterpret_cast<GameHandle::rule_command_handler>(load_proc("HandleRuleCommand"));
-        basic_info.handle_init_options_command_fn_ = reinterpret_cast<GameHandle::init_options_command_handler>(load_proc("HandleInitOptionsCommand"));
 
-        game_handles.emplace(std::piecewise_construct, std::forward_as_tuple(game_info.properties_->name_),
+        game_handles.emplace(std::piecewise_construct,
+                std::forward_as_tuple(game_info.properties_->name_),
                 std::forward_as_tuple(
                     std::move(basic_info),
-                    GameHandle::InternalHandler{
-                        .game_options_allocator_ = reinterpret_cast<GameHandle::game_options_allocator>(load_proc("NewGameOptions")),
-                        .game_options_deleter_ = reinterpret_cast<GameHandle::game_options_deleter>(load_proc("DeleteGameOptions")),
-                        .main_stage_allocator_ = reinterpret_cast<GameHandle::main_stage_allocator>(load_proc("NewMainStage")),
-                        .main_stage_deleter_ = reinterpret_cast<GameHandle::main_stage_deleter>(load_proc("DeleteMainStage")),
-                        .mod_guard_ = [mod] { FreeLibrary(mod); },
-                    },
-                    game_info.default_generic_options_));
+                    default_max_player,
+                    default_multiple,
+                    std::make_unique<GameConfigClient>(config_runner_path, lib_path, game_conf_path)));
     } catch (const std::exception& e) {
         ErrorLog() << "Load mod failed: " << e.what();
-        return;
+        return false;
     }
-    InfoLog() << "Loaded successfully!";
+    InfoLog() << "Loaded successfully: " << lib_path;
+    return true;
+    // guard destructor calls FreeLibrary/dlclose here
 }
 
 // TODO: use std::expect
-std::variant<GameHandleMap, const char*> BotCtx::LoadGameModules(const char* const games_path)
+std::variant<GameHandleMap, const char*> BotCtx::LoadGameModules(const char* const games_path,
+                                                                   const char* const config_runner_path,
+                                                                   const char* const conf_path)
 {
     GameHandleMap game_handles;
     if (games_path == nullptr) {
         return game_handles;
     }
+#ifndef CONFIG_RUNNER_PATH
+#define CONFIG_RUNNER_PATH "config_runner"
+#endif
+    const std::string runner_path = config_runner_path ? config_runner_path : CONFIG_RUNNER_PATH;
+    const std::string conf_dir = conf_path ? conf_path : "";
 #ifdef _WIN32
-    WIN32_FIND_DATA dir_data;
-    HANDLE dir_handle = FindFirstFile((std::string(games_path) + "\\*").c_str(), &dir_data);
-    if (dir_handle == INVALID_HANDLE_VALUE) {
-        return "LoadGameModules: open directory failed";
+    WIN32_FIND_DATA file_data;
+    HANDLE file_handle = FindFirstFile((std::string(games_path) + "\\*").c_str(), &file_data);
+    if (file_handle == INVALID_HANDLE_VALUE) {
+        return "LoadGameModules: find first file failed";
     }
     do {
-        if ((dir_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 || strcmp(dir_data.cFileName, ".") == 0 || strcmp(dir_data.cFileName, "..") == 0) {
-            WarnLog() << "Not the game directory, skip: " << dir_data.cFileName;
-            continue;
-        }
-        std::string dll_path = std::string(games_path) + "\\" + dir_data.cFileName + "\\libgame.dll";
-        if (GetFileAttributes(dll_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
-            WarnLog() << "Cannot find libgame.dll, skip: " << dir_data.cFileName;
-        } else {
-            LoadGame(LoadLibrary(dll_path.c_str()), game_handles);
-        }
-    } while (FindNextFile(dir_handle, &dir_data));
-    FindClose(dir_handle);
+        if (!(file_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) continue;
+        if (strcmp(file_data.cFileName, ".") == 0 || strcmp(file_data.cFileName, "..") == 0) continue;
+        const auto dll_path = std::string(games_path) + "\\" + file_data.cFileName + "\\libgame.dll";
+        const auto game_conf = conf_dir.empty() ? "" : conf_dir + "\\" + file_data.cFileName + ".json";
+        LoadGame(dll_path, runner_path, game_conf, game_handles);
+    } while (FindNextFile(file_handle, &file_data));
+    FindClose(file_handle);
     InfoLog() << "Load module count: " << game_handles.size();
 #elif defined(__linux__) || defined(__APPLE__)
     DIR* d = opendir(games_path);
@@ -165,7 +190,8 @@ std::variant<GameHandleMap, const char*> BotCtx::LoadGameModules(const char* con
         if (access(lib_name.c_str(), F_OK) != 0) {
             WarnLog() << "Cannot find " << lib_leaf << ", skip: " << dp->d_name;
         } else {
-            LoadGame(dlopen(lib_name.c_str(), RTLD_LAZY), game_handles);
+            const auto game_conf = conf_dir.empty() ? "" : conf_dir + "/" + dp->d_name + ".json";
+            LoadGame(lib_name, runner_path, game_conf, game_handles);
         }
     }
     InfoLog() << "Loading finished.";
@@ -178,7 +204,7 @@ std::variant<GameHandleMap, const char*> BotCtx::LoadGameModules(const char* con
 }
 
 // TODO: use std::expect
-static std::variant<nlohmann::json, const char*> LoadConfig(const char* const conf_path, GameHandleMap& game_handles,
+static std::variant<nlohmann::json, const char*> LoadConfig(const char* const conf_path,
         MutableBotOption& bot_options)
 {
     if (!conf_path) {
@@ -215,27 +241,22 @@ static std::variant<nlohmann::json, const char*> LoadConfig(const char* const co
             ErrorLog() << "LoadConfig set bot option failed: " << option_name << " " << value;
         }
     }
-    for (const auto& [game_name, game_json] : j["games"].items()) {
-        const auto it = game_handles.find(game_name);
-        if (it == game_handles.end()) {
-            ErrorLog() << "LoadConfig game '" << game_name << "' not found";
-            continue;
-        }
-        auto locked_option = it->second.DefaultGameOptions().Lock();
-        for (const auto& [option_name, value] : game_json["options"].items()) {
-            std::string option_str = option_name + " " + value.get<std::string>();
-            if (locked_option->game_options_->SetOption(option_str.c_str())) {
-                InfoLog() << "LoadConfig set game '" << game_name << "' option successfully: " << option_str;
-            } else {
-                ErrorLog() << "LoadConfig set game '" << game_name << "' option failed: " << option_str;
-            }
-        }
-        if (game_json.contains("is_formal")) {
-            locked_option->generic_options_.is_formal_ = game_json["is_formal"].get<bool>();
-            InfoLog() << "LoadConfig set game '" << game_name << "' is_formal: " << static_cast<int>(locked_option->generic_options_.is_formal_);
-        }
-    }
+    // Game-specific options are now handled by each game's config_runner subprocess,
+    // which reads its own per-game config file on startup. No loading needed here.
     return j;
+}
+
+BotCtx::~BotCtx()
+{
+    // Terminate all running matches before the cleanup queue is stopped.
+    // This ensures all read threads stop (and post their join tasks to the cleanup queue)
+    // while the queue is still alive, so no PostCleanup call races with queue destruction.
+    for (auto& match : match_manager_.Matches()) {
+        match->Terminate(true /* force */);
+    }
+    // match_cleanup_queue_ will Stop+drain in its own destructor (runs next),
+    // joining any read threads posted during the Terminate calls above.
+    // match_manager_ destructs after that (declared before match_cleanup_queue_).
 }
 
 BotCtx::BotCtx(std::string game_path,
@@ -268,7 +289,7 @@ BotCtx::BotCtx(std::string game_path,
 
 std::variant<BotCtx*, const char*> BotCtx::Create(const LGTBot_Option& options)
 {
-    auto game_handles = LoadGameModules(options.game_path_);
+    auto game_handles = LoadGameModules(options.game_path_, options.config_runner_path_, options.conf_path_);
     if (const char* const* const errmsg = std::get_if<const char*>(&game_handles)) {
         return *errmsg;
     }
@@ -279,8 +300,7 @@ std::variant<BotCtx*, const char*> BotCtx::Create(const LGTBot_Option& options)
     }
 #endif
     MutableBotOption bot_options;
-    auto config_json = LoadConfig(options.conf_path_, std::get<GameHandleMap>(game_handles),
-            bot_options);
+    auto config_json = LoadConfig(options.conf_path_, bot_options);
     if (const char* const* const errmsg = std::get_if<const char*>(&config_json)) {
         return *errmsg;
     }

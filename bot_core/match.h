@@ -10,6 +10,7 @@
 #include <set>
 #include <bitset>
 #include <memory>
+#include <thread>
 #include <variant>
 #include <vector>
 
@@ -34,14 +35,9 @@ class GroupMatch;
 class DiscussMatch;
 class MatchManager;
 class MatchChildClient;
-
-template <typename ...Ts>
-class Overload : public Ts...
-{
-  public:
-    Overload(Ts&& ...ts) : Ts(std::forward<Ts>(ts))... {}
-    using Ts::operator()...;
-};
+struct PostFrame;
+struct PlayerStateFrame;
+struct GameOverFrame;
 
 class Match : public MatchBase, public std::enable_shared_from_this<Match>
 {
@@ -50,7 +46,14 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
     enum State { NOT_STARTED = 'N', IS_STARTED = 'S', IS_OVER = 'O' };
     static const uint32_t kAvgScoreOffset = 10;
 
-    Match(BotCtx& bot, const MatchID id, GameHandle& game_handle, GameHandle::Options options,
+    struct InitOptions
+    {
+        uint32_t bench_computers_to_player_num_{0};
+        uint8_t is_formal_{1};
+        std::vector<std::string> applied_options_log_;
+    };
+
+    Match(BotCtx& bot, const MatchID id, GameHandle& game_handle, InitOptions init_options,
             const UserID host_uid, const std::optional<GroupID> gid);
     ~Match();
 
@@ -129,8 +132,8 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
         bool want_interrupt_{false};
     };
 
-    uint32_t MaxPlayerNum_() const { return game_handle_.Info().max_player_num_fn_(options_.game_options_.get()); }
-    uint32_t Multiple_() const { return game_handle_.Info().multiple_fn_(options_.game_options_.get()); }
+    uint64_t MaxPlayerNum_() const { return game_handle_.CachedMaxPlayer(); }
+    uint32_t Multiple_() const { return game_handle_.CachedMultiple(); }
 
     template <typename Logger>
     Logger& MatchLog_(Logger&& logger) const
@@ -149,11 +152,22 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
     void Help_(MsgSenderBase& reply, const bool text_mode);
     std::string OptionInfo_() const;
     void ApplyChildPlayerState(const PlayerID pid, const std::string& state);
-    void ApplyChildGameOverFromScores(const std::string& scores_json);
+    void ApplyChildGameOverFromScores(const struct GameOverFrame& frame);
+    void ApplyChildPost_(const struct PostFrame& frame);
+    void StartReadThread_();
+    void StopReadThread_();
     void KickForConfigChange_();
     void Unbind_();
     void UnbindMatchSide_();
-    void Terminate_();
+    // Signal the game child to stop and unbind the match.
+    // Must be called under mutex_. Returns the moved-out game child for the caller to
+    // destroy outside the lock (to avoid deadlocking with the read thread callbacks).
+    std::unique_ptr<MatchChildClient> PrepareTerminate_();
+
+    // Finish a terminate initiated by PrepareTerminate_: join the read thread and
+    // let the child be destroyed. Must be called WITHOUT holding mutex_.
+    void FinishTerminate_(std::unique_ptr<MatchChildClient> child);
+
     bool Has_(const UserID uid) const;
     std::string HostUserName_() const;
     uint32_t PlayerNum_() const;
@@ -173,7 +187,7 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
     std::atomic<State> state_{State::NOT_STARTED};
 
     // options
-    struct Options
+    struct RuntimeOptions
     {
         struct ResourceHolder
         {
@@ -182,12 +196,12 @@ class Match : public MatchBase, public std::enable_shared_from_this<Match>
         };
 
         ResourceHolder resource_holder_;
-        GameHandle::game_options_ptr game_options_;
         lgtbot::game::GenericOptions generic_options_;
     };
-    Options options_;
+    RuntimeOptions options_;
 
     std::unique_ptr<MatchChildClient> game_child_;
+    std::thread read_thread_;
     std::vector<std::string> applied_options_log_;
 
     // user info

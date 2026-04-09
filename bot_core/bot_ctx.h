@@ -13,12 +13,12 @@
 #include "bot_core/id.h"
 #include "bot_core/db_manager.h"
 #include "bot_core/options.h"
+#include "bot_core/game_handle.h"
 #include "utility/lock_wrapper.h"
+#include "utility/serial_task_queue.h"
 #include "nlohmann/json.hpp"
 
 #include <dirent.h>
-
-using GameHandleMap = std::map<std::string, GameHandle>;
 
 class BotCtx
 {
@@ -27,6 +27,8 @@ class BotCtx
     BotCtx(BotCtx&&) = delete;
 
     static std::variant<BotCtx*, const char*> Create(const LGTBot_Option& options);
+
+    ~BotCtx();
 
     MatchManager& match_manager() { return match_manager_; }
 
@@ -48,6 +50,17 @@ class BotCtx
     const auto& option() const { return mutable_bot_options_; }
 
     bool UpdateBotConfig(const std::string& option_name, const std::vector<std::string>& option_args);
+
+    // Post a cleanup task (e.g., joining a game read thread) to the cleanup queue.
+    // Fn may be move-only; it is wrapped in a shared_ptr to satisfy std::function's
+    // copy-constructibility requirement.
+    // The queue is drained during BotCtx destruction before MatchManager is destroyed.
+    template <typename Fn>
+    void PostCleanup(Fn&& fn)
+    {
+        auto shared_fn = std::make_shared<std::decay_t<Fn>>(std::forward<Fn>(fn));
+        match_cleanup_queue_.Post([shared_fn]() mutable { (*shared_fn)(); });
+    }
 
     bool UpdateGameConfig(const std::string& game_name, const std::string& option_name,
             const std::vector<std::string>& option_args);
@@ -73,7 +86,9 @@ class BotCtx
     MsgSender MakeMsgSender(const UserID& user_id, Match* const match = nullptr) const;
     MsgSender MakeMsgSender(const GroupID& user_id, Match* const match = nullptr) const;
 
-    static std::variant<GameHandleMap, const char*> LoadGameModules(const char* games_path);
+    static std::variant<GameHandleMap, const char*> LoadGameModules(const char* games_path,
+                                                                    const char* config_runner_path = nullptr,
+                                                                    const char* conf_path = nullptr);
 
 #ifndef TEST_BOT
   private:
@@ -107,4 +122,9 @@ class BotCtx
 
     MatchManager match_manager_;
     mutable std::mutex mutex_;
+
+    // Must be declared LAST so it is destroyed FIRST.
+    // Its destructor drains pending cleanup tasks (joining game-process read threads),
+    // ensuring no read thread accesses MatchManager after it is destroyed.
+    SerialTaskQueue match_cleanup_queue_;
 };

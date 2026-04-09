@@ -49,17 +49,24 @@ ErrCode MatchManager::NewMatch(GameHandle& game_handle, const std::string_view i
             return EC_MATCH_ALREADY_BEGIN;
         }
         const MatchID mid = NewMatchID_();
-        auto options = game_handle.CopyDefaultGameOptions();
+        uint64_t max_player = game_handle.CachedMaxPlayer();
+        uint32_t multiple = game_handle.CachedMultiple();
+        uint32_t bench = 0;
+        uint8_t is_formal = game_handle.ConfigClient().QueryDefaultFormal() ? 1 : 0;
         if (!init_options_args.empty()) {
-            start_mode = game_handle.Info().handle_init_options_command_fn_(init_options_args.data(), options.game_options_.get(),
-                    &options.generic_options_);
+            start_mode = game_handle.ConfigClient().InitOptions(std::string(init_options_args), max_player, multiple, bench, is_formal);
+            if (start_mode == lgtbot::game::InitOptionsResult::INVALID_INIT_OPTIONS_COMMAND) {
+                // TODO: show all valid preset commands
+                reply() << "[错误] 建立失败：非法的预设指令，您可以通过「" META_COMMAND_SIGN "规则 "
+                        << game_handle.Info().name_ << "」查看所有的预设指令";
+                return EC_INVALID_ARGUMENT;
+            }
+            game_handle.UpdateCachedLimits(max_player, multiple);
         }
-        if (start_mode == lgtbot::game::InitOptionsResult::INVALID_INIT_OPTIONS_COMMAND) {
-            // TODO: show all valid preset commands
-            reply() << "[错误] 建立失败：非法的预设指令，您可以通过「" META_COMMAND_SIGN "规则 "
-                    << game_handle.Info().name_ << "」查看所有的预设指令";
-            return EC_INVALID_ARGUMENT;
-        }
+        Match::InitOptions options;
+        options.bench_computers_to_player_num_ = bench;
+        options.is_formal_ = is_formal;
+        options.applied_options_log_ = game_handle.ConfigClient().GetAppliedLog();
         new_match = std::make_shared<Match>(bot_, mid, game_handle, std::move(options), uid, gid);
         BindMatch_(mid, new_match);
         BindMatch_(uid, new_match);

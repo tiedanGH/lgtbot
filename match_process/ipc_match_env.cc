@@ -10,9 +10,10 @@
 IpcMatchEnv::IpcMatchEnv(ChildGameSession& session)
     : session_(session)
 {
-    broadcast_sender_ = std::make_unique<IpcMsgSender>(*this, "broadcast", 0);
-    group_sender_ = std::make_unique<IpcMsgSender>(*this, "group", 0);
-    ai_sender_ = std::make_unique<IpcMsgSender>(*this, "ai", 0);
+    using Ch = lgtbot::ipc::PostResp::Channel;
+    broadcast_sender_ = std::make_unique<IpcMsgSender>(*this, Ch::PostResp_Channel_BROADCAST, 0);
+    group_sender_     = std::make_unique<IpcMsgSender>(*this, Ch::PostResp_Channel_GROUP, 0);
+    ai_sender_        = std::make_unique<IpcMsgSender>(*this, Ch::PostResp_Channel_AI, 0);
 }
 
 MsgSenderBase& IpcMatchEnv::BoardcastMsgSender() { return *broadcast_sender_; }
@@ -27,7 +28,8 @@ MsgSenderBase& IpcMatchEnv::TellMsgSender(const PlayerID pid)
     if (it != tell_senders_.end()) {
         return *it->second;
     }
-    auto [placed, _] = tell_senders_.emplace(pid, std::make_unique<IpcMsgSender>(*this, "tell", pid.Get()));
+    auto [placed, _] = tell_senders_.emplace(pid,
+        std::make_unique<IpcMsgSender>(*this, lgtbot::ipc::PostResp::Channel::PostResp_Channel_TELL, pid.Get()));
     return *placed->second;
 }
 
@@ -44,7 +46,6 @@ const char* IpcMatchEnv::PlayerName(const PlayerID& pid)
 
 const char* IpcMatchEnv::PlayerAvatar(const PlayerID& pid, const int32_t /*size*/)
 {
-    thread_local static std::string buf;
     const auto i = pid.Get();
     if (i < player_avatars_.size()) {
         return player_avatars_[i].c_str();
@@ -70,64 +71,68 @@ void IpcMatchEnv::SetMeta(const uint64_t match_id, std::string game_name, std::v
 
 void IpcMatchEnv::WritePlayerStateToParent(const PlayerID pid, const char* const state)
 {
-    nlohmann::json j;
-    j["op"] = "player_state";
-    j["pid"] = pid.Get();
-    j["state"] = state;
-    session_.SendJson(j);
+    lgtbot::ipc::GameResponse resp;
+    auto* ps = resp.mutable_player_state();
+    ps->set_pid(pid.Get());
+    ps->set_state(state);
+    session_.SendProto(resp);
 }
 
-void IpcMatchEnv::SendPostFrame(const char* const channel, const uint32_t target_pid, const nlohmann::json& items)
+void IpcMatchEnv::SendPostFrame(lgtbot::ipc::PostResp::Channel channel, uint32_t target_pid,
+                                std::vector<lgtbot::ipc::MsgItem> items)
 {
-    nlohmann::json j;
-    j["op"] = "post";
-    j["channel"] = channel;
-    j["target_pid"] = target_pid;
-    j["items"] = items;
-    session_.SendJson(j);
+    lgtbot::ipc::GameResponse resp;
+    auto* post = resp.mutable_post();
+    post->set_channel(channel);
+    post->set_target_pid(target_pid);
+    for (auto& item : items) {
+        *post->add_items() = std::move(item);
+    }
+    session_.SendProto(resp);
 }
 
 void IpcMatchEnv::IpcMsgSender::SaveText(const char* const data, const uint64_t len)
 {
-    nlohmann::json it;
-    it["text"] = std::string(data, data + len);
-    items_.push_back(std::move(it));
+    lgtbot::ipc::MsgItem item;
+    item.set_text(std::string(data, data + len));
+    items_.push_back(std::move(item));
 }
 
 void IpcMatchEnv::IpcMsgSender::SaveUser(const UserID& id, const bool /*is_at*/)
 {
-    nlohmann::json it;
-    it["user_id"] = id.GetStr();
-    items_.push_back(std::move(it));
+    lgtbot::ipc::MsgItem item;
+    item.set_user_id(id.GetStr());
+    items_.push_back(std::move(item));
 }
 
 void IpcMatchEnv::IpcMsgSender::SavePlayer(const PlayerID& id, const bool /*is_at*/)
 {
-    nlohmann::json it;
-    it["at_player_id"] = id.Get();
-    items_.push_back(std::move(it));
+    lgtbot::ipc::MsgItem item;
+    item.set_at_player_id(id.Get());
+    items_.push_back(std::move(item));
 }
 
 void IpcMatchEnv::IpcMsgSender::SaveImage(const char* const path)
 {
-    nlohmann::json it;
-    it["image_path"] = path;
-    items_.push_back(std::move(it));
+    lgtbot::ipc::MsgItem item;
+    item.set_image_path(path);
+    items_.push_back(std::move(item));
 }
 
 void IpcMatchEnv::IpcMsgSender::SaveMarkdown(const char* const markdown, const uint32_t width)
 {
-    nlohmann::json it;
-    it["markdown"] = markdown;
-    it["markdown_width"] = width;
-    items_.push_back(std::move(it));
+    lgtbot::ipc::MsgItem item;
+    auto* md = item.mutable_markdown();
+    md->set_text(markdown);
+    md->set_width(width);
+    items_.push_back(std::move(item));
 }
 
 void IpcMatchEnv::IpcMsgSender::Flush()
 {
     if (!items_.empty()) {
-        env_.SendPostFrame(channel_.c_str(), target_pid_, items_);
-        items_ = nlohmann::json::array();
+        env_.SendPostFrame(channel_, target_pid_, std::move(items_));
+        items_.clear();
     }
 }
 

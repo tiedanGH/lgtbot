@@ -1,4 +1,4 @@
-#include "match_process/json_frame.h"
+#include "match_process/ipc_frame.h"
 
 #include <cstdint>
 #include <vector>
@@ -35,7 +35,7 @@ bool ReadAll(FILE* in, void* data, const size_t len)
 
 } // namespace
 
-bool WriteJsonFrame(FILE* const out, const std::string& payload)
+bool WriteFrame(FILE* const out, const std::string& payload)
 {
     const auto len = static_cast<uint32_t>(payload.size());
     unsigned char hdr[4] = {
@@ -47,7 +47,7 @@ bool WriteJsonFrame(FILE* const out, const std::string& payload)
     return WriteAll(out, hdr, sizeof(hdr)) && WriteAll(out, payload.data(), payload.size());
 }
 
-bool ReadJsonFrame(FILE* const in, std::string& payload_out)
+bool ReadFrame(FILE* const in, std::string& payload_out)
 {
     unsigned char hdr[4];
     if (!ReadAll(in, hdr, sizeof(hdr))) {

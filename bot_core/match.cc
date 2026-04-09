@@ -22,7 +22,8 @@
 #include "bot_core/match_manager.h"
 #include "bot_core/score_calculation.h"
 #include "bot_core/options.h"
-#include "match_process/match_child_client.h"
+#include "bot_core/match_child_client.h"
+#include "match_process/match_ipc.pb.h"
 #include "nlohmann/json.hpp"
 
 #include <cstdlib>
@@ -32,6 +33,18 @@
 #endif
 
 namespace {
+
+void AppendMsgItem(MsgSenderBase::MsgSenderGuard& g, const lgtbot::ipc::MsgItem& item)
+{
+    switch (item.content_case()) {
+    case lgtbot::ipc::MsgItem::kText:       g << item.text(); break;
+    case lgtbot::ipc::MsgItem::kAtPlayerId: g << At(PlayerID{item.at_player_id()}); break;
+    case lgtbot::ipc::MsgItem::kUserId:     g << Name(UserID{item.user_id()}); break;
+    case lgtbot::ipc::MsgItem::kImagePath:  g << Image{item.image_path()}; break;
+    case lgtbot::ipc::MsgItem::kMarkdown:   g << Markdown{item.markdown().text(), item.markdown().width()}; break;
+    default: break;
+    }
+}
 
 std::filesystem::path ResolveRunnerExe()
 {
@@ -55,7 +68,7 @@ std::filesystem::path GameLibraryPath(const BotCtx& bot, const GameHandle& gh)
 
 } // namespace
 
-Match::Match(BotCtx& bot, const MatchID mid, GameHandle& game_handle, GameHandle::Options options,
+Match::Match(BotCtx& bot, const MatchID mid, GameHandle& game_handle, InitOptions init_options,
         const UserID host_uid, const std::optional<GroupID> gid)
         : bot_(bot)
         , mid_(mid)
@@ -70,23 +83,36 @@ Match::Match(BotCtx& bot, const MatchID mid, GameHandle& game_handle, GameHandle
                     (std::filesystem::absolute(bot_.image_path()) / "matches" /
                      (std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + "_" + game_handle_.Info().module_name_)).string(),
             },
-            .game_options_ = std::move(options.game_options_),
             .generic_options_{
                 lgtbot::game::ImmutableGenericOptions{
                     .public_timer_alert_ = GET_OPTION_VALUE(*bot_.option().Lock(), 计时公开提示),
                     .resource_dir_ = options_.resource_holder_.resource_dir_.c_str(),
                     .saved_image_dir_ = options_.resource_holder_.saved_image_dir_.c_str(),
                 },
-                lgtbot::game::MutableGenericOptions{std::move(options.generic_options_)}
+                lgtbot::game::MutableGenericOptions{
+                    .bench_computers_to_player_num_ = init_options.bench_computers_to_player_num_,
+                    .is_formal_ = static_cast<bool>(init_options.is_formal_),
+                }
             },
           }
-        , applied_options_log_(std::move(options.applied_log_))
+        , applied_options_log_(std::move(init_options.applied_options_log_))
         , group_sender_(gid.has_value() ? std::optional<MsgSender>(bot.MakeMsgSender(*gid_, this)) : std::nullopt)
 {
     EmplaceUser_(host_uid);
 }
 
-Match::~Match() = default;
+Match::~Match()
+{
+    // Normally read_thread_ has already been moved into the cleanup queue by UnbindMatchSide_.
+    // However, if BotCtx is force-destroyed while a game is in progress (e.g. test teardown),
+    // we must stop and join it here.
+    if (game_child_) {
+        game_child_->SignalStop();
+    }
+    if (read_thread_.joinable()) {
+        read_thread_.join();
+    }
+}
 
 bool Match::Has_(const UserID uid) const { return users_.find(uid) != users_.end(); }
 
@@ -166,7 +192,7 @@ ErrCode Match::SetFormal(const UserID uid, MsgSenderBase& reply, const bool is_f
 ErrCode Match::Request(const UserID uid, const std::optional<GroupID> gid, const std::string& msg,
                        MsgSender& reply)
 {
-    std::lock_guard<std::mutex> l(mutex_);
+    std::unique_lock<std::mutex> l(mutex_);
     const auto it = users_.find(uid);
     if (it == users_.end() || it->second.state_ == ParticipantUser::State::LEFT) {
         reply() << "[错误] 您未处于游戏中或已经离开";
@@ -178,17 +204,31 @@ ErrCode Match::Request(const UserID uid, const std::optional<GroupID> gid, const
         return EC_MATCH_ALREADY_OVER;
     }
     reply.SetMatch(this);
-    if (MsgReader reader(msg); help_cmd_.CallIfValid(reader, reply)) {
-        return EC_GAME_REQUEST_OK;
-    }
     if (state_ == State::IS_STARTED) {
         const auto pid = it->second.pid_;
-        if (players_[pid].state_ == Player::State::ELIMINATED) {
+        const bool is_eliminated = players_[pid].state_ == Player::State::ELIMINATED;
+        // Release mutex before any IPC or blocking call (read thread may callback into Match).
+        l.unlock();
+        {
+            MsgReader reader(msg);
+            if (help_cmd_.CallIfValid(reader, reply)) {
+                return EC_GAME_REQUEST_OK;
+            }
+        }
+        if (is_eliminated) {
             reply() << "[错误] 您已经被淘汰，无法执行游戏请求";
             return EC_MATCH_ELIMINATED;
         }
-        assert(game_child_);
-        const ErrCode rc = game_child_->SendExecute(*this, pid, gid.has_value(), msg, reply);
+        if (!game_child_) {
+            return EC_MATCH_ALREADY_OVER;
+        }
+        const ErrCode rc = game_child_->SendExecute(pid, gid.has_value(), msg,
+            [&reply](const lgtbot::ipc::ReplyResp& resp) {
+                auto g = reply();
+                for (const auto& item : resp.items()) {
+                    AppendMsgItem(g, item);
+                }
+            });
         if (rc == EC_GAME_REQUEST_NOT_FOUND) {
             reply() << "[错误] 未预料的游戏指令，您可以通过「帮助」（不带" META_COMMAND_SIGN "号）查看所有支持的游戏指令\n"
                         "若您想执行元指令，请尝试在请求前加「" META_COMMAND_SIGN "」，或通过「" META_COMMAND_SIGN "帮助」查看所有支持的元指令";
@@ -199,14 +239,17 @@ ErrCode Match::Request(const UserID uid, const std::optional<GroupID> gid, const
         reply() << "[错误] 您并非房主，没有变更游戏设置的权限，房主是" << HostUserName_();
         return EC_MATCH_NOT_HOST;
     }
-    if (!options_.game_options_->SetOption(msg.c_str())) {
+    uint64_t max_player = 0;
+    uint32_t multiple = 0;
+    if (!game_handle_.ConfigClient().SetDefaultOption(msg, max_player, multiple)) {
         reply() << "[错误] 未预料的游戏设置，您可以通过「帮助」（不带" META_COMMAND_SIGN "号）查看所有支持的游戏设置\n"
                     "若您想执行元指令，请尝试在请求前加「" META_COMMAND_SIGN "」，或通过「" META_COMMAND_SIGN "帮助」查看所有支持的元指令";
         return EC_GAME_REQUEST_NOT_FOUND;
     }
+    game_handle_.UpdateCachedLimits(max_player, multiple);
     applied_options_log_.push_back(msg);
     KickForConfigChange_();
-    reply() << "设置成功！目前配置：" << OptionInfo_() << "\n\n" << BriefInfo_();
+    reply() << "设置成功！\n\n" << BriefInfo_();
     return EC_GAME_REQUEST_OK;
 }
 
@@ -223,20 +266,13 @@ ErrCode Match::GameStart(const UserID uid, MsgSenderBase& reply)
     }
 
     // fill players
-    nlohmann::json players_json_array;
     players_.clear();
     for (auto& [uid, user_info] : users_) {
         players_.emplace_back(uid);
-        players_json_array.push_back(nlohmann::json{
-                    { "user_id", uid.GetStr() }
-                });
         user_info.sender_.SetMatch(this);
     }
     for (ComputerID cid = 0; cid < ComputerNum_(); ++cid) {
         players_.emplace_back(cid);
-        players_json_array.push_back(nlohmann::json{
-                    { "computer_id", static_cast<uint64_t>(cid) }
-                });
     }
     if (game_handle_.Info().shuffled_player_id_) {
         std::random_device rd;
@@ -274,25 +310,42 @@ ErrCode Match::GameStart(const UserID uid, MsgSenderBase& reply)
             return EC_MATCH_UNEXPECTED_CONFIG;
         }
     }
-    nlohmann::json players_for_child = nlohmann::json::array();
+    std::vector<lgtbot::ipc::PlayerInfo> players_for_child;
+    players_for_child.reserve(players_.size());
     for (const auto& pl : players_) {
-        nlohmann::json cell;
+        lgtbot::ipc::PlayerInfo pi;
         if (const auto* const cid = std::get_if<ComputerID>(&pl.id_)) {
-            cell["computer"] = true;
-            cell["computer_id"] = cid->Get();
+            pi.set_computer(true);
+            pi.set_computer_id(cid->Get());
         } else {
             const auto& uid = std::get<UserID>(pl.id_);
-            cell["computer"] = false;
-            cell["user_id"] = uid.GetStr();
-            cell["display_name"] = bot_.GetUserName(uid.GetCStr(), gid_.has_value() ? gid_->GetCStr() : nullptr);
-            cell["avatar"] = bot_.GetUserAvatar(uid.GetCStr(), 0);
+            pi.set_computer(false);
+            pi.set_display_name(bot_.GetUserName(uid.GetCStr(), gid_.has_value() ? gid_->GetCStr() : nullptr));
+            pi.set_avatar(bot_.GetUserAvatar(uid.GetCStr(), 0));
         }
-        players_for_child.push_back(std::move(cell));
+        players_for_child.push_back(std::move(pi));
     }
-    if (!game_child_->SendStart(*this, MatchId(), static_cast<uint32_t>(users_.size()), players_for_child)) {
-        reply() << "[错误] 开始失败：不符合游戏参数的预期";
-        game_child_.reset();
-        return EC_MATCH_UNEXPECTED_CONFIG;
+    {
+        std::vector<PushFrame> push_frames;
+        if (!game_child_->SendStart(MatchId(), static_cast<uint32_t>(users_.size()),
+                                    players_for_child, push_frames)) {
+            reply() << "[错误] 开始失败：不符合游戏参数的预期";
+            game_child_.reset();
+            return EC_MATCH_UNEXPECTED_CONFIG;
+        }
+        // Dispatch push frames collected during start (we still hold mutex here).
+        for (const auto& pf : push_frames) {
+            std::visit([this](const auto& f) {
+                using T = std::decay_t<decltype(f)>;
+                if constexpr (std::is_same_v<T, PostFrame>) {
+                    ApplyChildPost_(f);
+                } else if constexpr (std::is_same_v<T, PlayerStateFrame>) {
+                    ApplyChildPlayerState(f.pid, f.state);
+                } else if constexpr (std::is_same_v<T, GameOverFrame>) {
+                    ApplyChildGameOverFromScores(f);
+                }
+            }, pf);
+        }
     }
 
     if (state_ == State::IS_OVER) {
@@ -301,12 +354,23 @@ ErrCode Match::GameStart(const UserID uid, MsgSenderBase& reply)
         return EC_OK;
     }
     state_ = State::IS_STARTED;
+    StartReadThread_();
     BoardcastAtAll() << "游戏开始，您可以使用「帮助」命令（不带" META_COMMAND_SIGN "号），查看可执行命令";
-    BoardcastAiInfo() << nlohmann::json{
-            { "match_id", MatchId() },
-            { "state", "started" },
-            { "players", std::move(players_json_array) },
-        }.dump();
+    {
+        nlohmann::json players_json_array = nlohmann::json::array();
+        for (const auto& pi : players_for_child) {
+            if (pi.computer()) {
+                players_json_array.push_back(nlohmann::json{{"computer_id", pi.computer_id()}});
+            } else {
+                players_json_array.push_back(nlohmann::json{{"display_name", pi.display_name()}});
+            }
+        }
+        BoardcastAiInfo() << nlohmann::json{
+                { "match_id", MatchId() },
+                { "state", "started" },
+                { "players", std::move(players_json_array) },
+            }.dump();
+    }
 
     return EC_OK;
 }
@@ -337,47 +401,59 @@ ErrCode Match::Join(const UserID uid, MsgSenderBase& reply)
 
 ErrCode Match::Leave(const UserID uid, MsgSenderBase& reply, const bool force)
 {
-    ErrCode rc = EC_OK;
-    std::lock_guard<std::mutex> l(mutex_);
-    const auto it = users_.find(uid);
-    if (it == users_.end() || it->second.state_ == ParticipantUser::State::LEFT) {
-        reply() << "[错误] 退出失败：您未处于游戏中或已经离开";
-        return EC_MATCH_USER_NOT_IN_MATCH;
-    }
-    if (state_ == State::IS_OVER) {
-        reply() << "[错误] 退出失败：游戏已经结束";
-        rc = EC_MATCH_ALREADY_OVER;
-    } else if (state_ != State::IS_STARTED) {
-        match_manager().UnbindMatch(uid);
-        users_.erase(uid);
-        reply() << "退出成功";
-        Boardcast() << "玩家 " << At(uid) << " 退出了游戏\n\n" << BriefInfo_();
-        if (users_.empty()) {
-            Boardcast() << "所有玩家都退出了游戏，游戏解散";
-            Unbind_();
-        } else if (uid == host_uid_) {
-            host_uid_ = users_.begin()->first;
-            Boardcast() << At(host_uid_) << "被选为新房主";
+    PlayerID leave_pid;
+    std::unique_ptr<MatchChildClient> terminate_child;
+    bool send_leave_ipc = false;
+    {
+        std::lock_guard<std::mutex> l(mutex_);
+        const auto it = users_.find(uid);
+        if (it == users_.end() || it->second.state_ == ParticipantUser::State::LEFT) {
+            reply() << "[错误] 退出失败：您未处于游戏中或已经离开";
+            return EC_MATCH_USER_NOT_IN_MATCH;
         }
-    } else if (force || players_[it->second.pid_].state_ == Player::State::ELIMINATED) {
-        match_manager().UnbindMatch(uid);
-        reply() << "退出成功";
-        Boardcast() << "玩家 " << At(uid) << " 中途退出了游戏，他将不再参与后续的游戏进程";
-        assert(game_child_);
-        assert(it->second.state_ != ParticipantUser::State::LEFT);
-        it->second.state_ = ParticipantUser::State::LEFT;
-        if (std::ranges::all_of(users_, [](const auto& user) { return user.second.state_ == ParticipantUser::State::LEFT; })) {
-            Boardcast() << "所有玩家都强制退出了游戏，那还玩啥玩，游戏解散，结果不会被记录";
-            MatchLog_(InfoLog()) << "All users left the game";
-            Terminate_();
+        if (state_ == State::IS_OVER) {
+            reply() << "[错误] 退出失败：游戏已经结束";
+            return EC_MATCH_ALREADY_OVER;
+        } else if (state_ != State::IS_STARTED) {
+            match_manager().UnbindMatch(uid);
+            users_.erase(uid);
+            reply() << "退出成功";
+            Boardcast() << "玩家 " << At(uid) << " 退出了游戏\n\n" << BriefInfo_();
+            if (users_.empty()) {
+                Boardcast() << "所有玩家都退出了游戏，游戏解散";
+                Unbind_();
+            } else if (uid == host_uid_) {
+                host_uid_ = users_.begin()->first;
+                Boardcast() << At(host_uid_) << "被选为新房主";
+            }
+            return EC_OK;
+        } else if (force || players_[it->second.pid_].state_ == Player::State::ELIMINATED) {
+            match_manager().UnbindMatch(uid);
+            reply() << "退出成功";
+            Boardcast() << "玩家 " << At(uid) << " 中途退出了游戏，他将不再参与后续的游戏进程";
+            assert(game_child_);
+            assert(it->second.state_ != ParticipantUser::State::LEFT);
+            it->second.state_ = ParticipantUser::State::LEFT;
+            if (std::ranges::all_of(users_, [](const auto& user) { return user.second.state_ == ParticipantUser::State::LEFT; })) {
+                Boardcast() << "所有玩家都强制退出了游戏，那还玩啥玩，游戏解散，结果不会被记录";
+                MatchLog_(InfoLog()) << "All users left the game";
+                terminate_child = PrepareTerminate_();
+            } else {
+                leave_pid = it->second.pid_;
+                send_leave_ipc = true;
+            }
         } else {
-            (void)game_child_->SendLeave(*this, it->second.pid_);
+            reply() << "[错误] 退出失败：游戏已经开始，若仍要退出游戏，请使用「" META_COMMAND_SIGN "退出 强制」命令";
+            return EC_MATCH_ALREADY_BEGIN;
         }
-    } else {
-        reply() << "[错误] 退出失败：游戏已经开始，若仍要退出游戏，请使用「" META_COMMAND_SIGN "退出 强制」命令";
-        rc = EC_MATCH_ALREADY_BEGIN;
     }
-    return rc;
+    if (terminate_child) {
+        FinishTerminate_(std::move(terminate_child));
+    } else if (send_leave_ipc) {
+        // Call SendLeave without holding mutex (read thread may callback into Match).
+        (void)game_child_->SendLeave(leave_pid);
+    }
+    return EC_OK;
 }
 
 MsgSenderBase& Match::BoardcastMsgSender()
@@ -472,6 +548,77 @@ bool Match::SwitchHost()
 }
 
 // REQUIRE: should be protected by mutex_
+// Must be called WITH mutex_ held.
+void Match::ApplyChildPost_(const PostFrame& frame)
+{
+    using Channel = lgtbot::ipc::PostResp::Channel;
+    const auto& post = frame.post;
+    MsgSenderBase::MsgSenderGuard sender = [&]() -> MsgSenderBase::MsgSenderGuard
+        {
+            switch (post.channel()) {
+            case Channel::PostResp_Channel_BROADCAST: return Boardcast();
+            case Channel::PostResp_Channel_GROUP:     return GroupMsgSender()();
+            case Channel::PostResp_Channel_AI:        return BoardcastAiInfo();
+            case Channel::PostResp_Channel_TELL:      return Tell(PlayerID{post.target_pid()});
+            default:                                  return Boardcast();
+            }
+        }();
+    for (const auto& item : post.items()) {
+        AppendMsgItem(sender, item);
+    }
+}
+
+void Match::StartReadThread_()
+{
+    assert(game_child_);
+    struct Callbacks : IMatchChildCallbacks {
+        explicit Callbacks(Match& m) : match(m) {}
+        void OnPost(const PostFrame& f) override {
+            std::lock_guard<std::mutex> l(match.mutex_);
+            match.ApplyChildPost_(f);
+        }
+        void OnPlayerState(const PlayerStateFrame& f) override {
+            std::lock_guard<std::mutex> l(match.mutex_);
+            match.ApplyChildPlayerState(f.pid, f.state);
+        }
+        void OnGameOver(const GameOverFrame& f) override {
+            std::lock_guard<std::mutex> l(match.mutex_);
+            match.ApplyChildGameOverFromScores(f);
+        }
+        void OnEof(const bool unexpected) override {
+            if (!unexpected) {
+                return;
+            }
+            std::unique_ptr<MatchChildClient> child;
+            {
+                std::lock_guard<std::mutex> l(match.mutex_);
+                if (match.state_ == State::IS_OVER) {
+                    return;
+                }
+                match.BoardcastAtAll() << "[错误] 游戏进程意外终止，游戏已中断";
+                match.MatchLog_(ErrorLog()) << "Game subprocess died unexpectedly, terminating match";
+                // PrepareTerminate_ calls UnbindMatchSide_ which posts a cleanup task to join
+                // read_thread_.  After this returns, read_thread_ ownership is transferred to
+                // the cleanup queue, so we must NOT join it here (we are the read thread).
+                child = match.PrepareTerminate_();
+            }
+            child.reset();
+        }
+        Match& match;
+    };
+    read_thread_ = std::thread([this, cbs = Callbacks{*this}]() mutable {
+        game_child_->RunReadLoop(cbs);
+    });
+}
+
+// Must be called WITHOUT holding mutex_.
+void Match::StopReadThread_()
+{
+    if (read_thread_.joinable()) {
+        read_thread_.join();
+    }
+}
+
 void Match::StartTimer(const uint64_t /*sec*/, void* /*alert_arg*/, void (*/*alert_cb*/)(void*, uint64_t))
 {
     MatchLog_(WarnLog()) << "StartTimer ignored on host Match (timer runs in game subprocess)";
@@ -573,14 +720,7 @@ std::string Match::BriefInfo_() const
 
 std::string Match::OptionInfo_() const
 {
-    std::string result;
-    const char* const* option_content = options_.game_options_->ShortInfo();
-    while (*option_content) {
-        result += "\n- ";
-        result += *option_content;
-        ++option_content;
-    }
-    return result;
+    return game_handle_.ConfigClient().QueryOptionInfo(true /* text_mode */);
 }
 
 void Match::ApplyChildPlayerState(const PlayerID pid, const std::string& state)
@@ -603,31 +743,26 @@ void Match::ApplyChildPlayerState(const PlayerID pid, const std::string& state)
     }
 }
 
-void Match::ApplyChildGameOverFromScores(const std::string& scores_json)
+void Match::ApplyChildGameOverFromScores(const GameOverFrame& frame)
 {
     if (state_ == State::IS_OVER) {
         MatchLog_(WarnLog()) << "ApplyChildGameOverFromScores but has already been over";
         return;
     }
-    const auto scores = nlohmann::json::parse(scores_json, nullptr, false);
-    if (!scores.is_array()) {
-        MatchLog_(ErrorLog()) << "ApplyChildGameOverFromScores: bad scores json";
-        return;
-    }
+    const auto& scores = frame.game_over.scores();
     std::vector<std::pair<UserID, int64_t>> user_game_scores;
     std::vector<std::pair<UserID, std::string>> user_achievements;
     {
         auto sender = Boardcast();
         sender << "游戏结束，公布分数：\n";
         for (const auto& row : scores) {
-            const auto pid = PlayerID{row.at("pid").get<uint32_t>()};
-            const auto score = row.at("score").get<int64_t>();
+            const auto pid = PlayerID{row.pid()};
+            const auto score = static_cast<int64_t>(row.score());
             sender << At(pid) << " " << score << "\n";
             const auto id = ConvertPid(pid);
             if (const auto pval = std::get_if<UserID>(&id); pval) {
                 user_game_scores.emplace_back(*pval, score);
-                for (const auto& an : row.at("achievements")) {
-                    const std::string ach_name = an.get<std::string>();
+                for (const auto& ach_name : row.achievements()) {
                     user_achievements.emplace_back(*pval, ach_name);
                     MatchLog_(InfoLog()) << "User get achievement uid=" << *pval << " achievement=" << ach_name;
                 }
@@ -688,7 +823,7 @@ void Match::Help_(MsgSenderBase& reply, const bool text_mode)
 {
     if (game_child_) {
         std::string remote;
-        if (!game_child_->FetchHelp(*this, text_mode, remote)) {
+        if (!game_child_->FetchHelp(text_mode, remote)) {
             reply() << "[错误] 无法从游戏进程获取帮助信息";
             return;
         }
@@ -702,11 +837,14 @@ void Match::Help_(MsgSenderBase& reply, const bool text_mode)
         }
         return;
     }
+    const std::string remote_opts = game_handle_.ConfigClient().QueryOptionInfo(text_mode);
     std::string outstr = "## 当前可使用的游戏命令";
     outstr += "\n\n### 查看信息";
     outstr += "\n1. " + help_cmd_.Info(true /* with_example */, !text_mode /* with_html_color */);
-    outstr += "\n\n ### 配置选项";
-    outstr += options_.game_options_->Info(true, !text_mode);
+    if (!remote_opts.empty()) {
+        outstr += "\n\n### 配置选项";
+        outstr += "\n" + remote_opts;
+    }
     if (text_mode) {
         reply() << outstr;
     } else {
@@ -716,57 +854,88 @@ void Match::Help_(MsgSenderBase& reply, const bool text_mode)
 
 ErrCode Match::UserInterrupt(const UserID uid, MsgSenderBase& reply, const bool cancel)
 {
-    const std::lock_guard<std::mutex> l(mutex_);
-    const auto it = users_.find(uid);
-    const char* const operation_str = cancel ? "取消中断" : "确定中断";
-    if (it == users_.end() && it->second.state_ == ParticipantUser::State::LEFT) {
-        reply() << "[错误] " << operation_str << "失败：您未处于游戏中或已经离开";
-        return EC_MATCH_USER_NOT_IN_MATCH;
-    }
-    if (state_ == State::NOT_STARTED) {
-        reply() << "[错误] " << operation_str << "失败：比赛尚未开始";
-        return EC_MATCH_NOT_BEGIN;
-    }
-    if (state_ == State::IS_OVER) {
-        reply() << "[错误] " << operation_str << "失败：比赛已经结束";
-        return EC_MATCH_ALREADY_OVER;
-    }
-    it->second.want_interrupt_ = !cancel;
-    const auto remain = std::count_if(users_.begin(), users_.end(), [this](const auto& pair)
-            {
-                const auto& user = pair.second;
-                return !(user.want_interrupt_ ||
-                         user.state_ == ParticipantUser::State::LEFT ||
-                         players_[user.pid_].state_ == Player::State::HOOKED);
+    std::unique_ptr<MatchChildClient> child;
+    {
+        const std::lock_guard<std::mutex> l(mutex_);
+        const auto it = users_.find(uid);
+        const char* const operation_str = cancel ? "取消中断" : "确定中断";
+        if (it == users_.end() && it->second.state_ == ParticipantUser::State::LEFT) {
+            reply() << "[错误] " << operation_str << "失败：您未处于游戏中或已经离开";
+            return EC_MATCH_USER_NOT_IN_MATCH;
+        }
+        if (state_ == State::NOT_STARTED) {
+            reply() << "[错误] " << operation_str << "失败：比赛尚未开始";
+            return EC_MATCH_NOT_BEGIN;
+        }
+        if (state_ == State::IS_OVER) {
+            reply() << "[错误] " << operation_str << "失败：比赛已经结束";
+            return EC_MATCH_ALREADY_OVER;
+        }
+        it->second.want_interrupt_ = !cancel;
+        const auto remain = std::count_if(users_.begin(), users_.end(), [this](const auto& pair)
+                {
+                    const auto& user = pair.second;
+                    return !(user.want_interrupt_ ||
+                             user.state_ == ParticipantUser::State::LEFT ||
+                             players_[user.pid_].state_ == Player::State::HOOKED);
 
-            });
-    reply() << operation_str << "成功";
-    if (remain == 0) {
-        BoardcastAtAll() << "全员支持中断游戏，游戏已中断，谢谢大家参与";
-        MatchLog_(InfoLog()) << "Match is interrupted by users";
-        Terminate_();
-    } else {
-        Boardcast() << "有玩家" << operation_str << "比赛，目前 " << remain << " 人尚未确定中断，所有玩家可通过「" META_COMMAND_SIGN "中断」命令确定中断比赛，或「" META_COMMAND_SIGN "中断 取消」命令取消中断比赛";
+                });
+        reply() << operation_str << "成功";
+        if (remain == 0) {
+            BoardcastAtAll() << "全员支持中断游戏，游戏已中断，谢谢大家参与";
+            MatchLog_(InfoLog()) << "Match is interrupted by users";
+            child = PrepareTerminate_();
+        } else {
+            Boardcast() << "有玩家" << operation_str << "比赛，目前 " << remain << " 人尚未确定中断，所有玩家可通过「" META_COMMAND_SIGN "中断」命令确定中断比赛，或「" META_COMMAND_SIGN "中断 取消」命令取消中断比赛";
+        }
     }
-
+    if (child) {
+        FinishTerminate_(std::move(child));
+    }
     return EC_OK;
 }
 
 ErrCode Match::Terminate(const bool is_force)
 {
-    const std::lock_guard<std::mutex> l(mutex_);
-    if (is_force || state_ == State::NOT_STARTED) {
-        BoardcastAtAll() << "游戏已解散，谢谢大家参与";
-        MatchLog_(InfoLog()) << "Match is terminated outside";
-        Terminate_();
-        return EC_OK;
-    } else {
-        return EC_MATCH_ALREADY_BEGIN;
+    std::unique_ptr<MatchChildClient> child;
+    {
+        const std::lock_guard<std::mutex> l(mutex_);
+        if (is_force || state_ == State::NOT_STARTED) {
+            BoardcastAtAll() << "游戏已解散，谢谢大家参与";
+            MatchLog_(InfoLog()) << "Match is terminated outside";
+            child = PrepareTerminate_();
+        } else {
+            return EC_MATCH_ALREADY_BEGIN;
+        }
     }
+    FinishTerminate_(std::move(child));
+    return EC_OK;
 }
 
 void Match::UnbindMatchSide_()
 {
+    // If the read thread is still running, tell the subprocess to shut down so the read
+    // thread unblocks and exits, then post a cleanup task to join it.
+    // Both read_thread_ and game_child_ are moved into the lambda so game_child_ is
+    // destroyed *after* the thread has exited (the read thread runs inside
+    // game_child_->RunReadLoop and must not outlive game_child_).
+    //
+    // In the normal game-over path this is called from the read thread itself.  We use
+    // SendShutdown() (which sends a Shutdown proto without touching WaitForResponse_) so
+    // that any pending SendExecute in flight can still receive its ResultFrame before the
+    // subprocess exits.  Callers that want to kill the subprocess immediately (forced
+    // termination, crash, teardown) should call SignalStop() *before* UnbindMatchSide_().
+    if (read_thread_.joinable()) {
+        if (game_child_) {
+            game_child_->CloseInput(); // EOF on subprocess stdin causes it to exit cleanly
+        }
+        bot_.PostCleanup([self = shared_from_this(), t = std::move(read_thread_),
+                          child = std::move(game_child_)]() mutable {
+            if (t.joinable()) t.join();
+            child.reset(); // destroy after thread has exited
+            // self (and thus ~Match) destructs here, on the cleanup thread — safe.
+        });
+    }
     for (auto& [uid, user_info] : users_) {
         if (user_info.state_ != ParticipantUser::State::LEFT) {
             match_manager().UnbindMatch(uid);
@@ -779,17 +948,26 @@ void Match::UnbindMatchSide_()
         }.dump();
 }
 
-void Match::Terminate_()
+std::unique_ptr<MatchChildClient> Match::PrepareTerminate_()
 {
-    game_child_.reset();
+    // Called under mutex_. Signal stop but do NOT join (that must happen without the lock).
+    if (game_child_) {
+        game_child_->SignalStop();
+    }
     UnbindMatchSide_();
+    return std::move(game_child_);
+}
+
+void Match::FinishTerminate_(std::unique_ptr<MatchChildClient> child)
+{
+    // Called WITHOUT mutex_. Join the read thread so callbacks have finished, then drop child.
+    StopReadThread_(); // join (SignalStop was already called in PrepareTerminate_)
+    child.reset();     // destructor closes the subprocess
 }
 
 void Match::ReleaseGameChildIfOver()
 {
-    if (state_ == State::IS_OVER) {
-        game_child_.reset();
-    }
+    // No-op: game child lifecycle is now managed via PrepareTerminate_/FinishTerminate_.
 }
 
 void Match::KickForConfigChange_()
