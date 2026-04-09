@@ -2,9 +2,9 @@
 
 #include <stdexcept>
 
-#include "match_process/json_frame.h"
+#include "match_process/ipc_frame.h"
+#include "match_process/match_ipc.pb.h"
 #include "utility/log.h"
-#include "nlohmann/json.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -43,47 +43,42 @@ class ReplySender final : public MsgSenderBase
   protected:
     void SaveText(const char* const data, const uint64_t len) override
     {
-        nlohmann::json it;
-        it["text"] = std::string(data, data + len);
-        items_.push_back(std::move(it));
+        auto* item = reply_.add_items();
+        item->set_text(std::string(data, data + len));
     }
 
     void SaveUser(const UserID& id, const bool /*is_at*/) override
     {
-        nlohmann::json it;
-        it["user_id"] = id.GetStr();
-        items_.push_back(std::move(it));
+        auto* item = reply_.add_items();
+        item->set_user_id(id.GetStr());
     }
 
     void SavePlayer(const PlayerID& id, const bool /*is_at*/) override
     {
-        nlohmann::json it;
-        it["at_player_id"] = id.Get();
-        items_.push_back(std::move(it));
+        auto* item = reply_.add_items();
+        item->set_at_player_id(id.Get());
     }
 
     void SaveImage(const char* const path) override
     {
-        nlohmann::json it;
-        it["image_path"] = path;
-        items_.push_back(std::move(it));
+        auto* item = reply_.add_items();
+        item->set_image_path(path);
     }
 
     void SaveMarkdown(const char* const markdown, const uint32_t width) override
     {
-        nlohmann::json it;
-        it["markdown"] = markdown;
-        it["markdown_width"] = width;
-        items_.push_back(std::move(it));
+        auto* item = reply_.add_items();
+        auto* md = item->mutable_markdown();
+        md->set_text(markdown);
+        md->set_width(width);
     }
 
     void Flush() override
     {
-        nlohmann::json j;
-        j["op"] = "reply";
-        j["items"] = items_;
-        session_.SendJson(j);
-        items_ = nlohmann::json::array();
+        lgtbot::ipc::GameResponse resp;
+        *resp.mutable_reply() = reply_;
+        session_.SendProto(resp);
+        reply_.Clear();
     }
 
   public:
@@ -91,18 +86,19 @@ class ReplySender final : public MsgSenderBase
 
   private:
     ChildGameSession& session_;
-    nlohmann::json items_{nlohmann::json::array()};
+    lgtbot::ipc::ReplyResp reply_;
 };
 
-static const char* StageErrToStr(const StageErrCode rc)
+static lgtbot::ipc::ResultResp::Stage StageErrToProto(const StageErrCode rc)
 {
+    using S = lgtbot::ipc::ResultResp;
     switch (rc) {
-    case StageErrCode::OK: return "ok";
-    case StageErrCode::CHECKOUT: return "checkout";
-    case StageErrCode::FAILED: return "failed";
-    case StageErrCode::CONTINUE: return "continue";
-    case StageErrCode::NOT_FOUND: return "not_found";
-    default: return "unknown";
+    case StageErrCode::OK:        return S::STAGE_OK;
+    case StageErrCode::CHECKOUT:  return S::STAGE_CHECKOUT;
+    case StageErrCode::FAILED:    return S::STAGE_FAILED;
+    case StageErrCode::CONTINUE:  return S::STAGE_CONTINUE;
+    case StageErrCode::NOT_FOUND: return S::STAGE_NOT_FOUND;
+    default:                      return S::STAGE_UNKNOWN;
     }
 }
 
@@ -183,11 +179,16 @@ bool ChildGameSession::LoadModule(const std::string& lib_path, std::string& erro
     return true;
 }
 
-void ChildGameSession::SendJson(const nlohmann::json& j)
+void ChildGameSession::SendProto(const lgtbot::ipc::GameResponse& resp)
 {
+    std::string buf;
+    if (!resp.SerializeToString(&buf)) {
+        ErrorLog() << "GameResponse::SerializeToString failed";
+        return;
+    }
     const std::lock_guard lock(write_mutex_);
-    if (!WriteJsonFrame(out_, j.dump())) {
-        ErrorLog() << "WriteJsonFrame failed";
+    if (!WriteFrame(out_, buf)) {
+        ErrorLog() << "WriteFrame failed";
     }
 }
 
@@ -196,26 +197,21 @@ void ChildGameSession::SendGameOver()
     if (!main_stage_ || !env_) {
         return;
     }
-    nlohmann::json j;
-    j["op"] = "game_over";
-    nlohmann::json scores = nlohmann::json::array();
+    lgtbot::ipc::GameResponse resp;
+    auto* go = resp.mutable_game_over();
     for (uint32_t i = 0; i < env_->PlayerCount(); ++i) {
         const PlayerID pid{i};
-        nlohmann::json row;
-        row["pid"] = i;
-        row["score"] = main_stage_->PlayerScore(pid);
-        nlohmann::json ach = nlohmann::json::array();
+        auto* entry = go->add_scores();
+        entry->set_pid(i);
+        entry->set_score(static_cast<int32_t>(main_stage_->PlayerScore(pid)));
         const char* const* ap = main_stage_->VerdictateAchievements(pid);
         if (ap) {
             for (; *ap; ++ap) {
-                ach.push_back(*ap);
+                entry->add_achievements(*ap);
             }
         }
-        row["achievements"] = std::move(ach);
-        scores.push_back(std::move(row));
     }
-    j["scores"] = std::move(scores);
-    SendJson(j);
+    SendProto(resp);
 }
 
 void ChildGameSession::DrainAfterStageWork()
@@ -255,64 +251,67 @@ void ChildGameSession::Routine()
     }
 }
 
-bool ChildGameSession::HandleInit(const nlohmann::json& j, std::string& err)
+bool ChildGameSession::HandleInit(const lgtbot::ipc::InitReq& req, std::string& err)
 {
-    resource_dir_ = j.at("resource_dir").get<std::string>();
-    saved_image_dir_ = j.at("saved_image_dir").get<std::string>();
+    resource_dir_ = req.resource_dir();
+    saved_image_dir_ = req.saved_image_dir();
     game_options_ = GameHandle::game_options_ptr(module_.alloc_opt_(), module_.del_opt_);
     if (!game_options_) {
         err = "NewGameOptions returned null";
-        SendJson(nlohmann::json{{"op", "ack"}, {"ok", false}, {"err", err}});
+        lgtbot::ipc::GameResponse resp;
+        resp.mutable_ack()->set_ok(false);
+        SendProto(resp);
         return false;
     }
     lgtbot::game::ImmutableGenericOptions imm{};
-    imm.public_timer_alert_ = j.at("public_timer_alert").get<bool>();
+    imm.public_timer_alert_ = req.public_timer_alert();
     imm.resource_dir_ = resource_dir_.c_str();
     imm.saved_image_dir_ = saved_image_dir_.c_str();
     imm.user_num_ = 0;
     lgtbot::game::MutableGenericOptions mut{};
-    mut.bench_computers_to_player_num_ = j.at("bench").get<uint32_t>();
-    mut.is_formal_ = static_cast<uint8_t>(j.at("is_formal").get<uint32_t>());
+    mut.bench_computers_to_player_num_ = req.bench();
+    mut.is_formal_ = static_cast<uint8_t>(req.is_formal());
     generic_options_ = lgtbot::game::GenericOptions(imm, mut);
-    SendJson(nlohmann::json{{"op", "ack"}, {"ok", true}});
+    lgtbot::ipc::GameResponse resp;
+    resp.mutable_ack()->set_ok(true);
+    SendProto(resp);
     return true;
 }
 
-bool ChildGameSession::HandleSetOption(const nlohmann::json& j, std::string& /*err*/)
+bool ChildGameSession::HandleSetOption(const lgtbot::ipc::SetOptionReq& req, std::string& /*err*/)
 {
-    const std::string text = j.at("text").get<std::string>();
-    const bool ok = game_options_ && game_options_->SetOption(text.c_str());
-    SendJson(nlohmann::json{{"op", "ack"}, {"ok", ok}});
+    const bool ok = game_options_ && game_options_->SetOption(req.text().c_str());
+    lgtbot::ipc::GameResponse resp;
+    resp.mutable_ack()->set_ok(ok);
+    SendProto(resp);
     return true;
 }
 
-bool ChildGameSession::HandleStart(const nlohmann::json& j, std::string& err)
+bool ChildGameSession::HandleStart(const lgtbot::ipc::StartReq& req, std::string& err)
 {
-    const auto plist = j.at("players");
     std::vector<std::string> names;
     std::vector<std::string> avatars;
     std::vector<bool> computer;
-    names.reserve(plist.size());
-    avatars.reserve(plist.size());
-    computer.reserve(plist.size());
-    for (const auto& p : plist) {
-        const bool is_computer = p.at("computer").get<bool>();
+    names.reserve(req.players_size());
+    avatars.reserve(req.players_size());
+    computer.reserve(req.players_size());
+    for (const auto& p : req.players()) {
+        const bool is_computer = p.computer();
         computer.push_back(is_computer);
         if (is_computer) {
-            const auto cid = p.at("computer_id").get<uint32_t>();
-            names.push_back("机器人" + std::to_string(cid) + "号");
+            names.push_back("机器人" + std::to_string(p.computer_id()) + "号");
             avatars.push_back("");
         } else {
-            names.push_back(p.at("display_name").get<std::string>());
-            avatars.push_back(p.value("avatar", std::string{}));
+            names.push_back(p.display_name());
+            avatars.push_back(p.avatar());
         }
     }
     env_ = std::make_unique<IpcMatchEnv>(*this);
-    env_->SetMeta(j.at("match_id").get<uint64_t>(), game_title_, std::move(names), std::move(avatars), std::move(computer));
+    env_->SetMeta(req.match_id(), game_title_, std::move(names), std::move(avatars), std::move(computer));
 
     lgtbot::game::ImmutableGenericOptions imm{};
     imm.public_timer_alert_ = generic_options_.public_timer_alert_;
-    imm.user_num_ = j.at("user_num").get<uint32_t>();
+    imm.user_num_ = req.user_num();
     imm.resource_dir_ = resource_dir_.c_str();
     imm.saved_image_dir_ = saved_image_dir_.c_str();
     lgtbot::game::MutableGenericOptions mut{};
@@ -326,49 +325,61 @@ bool ChildGameSession::HandleStart(const nlohmann::json& j, std::string& err)
             module_.del_stage_);
     if (!main_stage_) {
         err = err_reply.text_.empty() ? "NewMainStage failed" : err_reply.text_;
-        SendJson(nlohmann::json{{"op", "ack"}, {"ok", false}, {"err", err}});
+        lgtbot::ipc::GameResponse resp;
+        resp.mutable_ack()->set_ok(false);
+        SendProto(resp);
         env_.reset();
         return false;
     }
     main_stage_->HandleStageBegin();
     Routine();
-    SendJson(nlohmann::json{{"op", "ack"}, {"ok", true}});
+    lgtbot::ipc::GameResponse resp;
+    resp.mutable_ack()->set_ok(true);
+    SendProto(resp);
     return true;
 }
 
-bool ChildGameSession::HandleExecute(const nlohmann::json& j, std::string& /*err*/)
+bool ChildGameSession::HandleExecute(const lgtbot::ipc::ExecuteReq& req, std::string& /*err*/)
 {
     if (!main_stage_) {
-        SendJson(nlohmann::json{{"op", "result"}, {"stage", "failed"}});
+        lgtbot::ipc::GameResponse resp;
+        resp.mutable_result()->set_stage(lgtbot::ipc::ResultResp::STAGE_FAILED);
+        SendProto(resp);
         return true;
     }
     ReplySender rep(*this);
     const auto stage_rc = main_stage_->HandleRequest(
-            j.at("text").get<std::string>().c_str(),
-            j.at("player_id").get<uint32_t>(),
-            j.at("is_public").get<bool>(),
+            req.text().c_str(),
+            req.player_id(),
+            req.is_public(),
             rep);
     rep.flush_out();
     Routine();
-    SendJson(nlohmann::json{{"op", "result"}, {"stage", StageErrToStr(stage_rc)}});
+    lgtbot::ipc::GameResponse resp;
+    resp.mutable_result()->set_stage(StageErrToProto(stage_rc));
+    SendProto(resp);
     return true;
 }
 
-bool ChildGameSession::HandleLeave(const nlohmann::json& j, std::string& /*err*/)
+bool ChildGameSession::HandleLeave(const lgtbot::ipc::LeaveReq& req, std::string& /*err*/)
 {
     if (!main_stage_) {
-        SendJson(nlohmann::json{{"op", "ack"}, {"ok", false}});
+        lgtbot::ipc::GameResponse resp;
+        resp.mutable_ack()->set_ok(false);
+        SendProto(resp);
         return true;
     }
-    main_stage_->HandleLeave(PlayerID{j.at("player_id").get<uint32_t>()});
+    main_stage_->HandleLeave(PlayerID{req.player_id()});
     Routine();
-    SendJson(nlohmann::json{{"op", "ack"}, {"ok", true}});
+    lgtbot::ipc::GameResponse resp;
+    resp.mutable_ack()->set_ok(true);
+    SendProto(resp);
     return true;
 }
 
-bool ChildGameSession::HandleHelp(const nlohmann::json& j, std::string& /*err*/)
+bool ChildGameSession::HandleHelp(const lgtbot::ipc::HelpReq& req, std::string& /*err*/)
 {
-    const bool text_mode = j.value("text_mode", false);
+    const bool text_mode = req.text_mode();
     std::string out;
     if (main_stage_) {
         out += "## 阶段信息\n\n";
@@ -382,7 +393,10 @@ bool ChildGameSession::HandleHelp(const nlohmann::json& j, std::string& /*err*/)
         out += "\n\n ### 配置选项";
         out += game_options_->Info(true, !text_mode);
     }
-    SendJson(nlohmann::json{{"op", "help_text"}, {"text", std::move(out)}, {"text_mode", text_mode}});
+    lgtbot::ipc::GameResponse resp;
+    auto* item = resp.mutable_reply()->add_items();
+    item->set_text(std::move(out));
+    SendProto(resp);
     return true;
 }
 
@@ -390,36 +404,44 @@ int ChildGameSession::RunLoop()
 {
     for (;;) {
         std::string raw;
-        if (!ReadJsonFrame(in_, raw)) {
+        if (!ReadFrame(in_, raw)) {
             return 0;
         }
-        nlohmann::json j;
-        try {
-            j = nlohmann::json::parse(raw);
-        } catch (...) {
-            SendJson(nlohmann::json{{"op", "error"}, {"msg", "bad json"}});
+        lgtbot::ipc::GameRequest req;
+        if (!req.ParseFromString(raw)) {
+            lgtbot::ipc::GameResponse err_resp;
+            err_resp.mutable_ack()->set_ok(false);
+            SendProto(err_resp);
             continue;
         }
-        const std::string op = j.value("op", "");
         std::string err;
-        if (op == "shutdown") {
+        switch (req.req_case()) {
+        case lgtbot::ipc::GameRequest::kShutdown:
             return 0;
+        case lgtbot::ipc::GameRequest::kInit:
+            HandleInit(req.init(), err);
+            break;
+        case lgtbot::ipc::GameRequest::kSetOption:
+            HandleSetOption(req.set_option(), err);
+            break;
+        case lgtbot::ipc::GameRequest::kStart:
+            HandleStart(req.start(), err);
+            break;
+        case lgtbot::ipc::GameRequest::kExecute:
+            HandleExecute(req.execute(), err);
+            break;
+        case lgtbot::ipc::GameRequest::kLeave:
+            HandleLeave(req.leave(), err);
+            break;
+        case lgtbot::ipc::GameRequest::kHelp:
+            HandleHelp(req.help(), err);
+            break;
+        default: {
+            lgtbot::ipc::GameResponse resp;
+            resp.mutable_ack()->set_ok(false);
+            SendProto(resp);
+            break;
         }
-        if (op == "init") {
-            HandleInit(j, err);
-        } else if (op == "set_option") {
-            HandleSetOption(j, err);
-        } else if (op == "start") {
-            HandleStart(j, err);
-        } else if (op == "execute") {
-            HandleExecute(j, err);
-        } else if (op == "leave") {
-            HandleLeave(j, err);
-        } else if (op == "help") {
-            HandleHelp(j, err);
-        } else {
-            SendJson(nlohmann::json{{"op", "error"}, {"msg", "unknown op"}});
         }
     }
 }
-

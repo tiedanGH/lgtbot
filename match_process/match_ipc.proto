@@ -1,0 +1,171 @@
+// Copyright (c) 2018-present, Chang Liu <github.com/slontia>. All rights reserved.
+//
+// This source code is licensed under LGPLv2 (found in the LICENSE file).
+
+syntax = "proto3";
+package lgtbot.ipc;
+
+// ─── Common message content ──────────────────────────────────────────────────
+
+message Markdown {
+  string text  = 1;
+  uint32 width = 2;
+}
+
+message MsgItem {
+  oneof content {
+    string   text         = 1;
+    string   image_path   = 2;
+    uint32   at_player_id = 3;
+    string   user_id      = 4;
+    Markdown markdown     = 5;
+  }
+}
+
+// ─── game_runner protocol (match_child_client <-> child_session) ─────────────
+
+message InitReq {
+  string resource_dir       = 1;
+  string saved_image_dir    = 2;
+  bool   public_timer_alert = 3;
+  uint32 bench              = 4;
+  uint32 is_formal          = 5;
+}
+
+message SetOptionReq { string text = 1; }
+
+message PlayerInfo {
+  bool   computer     = 1;
+  uint32 computer_id  = 2;  // valid when computer=true
+  string display_name = 3;  // valid when computer=false
+  string avatar       = 4;
+}
+
+message StartReq {
+  uint64              match_id = 1;
+  uint32              user_num = 2;
+  repeated PlayerInfo players  = 3;
+}
+
+message ExecuteReq {
+  string text      = 1;
+  uint32 player_id = 2;
+  bool   is_public = 3;
+}
+
+message LeaveReq { uint32 player_id = 1; }
+
+message HelpReq { bool text_mode = 1; }
+
+message GameRequest {
+  oneof req {
+    InitReq      init       = 1;
+    SetOptionReq set_option = 2;
+    StartReq     start      = 3;
+    ExecuteReq   execute    = 4;
+    LeaveReq     leave      = 5;
+    HelpReq      help       = 6;
+    bool         shutdown   = 7;  // true = terminate
+  }
+}
+
+message AckResp { bool ok = 1; }
+
+message ReplyResp { repeated MsgItem items = 1; }
+
+message ResultResp {
+  enum Stage {
+    STAGE_OK        = 0;
+    STAGE_CHECKOUT  = 1;
+    STAGE_FAILED    = 2;
+    STAGE_CONTINUE  = 3;
+    STAGE_NOT_FOUND = 4;
+    STAGE_UNKNOWN   = 5;
+  }
+  Stage stage = 1;
+}
+
+message PostResp {
+  enum Channel {
+    BROADCAST = 0;
+    GROUP     = 1;
+    TELL      = 2;
+    AI        = 3;
+  }
+  Channel          channel    = 1;
+  uint32           target_pid = 2;  // valid for TELL
+  repeated MsgItem items      = 3;
+}
+
+message PlayerStateResp {
+  uint32 pid   = 1;
+  string state = 2;
+}
+
+message ScoreEntry {
+  uint32          pid          = 1;
+  int32           score        = 2;
+  repeated string achievements = 3;
+}
+
+message GameOverResp { repeated ScoreEntry scores = 1; }
+
+message GameResponse {
+  oneof resp {
+    AckResp         ack          = 1;
+    ReplyResp       reply        = 2;
+    ResultResp      result       = 3;
+    PostResp        post         = 4;
+    PlayerStateResp player_state = 5;
+    GameOverResp    game_over    = 6;
+  }
+}
+
+// ─── config_runner protocol (game_config_client <-> child_config_session) ────
+
+message QueryOptionInfoReq { bool text_mode = 1; }
+message SetDefaultOptionReq { string text = 1; }
+message SetFormalReq        { bool value = 1; }
+message InitOptionsReq      { string args = 1; }
+
+message ConfigRequest {
+  oneof req {
+    QueryOptionInfoReq  query_option_info  = 1;
+    SetDefaultOptionReq set_default_option = 2;
+    SetFormalReq        set_formal         = 3;
+    bool                query_formal       = 4;  // true = request
+    bool                get_applied_log    = 5;  // true = request
+    InitOptionsReq      init_options       = 6;
+    bool                shutdown           = 7;  // true = terminate
+  }
+}
+
+message OptionInfoResp   { bool ok = 1; string text = 2; }
+message OptionUpdateResp { bool ok = 1; uint64 max_player = 2; uint32 multiple = 3; }
+message FormalResp       { bool ok = 1; bool is_formal = 2; }
+message AppliedLogResp   { bool ok = 1; repeated string log = 2; }
+
+message InitOptionsResp {
+  enum StartMode {
+    MULTIPLE = 0;
+    SINGLE   = 1;
+    INVALID  = 2;
+  }
+  bool      ok         = 1;
+  StartMode start_mode = 2;
+  uint64    max_player = 3;
+  uint32    multiple   = 4;
+  uint32    bench      = 5;
+  uint32    is_formal  = 6;
+}
+
+message ConfigResponse {
+  oneof resp {
+    AckResp          ack           = 1;
+    OptionInfoResp   option_info   = 2;
+    OptionUpdateResp option_update = 3;
+    FormalResp       formal        = 4;
+    AppliedLogResp   applied_log   = 5;
+    InitOptionsResp  init_options  = 6;
+  }
+}

@@ -13,12 +13,12 @@
 #include "bot_core/msg_sender.h"
 #include "bot_core/timer.h"
 #include "game_framework/game_main.h"
-#include "nlohmann/json.hpp"
+#include "match_process/match_ipc.pb.h"
 #include "utility/empty_func.h"
 
 class ChildGameSession;
 
-// MatchBase implementation inside the game child process: forwards outbound messages as JSON frames.
+// MatchBase implementation inside the game child process: forwards outbound messages as proto frames.
 class IpcMatchEnv final : public MatchBase
 {
   public:
@@ -63,7 +63,8 @@ class IpcMatchEnv final : public MatchBase
         bool is_computer_{false};
     };
 
-    void SendPostFrame(const char* channel, const uint32_t target_pid, const nlohmann::json& items);
+    void SendPostFrame(lgtbot::ipc::PostResp::Channel channel, uint32_t target_pid,
+                       std::vector<lgtbot::ipc::MsgItem> items);
 
     struct TimerCtl
     {
@@ -85,9 +86,9 @@ class IpcMatchEnv final : public MatchBase
     class IpcMsgSender final : public MsgSenderBase
     {
       public:
-        IpcMsgSender(IpcMatchEnv& env, std::string channel, const uint32_t target_pid)
+        IpcMsgSender(IpcMatchEnv& env, lgtbot::ipc::PostResp::Channel channel, const uint32_t target_pid)
             : env_(env)
-            , channel_(std::move(channel))
+            , channel_(channel)
             , target_pid_(target_pid)
         {}
 
@@ -103,9 +104,9 @@ class IpcMatchEnv final : public MatchBase
 
       private:
         IpcMatchEnv& env_;
-        std::string channel_;
+        lgtbot::ipc::PostResp::Channel channel_;
         uint32_t target_pid_;
-        nlohmann::json items_{nlohmann::json::array()};
+        std::vector<lgtbot::ipc::MsgItem> items_;
     };
 
     std::unique_ptr<IpcMsgSender> broadcast_sender_;

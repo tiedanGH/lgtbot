@@ -5,11 +5,10 @@
 #include <mutex>
 #include <string>
 
-#include "nlohmann/json.hpp"
-
 #include "bot_core/game_handle.h"
 #include "game_framework/game_main.h"
 #include "match_process/ipc_match_env.h"
+#include "match_process/match_ipc.pb.h"
 
 #ifdef _WIN32
 #define GAME_DYNLIB_SUFFIX ".dll"
@@ -47,7 +46,7 @@ class ChildGameSession
 
     [[nodiscard]] bool LoadModule(const std::string& lib_path, std::string& err);
 
-    void SendJson(const nlohmann::json& j);
+    void SendProto(const lgtbot::ipc::GameResponse& resp);
 
     [[nodiscard]] std::mutex& write_mutex() { return write_mutex_; }
     [[nodiscard]] FILE* out() const { return out_; }
@@ -65,12 +64,12 @@ class ChildGameSession
         GameHandle::main_stage_deleter del_stage_{};
     };
 
-    bool HandleInit(const nlohmann::json& j, std::string& err);
-    bool HandleSetOption(const nlohmann::json& j, std::string& err);
-    bool HandleStart(const nlohmann::json& j, std::string& err);
-    bool HandleExecute(const nlohmann::json& j, std::string& err);
-    bool HandleLeave(const nlohmann::json& j, std::string& err);
-    bool HandleHelp(const nlohmann::json& j, std::string& err);
+    bool HandleInit(const lgtbot::ipc::InitReq& req, std::string& err);
+    bool HandleSetOption(const lgtbot::ipc::SetOptionReq& req, std::string& err);
+    bool HandleStart(const lgtbot::ipc::StartReq& req, std::string& err);
+    bool HandleExecute(const lgtbot::ipc::ExecuteReq& req, std::string& err);
+    bool HandleLeave(const lgtbot::ipc::LeaveReq& req, std::string& err);
+    bool HandleHelp(const lgtbot::ipc::HelpReq& req, std::string& err);
     void SendGameOver();
     void DrainAfterStageWork();
 

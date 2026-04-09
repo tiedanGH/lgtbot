@@ -19,6 +19,16 @@ class Subprocess
     [[nodiscard]] FILE* child_stdin() const { return child_stdin_; }
     [[nodiscard]] FILE* child_stdout() const { return child_stdout_; }
 
+    // Close the write end of the stdin pipe (causes the child to get EOF on its stdin).
+    // Safe to call multiple times.  ~Subprocess will not double-close.
+    void close_stdin()
+    {
+        if (child_stdin_) {
+            fclose(child_stdin_);
+            child_stdin_ = nullptr;
+        }
+    }
+
     void request_stop();
     void wait_exit();
 
