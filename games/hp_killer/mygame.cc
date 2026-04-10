@@ -1403,7 +1403,7 @@ class MainStage : public MainGameStage<>
         std::ranges::sort(occupations);
         for (const auto& occupation : occupations) {
             if (occupation == Occupation::杀手 || occupation == Occupation::替身 || occupation == Occupation::恶灵 ||
-                    occupation == Occupation::刺客 || occupation == Occupation::双子（邪） || occupation == Occupation::魔女 ||
+                    occupation == Occupation::刺客 || occupation == Occupation::双子_邪 || occupation == Occupation::魔女 ||
                     occupation == Occupation::囚犯) {
                 s += HTML_COLOR_FONT_HEADER(red);
             } else if (occupation == Occupation::内奸 || occupation == Occupation::初版内奸 || occupation == Occupation::特工 ||
@@ -2241,7 +2241,7 @@ MainStage::RoleMaker MainStage::k_role_makers_[Occupation::Count()] {
     [static_cast<uint32_t>(Occupation(Occupation::替身))] = &MainStage::MakeRole_<BodyDoubleRole>,
     [static_cast<uint32_t>(Occupation(Occupation::恶灵))] = &MainStage::MakeRole_<GhostRole>,
     [static_cast<uint32_t>(Occupation(Occupation::刺客))] = &MainStage::MakeRole_<AssassinRole>,
-    [static_cast<uint32_t>(Occupation(Occupation::双子（邪）))] = &MainStage::MakeRole_<TwinRole<true>>,
+    [static_cast<uint32_t>(Occupation(Occupation::双子_邪))] = &MainStage::MakeRole_<TwinRole<true>>,
     [static_cast<uint32_t>(Occupation(Occupation::魔女))] = &MainStage::MakeRole_<WitchRole>,
     [static_cast<uint32_t>(Occupation(Occupation::囚犯))] = &MainStage::MakeRole_<PrisonerRole>,
     // civilian team

@@ -30,7 +30,7 @@ const GameProperties k_properties {
 uint64_t MaxPlayerNum(const CustomOptions& options) { return 2; }
 uint32_t Multiple(const CustomOptions& options) { return 1; }
 const MutableGenericOptions k_default_generic_options{
-    .is_formal_{false},
+    .is_formal_ = false,
 };
 const std::vector<RuleCommand> k_rule_commands = {};
 
@@ -176,7 +176,7 @@ class MainStage : public MainGameStage<RoundStage, ShootStage>
         return StageErrCode::OK;
     }
 
-    void FirstStageFsm(SubStageFsmSetter setter)
+    void FirstStageFsm(SubStageFsmSetter setter) override
     {
         player_role_.push_back(Role::KILLER);
         player_role_.push_back(Role::POLICE);
@@ -194,7 +194,7 @@ class MainStage : public MainGameStage<RoundStage, ShootStage>
         setter.Emplace<RoundStage>(*this, ++round_);
     }
 
-    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         // 超时或强退中途结束
         if (player_scores_[0] == -1 || player_scores_[1] == -1) {
@@ -270,7 +270,7 @@ class MainStage : public MainGameStage<RoundStage, ShootStage>
         }
     }
 
-    void NextStageFsm(ShootStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+    void NextStageFsm(ShootStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
         HandleRoundOver(setter);    // 回合结束
     }
