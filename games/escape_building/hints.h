@@ -1,3 +1,10 @@
+#pragma once
+
+#include <array>
+#include <span>
+#include <string>
+#include <string_view>
+
 /* ========== 游戏文案 ========== */
 std::string GetRandomHint(std::span<const std::string_view> hints) {
     return std::string(hints[rand() % hints.size()]);
