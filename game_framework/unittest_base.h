@@ -4,17 +4,30 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-#include <gflags/gflags.h>
-#if WITH_GLOG
-#include <glog/logging.h>
-#endif
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
 
-#include "game_framework/util.h"
-#include "game_framework/stage.h"
-#include "game_framework/game_options.h"
+#include <gflags/gflags.h>
+#include <gtest/gtest.h>
+
 #include "game_framework/game_main.h"
+#include "game_framework/game_options.h"
 #include "game_framework/mock_match.h"
+#include "game_framework/stage.h"
+#include "game_framework/util.h"
+
+// gflags must stay at global namespace scope (not inside GAME_MODULE_NAME).
+DEFINE_string(resource_dir, "./resource_dir/", "The path of game image resources");
+DEFINE_string(image_dir, "./.lgtbot_image/", "The path of directory to store generated images");
+DEFINE_bool(gen_image, false, "Whether generate image or not");
+
+// Normalize extend_enum constants and `StageErrCode` values for comparisons / gtest (avoids ambiguous `operator<<`).
+#define LGTBOT_STAGE_ERR_UINT_(e) (static_cast<uint32_t>(::StageErrCode(e)))
 
 namespace lgtbot {
 
@@ -22,225 +35,229 @@ namespace game {
 
 namespace GAME_MODULE_NAME {
 
-DEFINE_string(resource_dir, "./resource_dir/", "The path of game image resources");
-DEFINE_bool(gen_image, false, "Whether generate image or not");
-DEFINE_string(image_dir, "./.lgtbot_image/", "The path of directory to store generated images");
+// `StageErrCode` is defined at global scope by extend_enum (via game_main.h).
+inline constexpr ::StageErrCode OK = ::StageErrCode::OK;
+inline constexpr ::StageErrCode CHECKOUT = ::StageErrCode::CHECKOUT;
+inline constexpr ::StageErrCode CONTINUE = ::StageErrCode::CONTINUE;
+inline constexpr ::StageErrCode FAILED = ::StageErrCode::FAILED;
+inline constexpr ::StageErrCode READY = ::StageErrCode::READY;
+inline constexpr ::StageErrCode NOT_FOUND = ::StageErrCode::NOT_FOUND;
 
 internal::MainStage* MakeMainStage(MainStageFactory factory);
 
-static inline const std::string g_begin_timestamp =
-    std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-
-template <uint64_t k_player_num>
-class TestGame : public MockMatch, public testing::Test
+template <uint64_t kPlayerNum>
+class TestGame : public ::testing::Test
 {
-
-   public:
-    using ScoreArray = std::array<int64_t, k_player_num>;
-    using AchievementsArray = std::array<std::vector<std::string>, k_player_num>;
-
-    TestGame()
-        : MockMatch(std::filesystem::path(FLAGS_image_dir) / g_begin_timestamp / ::testing::UnitTest::GetInstance()->current_test_info()->name(), k_player_num)
-        , timer_started_(false) {}
-
-    virtual ~TestGame() {}
-
-    virtual void SetUp() override
+  protected:
+    void SetUp() override
     {
-#ifdef WITH_GLOG
-        google::InitGoogleLogging(::testing::UnitTest::GetInstance()->current_test_info()->name());
-#endif
-        enable_markdown_to_image = FLAGS_gen_image && !FLAGS_image_dir.empty();
+        main_stage_.reset();
+
+        resource_dir_str_ = std::filesystem::absolute(FLAGS_resource_dir).lexically_normal().string();
+        if (!resource_dir_str_.empty() && resource_dir_str_.back() != '/') {
+            resource_dir_str_ += '/';
+        }
+
+        const auto* const info = ::testing::UnitTest::GetInstance()->current_test_info();
+        const std::string suite = info ? info->test_case_name() : "suite";
+        const std::string name = info ? info->name() : "case";
+        saved_image_dir_str_ =
+                (std::filesystem::absolute(FLAGS_image_dir) / "unittest" / suite / name).lexically_normal().string();
+        std::filesystem::create_directories(saved_image_dir_str_);
+
+        // Default: no markdown→PNG in unit tests (matches run_game.cc). Non-empty MockMatch image_dir makes
+        // SaveMarkdown run and can trigger huge strings / failures when --gen_image is off.
+        const bool want_mock_images = FLAGS_gen_image && !FLAGS_image_dir.empty();
+        ::enable_markdown_to_image = want_mock_images;
+
+        imm_.user_num_ = 0;
+        imm_.resource_dir_ = resource_dir_str_.c_str();
+        imm_.saved_image_dir_ = saved_image_dir_str_.c_str();
+        mut_ = MutableGenericOptions{};
+        mut_.bench_computers_to_player_num_ = static_cast<uint32_t>(kPlayerNum);
+        mut_.is_formal_ = 1;
+
+        std::filesystem::path mock_image_dir;
+        if (want_mock_images) {
+            mock_image_dir = saved_image_dir_str_;
+        }
+        match_ = std::make_unique<MockMatch>(mock_image_dir, kPlayerNum);
+        SyncOptions_();
     }
 
-    virtual void TearDown() override
-    {
-#ifdef WITH_GLOG
-        google::ShutdownGoogleLogging();
-#endif
-    }
+    void TearDown() override { main_stage_.reset(); }
 
-    virtual const char* GameName() const override { return k_properties.name_; }
+    GenericOptions MakeGenericOptions_() const { return GenericOptions{imm_, mut_}; }
+
+    void SyncOptions_() { options_.generic_options_ = MakeGenericOptions_(); }
+
+    // Before StartGame(), both public and private messages only configure options / init commands.
+    ::StageErrCode HandlePreStartMessage_(const char* const msg)
+    {
+        MsgReader reader(msg);
+        for (const auto& cmd : k_init_options_commands) {
+            reader.Reset();
+            if (cmd.CallIfValid(reader, game_options_, mut_).has_value()) {
+                SyncOptions_();
+                return OK;
+            }
+        }
+        const ::StageErrCode rc = game_options_.SetOption(msg) ? OK : FAILED;
+        SyncOptions_();
+        return rc;
+    }
 
     bool StartGame()
     {
-        MockMsgSender sender(image_dir());
-        options_.resource_holder_.resource_dir_ = std::filesystem::absolute(FLAGS_resource_dir + "/").string();
-        options_.resource_holder_.saved_image_dir_ = std::filesystem::absolute(image_dir()).string();
-        options_.generic_options_.resource_dir_ = options_.resource_holder_.resource_dir_.c_str();
-        options_.generic_options_.saved_image_dir_ = options_.resource_holder_.saved_image_dir_.c_str();
-        options_.generic_options_.user_num_ = k_player_num;
-        if (!AdaptOptions(sender, options_.game_options_, options_.generic_options_, options_.generic_options_)) {
+        if (main_stage_) {
             return false;
         }
-        main_stage_.reset(MakeMainStage(MainStageFactory{options_.game_options_, options_.generic_options_, *this}));
-        if (main_stage_) {
-            main_stage_->HandleStageBegin();
+        if (!AdaptOptions(match_->BoardcastMsgSender(), game_options_, MakeGenericOptions_(), mut_)) {
+            return false;
         }
-        return main_stage_ != nullptr;
-    }
-
-    auto& actual_scores() const { return actual_scores_; }
-
-    auto& actual_achievements() const { return actual_achievements_; }
-
-    virtual void StartTimer(const uint64_t /*sec*/, void* p, void(*cb)(void*, uint64_t)) override { timer_started_ = true; }
-
-    virtual void StopTimer() override { timer_started_ = false; }
-
-   protected:
-    StageErrCode Timeout()
-    {
-        if (!timer_started_) {
-            throw std::runtime_error("timer is not started");
+        SyncOptions_();
+        const GenericOptions gen = MakeGenericOptions_();
+        main_stage_.reset(MakeMainStage(MainStageFactory{game_options_, gen, *match_}));
+        if (!main_stage_) {
+            return false;
         }
-        std::cout << "[TIMEOUT]" << std::endl;
-        const auto rc = main_stage_->HandleTimeout();
-        HandleGameOver_();
-        return rc;
+        main_stage_->HandleStageBegin();
+        return true;
     }
 
-    StageErrCode PublicRequest(const PlayerID pid, const std::string& msg)
+    ::StageErrCode PublicRequest(const uint64_t pid, const char* const msg)
     {
-        std::cout << "[PLAYER_" << pid << " -> GROUP]" << std::endl << msg << std::endl;
-        return Request_(pid, msg, true);
+        if (!main_stage_) {
+            return HandlePreStartMessage_(msg);
+        }
+        return main_stage_->HandleRequest(msg, pid, true, match_->BoardcastMsgSender());
     }
 
-    StageErrCode PrivateRequest(const PlayerID pid, const std::string& msg)
+    ::StageErrCode PublicRequest(const uint64_t pid, const std::string& msg) { return PublicRequest(pid, msg.c_str()); }
+
+    ::StageErrCode PrivateRequest(const uint64_t pid, const char* const msg)
     {
-        std::cout << "[PLAYER_" << pid << " -> BOT]" << std::endl << msg << std::endl;
-        return Request_(pid, msg, false);
+        if (!main_stage_) {
+            return HandlePreStartMessage_(msg);
+        }
+        return main_stage_->HandleRequest(msg, pid, false,
+                match_->TellMsgSender(PlayerID{static_cast<uint32_t>(pid)}));
     }
 
-    StageErrCode Leave(const PlayerID pid)
+    ::StageErrCode PrivateRequest(const uint64_t pid, const std::string& msg) { return PrivateRequest(pid, msg.c_str()); }
+
+    ::StageErrCode TimeoutRequest_()
     {
-        std::cout << "[PLAYER_" << pid << " LEAVE GAME]" << std::endl;
-        const auto rc = main_stage_->HandleLeave(pid);
-        HandleGameOver_();
-        return rc;
+        EXPECT_NE(main_stage_, nullptr);
+        return main_stage_->HandleTimeout();
     }
 
-    StageErrCode ComputerAct(const PlayerID pid)
+    ::StageErrCode LeaveRequest_(const PlayerID pid)
     {
-        std::cout << "[PLAYER_" << pid << " COMPUTER ACT]" << std::endl;
-        const auto rc = main_stage_->HandleComputerAct(pid, false);
-        HandleGameOver_();
-        return rc;
+        EXPECT_NE(main_stage_, nullptr);
+        return main_stage_->HandleLeave(pid);
     }
 
-    struct Options
+    ::StageErrCode ComputerActRequest_(const uint64_t pid)
     {
-        struct ResourceHolder
-        {
-            std::string resource_dir_;
-            std::string saved_image_dir_;
-        };
+        EXPECT_NE(main_stage_, nullptr);
+        return main_stage_->HandleComputerAct(pid, true);
+    }
 
-        ResourceHolder resource_holder_;
-        GameOptions game_options_;
-        lgtbot::game::GenericOptions generic_options_;
-    };
-
-    Options options_;
-    std::unique_ptr<MainStageBase> main_stage_;
-    std::optional<ScoreArray> actual_scores_;
-    std::optional<AchievementsArray> actual_achievements_;
-    bool timer_started_;
-
-  private:
-    void HandleGameOver_()
+    void AssertAchievementsImpl_(const PlayerID pid, std::initializer_list<const char*> names)
     {
-        if (main_stage_ && main_stage_->IsOver()) {
-            auto& dst_scores = actual_scores_.emplace();
-            auto& dst_achievements = actual_achievements_.emplace();
-            for (size_t i = 0; i < dst_scores.size(); ++i) {
-                dst_scores.at(i) = main_stage_->PlayerScore(i);
-                for (const char* const* achievement_name_p = main_stage_->VerdictateAchievements(i);
-                        *achievement_name_p;
-                        ++achievement_name_p) {
-                    dst_achievements.at(i).emplace_back(*achievement_name_p);
-                }
-            }
+        ASSERT_NE(main_stage_, nullptr);
+        std::vector<std::string> expected;
+        expected.reserve(names.size());
+        for (const char* n : names) {
+            expected.emplace_back(n);
+        }
+        std::sort(expected.begin(), expected.end());
+        const char* const* p = main_stage_->VerdictateAchievements(pid);
+        std::vector<std::string> actual;
+        for (; *p; ++p) {
+            actual.emplace_back(*p);
+        }
+        std::sort(actual.begin(), actual.end());
+        EXPECT_EQ(actual, expected);
+    }
+
+    void AssertAchievementsImpl_(const PlayerID pid) { AssertAchievementsImpl_(pid, {}); }
+
+    void AssertScoresImpl_(const std::vector<int64_t>& scores)
+    {
+        ASSERT_NE(main_stage_, nullptr);
+        ASSERT_EQ(scores.size(), kPlayerNum);
+        for (uint64_t i = 0; i < kPlayerNum; ++i) {
+            EXPECT_EQ(main_stage_->PlayerScore(PlayerID{static_cast<uint32_t>(i)}), scores[i]);
         }
     }
 
-    StageErrCode Request_(const PlayerID pid, const std::string& msg, const bool is_public)
-    {
-        MockMsgSender sender(image_dir(), pid, is_public);
-        assert(!main_stage_ || !main_stage_->IsOver());
-        const auto rc =
-            main_stage_  ? main_stage_->HandleRequest(msg.c_str(), pid, is_public, sender)
-                         : StageErrCode::Condition(options_.game_options_.SetOption(msg.c_str()), StageErrCode::OK , StageErrCode::FAILED); // for easy test
-        HandleGameOver_();
-        return rc;
-    }
+    std::string resource_dir_str_;
+    std::string saved_image_dir_str_;
+    ImmutableGenericOptions imm_{};
+    MutableGenericOptions mut_{};
+    GameOptions game_options_{};
+    // Some tests (e.g. holdem_poker) read `options_.generic_options_` for `PlayerNum()` etc.
+    struct {
+        GenericOptions generic_options_{};
+    } options_;
+    std::unique_ptr<MockMatch> match_;
+    std::unique_ptr<internal::MainStage> main_stage_;
 };
 
-#define ASSERT_FINISHED(finished) ASSERT_EQ(actual_scores().has_value(), finished);
+// gtest token-pastes fixture + "_" + test name; `TestGame<n>` ends with `>` and breaks ##. Use a derived class.
+// `__LINE__` disambiguates repeated test names (e.g. several `start_game` cases with different player counts).
+#define GAME_TEST_FIXTURE_NAME_INNER_(n, l) GAME_TEST_FIX_##n##_##l
+#define GAME_TEST_FIXTURE_NAME_(name, line) GAME_TEST_FIXTURE_NAME_INNER_(name, line)
+#define GAME_TEST(n, name)                                                     \
+    class GAME_TEST_FIXTURE_NAME_(name, __LINE__) : public TestGame<n>           \
+    {                                                                          \
+    };                                                                         \
+    TEST_F(GAME_TEST_FIXTURE_NAME_(name, __LINE__), name)
 
-#define ASSERT_SCORE(scores...) \
+#define START_GAME() ASSERT_TRUE(this->StartGame())
+
+#define ASSERT_PUB_MSG(expect, pid, msg) \
+    ASSERT_EQ(LGTBOT_STAGE_ERR_UINT_(expect), LGTBOT_STAGE_ERR_UINT_(this->PublicRequest((pid), (msg))))
+#define ASSERT_PRI_MSG(expect, pid, msg) \
+    ASSERT_EQ(LGTBOT_STAGE_ERR_UINT_(expect), LGTBOT_STAGE_ERR_UINT_(this->PrivateRequest((pid), (msg))))
+#define CHECK_PRI_MSG(expect, pid, msg) \
+    (LGTBOT_STAGE_ERR_UINT_(this->PrivateRequest((pid), (msg))) == LGTBOT_STAGE_ERR_UINT_(expect))
+
+#define ASSERT_TIMEOUT(expect) \
+    ASSERT_EQ(LGTBOT_STAGE_ERR_UINT_(expect), LGTBOT_STAGE_ERR_UINT_(this->TimeoutRequest_()))
+#define CHECK_TIMEOUT(expect) \
+    (LGTBOT_STAGE_ERR_UINT_(this->TimeoutRequest_()) == LGTBOT_STAGE_ERR_UINT_(expect))
+
+#define ASSERT_LEAVE(expect, pid) \
+    ASSERT_EQ(LGTBOT_STAGE_ERR_UINT_(expect), \
+            LGTBOT_STAGE_ERR_UINT_(this->LeaveRequest_(PlayerID{static_cast<uint32_t>(pid)})))
+
+#define ASSERT_COMPUTER_ACT(expect, pid) \
+    ASSERT_EQ(LGTBOT_STAGE_ERR_UINT_(expect), LGTBOT_STAGE_ERR_UINT_(this->ComputerActRequest_((pid))))
+
+#define ASSERT_SCORE(...) \
     do { \
-        ASSERT_TRUE(actual_scores().has_value()) << "Game not finish"; \
-        ASSERT_EQ((ScoreArray{scores}), *actual_scores()) << "Score not match"; \
+        this->AssertScoresImpl_({__VA_ARGS__}); \
     } while (0)
 
-#define ASSERT_ACHIEVEMENTS(pid, achievements...) \
-    do { \
-        ASSERT_TRUE(actual_achievements().has_value()) << "Game not finish"; \
-        auto expected_achievements = std::vector<std::string>{achievements}; \
-        std::ranges::sort(expected_achievements); \
-        auto player_actual_achievements = actual_achievements()->at(pid); \
-        std::ranges::sort(player_actual_achievements); \
-        ASSERT_EQ(expected_achievements, player_actual_achievements) << "Achievements not match"; \
+#define ASSERT_ACHIEVEMENTS(pid, ...) \
+    this->AssertAchievementsImpl_(PlayerID{static_cast<uint32_t>(pid)} __VA_OPT__(, {__VA_ARGS__}))
+
+#define ASSERT_ELIMINATED(pid) \
+    ASSERT_TRUE((this->match_->IsEliminated(PlayerID{static_cast<uint32_t>(pid)})))
+
+#define ASSERT_FINISHED(expect_finished)            \
+    do {                                            \
+        ASSERT_NE(this->main_stage_, nullptr);      \
+        ASSERT_EQ((expect_finished), this->main_stage_->IsOver()); \
     } while (0)
 
-#define START_GAME() \
-    do { \
-        std::cout << "[GAME START]" << std::endl; \
-        ASSERT_TRUE(StartGame()) << "Start game failed"; \
-    } while (0)
-
-#define ASSERT_ERRCODE(expected, actual) ASSERT_TRUE((expected) == (actual)) << "ErrCode Mismatch, Actual: " << (actual.ToString())
-
-#define __ASSERT_ERRCODE_BASE(ret, statement) \
-    do { \
-        const auto rc = statement; \
-        ASSERT_ERRCODE(StageErrCode::ret, rc); \
-    } while (0)
-
-#define ASSERT_TIMEOUT(ret) __ASSERT_ERRCODE_BASE(ret, (Timeout()))
-#define CHECK_TIMEOUT(ret) (StageErrCode::ret == (Timeout()))
-
-#define ASSERT_PUB_MSG(ret, pid, msg) \
-    do { \
-        ASSERT_FALSE(IsEliminated(pid)) << "player is eliminated"; \
-        __ASSERT_ERRCODE_BASE(ret, (PublicRequest(pid, msg))); \
-    } while (0)
-#define CHECK_PUB_MSG(ret, pid, msg) \
-    ([&] { ASSERT_FALSE(IsEliminated(pid)) << "player is eliminated"; }(), StageErrCode::ret == PublicRequest(pid, msg))
-
-#define ASSERT_PRI_MSG(ret, pid, msg) \
-    do { \
-        ASSERT_FALSE(IsEliminated(pid)) << "player is eliminated"; \
-        __ASSERT_ERRCODE_BASE(ret, (PrivateRequest(pid, msg))); \
-    } while (0)
-#define CHECK_PRI_MSG(ret, pid, msg) \
-    ([&] { ASSERT_FALSE(IsEliminated(pid)) << "player is eliminated"; }(), StageErrCode::ret == PrivateRequest(pid, msg))
-
-#define ASSERT_LEAVE(ret, pid) __ASSERT_ERRCODE_BASE(ret, Leave(pid))
-#define CHECK_LEAVE(ret, pid) (StageErrCode::ret == Leave(pid))
-
-#define ASSERT_COMPUTER_ACT(ret, pid) __ASSERT_ERRCODE_BASE(ret, ComputerAct(pid))
-#define CHECK_COMPUTER_ACT(ret, pid) (StageErrCode::ret == ComputerAct(pid))
-
-#define GAME_TEST(player_num, test_name) \
-    using TestGame_##player_num##_##test_name = TestGame<player_num>; \
-    TEST_F(TestGame_##player_num##_##test_name, test_name)
-
-#define ASSERT_ELIMINATED(pid) ASSERT_TRUE(IsEliminated(pid))
+#define ASSERT_ERRCODE(expect, value) ASSERT_EQ(LGTBOT_STAGE_ERR_UINT_(expect), LGTBOT_STAGE_ERR_UINT_(value))
 
 } // namespace GAME_MODULE_NAME
 
 } // namespace game
 
-} // gamespace lgtbot
+} // namespace lgtbot

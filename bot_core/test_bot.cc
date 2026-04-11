@@ -15,6 +15,7 @@
 #include "bot_core/db_manager.h"
 #include "bot_core/score_calculation.h"
 #include "bot_core/match.h"
+#include "utility/process_signals.h"
 
 static_assert(TEST_BOT);
 
@@ -1224,6 +1225,7 @@ TEST_F(TestBot, subprocess_killed_during_game)
 
 int main(int argc, char** argv)
 {
+  lgtbot::InstallDefaultSignalHandlersOnce();
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   g_argc = argc;

@@ -938,7 +938,7 @@ GAME_TEST(5, goddess_can_hurt_puppet)
 
 GAME_TEST(5, twin_cannot_attack_self_and_each_other)
 {
-    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子（邪） 双子（正） 平民 守卫");
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子_邪 双子_正 平民 守卫");
     START_GAME();
     ASSERT_PRI_MSG(FAILED, 1, "攻击 B 15");
     ASSERT_PRI_MSG(FAILED, 2, "攻击 B 15");
@@ -950,7 +950,7 @@ GAME_TEST(5, twin_cannot_attack_self_and_each_other)
 
 GAME_TEST(5, killer_twin_change_team_if_one_dead_and_another_one_alive)
 {
-    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子（邪） 双子（正） 平民 守卫");
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子_邪 双子_正 平民 守卫");
     ASSERT_PRI_MSG(OK, 0, "血量 15");
     START_GAME();
     ASSERT_TIMEOUT(CONTINUE);
@@ -961,7 +961,7 @@ GAME_TEST(5, killer_twin_change_team_if_one_dead_and_another_one_alive)
 
 GAME_TEST(5, civilian_twin_change_team_if_one_dead_and_another_one_alive)
 {
-    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子（邪） 双子（正） 平民 守卫");
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子_邪 双子_正 平民 守卫");
     ASSERT_PRI_MSG(OK, 0, "血量 15");
     START_GAME();
     ASSERT_TIMEOUT(CONTINUE);
@@ -972,7 +972,7 @@ GAME_TEST(5, civilian_twin_change_team_if_one_dead_and_another_one_alive)
 
 GAME_TEST(5, twin_do_not_change_team_if_dead_at_the_same_time)
 {
-    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子（邪） 双子（正） 平民 守卫");
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子_邪 双子_正 平民 守卫");
     ASSERT_PRI_MSG(OK, 0, "血量 15");
     START_GAME();
     ASSERT_PRI_MSG(OK, 0, "攻击 B 15"); // killer twin dead
@@ -985,7 +985,7 @@ GAME_TEST(5, twin_do_not_change_team_if_dead_at_the_same_time)
 
 GAME_TEST(5, twin_change_team_from_the_next_round_on)
 {
-    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子（邪） 双子（正） 平民 守卫");
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子_邪 双子_正 平民 守卫");
     ASSERT_PRI_MSG(OK, 0, "血量 15");
     START_GAME();
     ASSERT_PRI_MSG(OK, 0, "攻击 A 15"); // killer dead, civilian team wins
@@ -996,7 +996,7 @@ GAME_TEST(5, twin_change_team_from_the_next_round_on)
 
 GAME_TEST(5, all_civilian_dead_killer_win)
 {
-    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子（邪） 双子（正） 平民 守卫");
+    ASSERT_PUB_MSG(OK, 0, "身份列表 杀手 双子_邪 双子_正 平民 守卫");
     ASSERT_PRI_MSG(OK, 0, "血量 15");
     START_GAME();
     ASSERT_PRI_MSG(OK, 0, "攻击 D 15");

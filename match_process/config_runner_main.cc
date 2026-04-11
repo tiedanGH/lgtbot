@@ -6,6 +6,8 @@
 
 #include <cstdio>
 
+#include "utility/process_signals.h"
+
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
@@ -15,6 +17,7 @@
 // argv[2] = path to game config file (optional, may be empty string)
 int main(const int argc, char** argv)
 {
+    lgtbot::InstallDefaultSignalHandlersOnce();
 #ifdef _WIN32
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);

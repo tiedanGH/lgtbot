@@ -20,7 +20,7 @@ namespace internal {
 
 PublicStageUtility::PublicStageUtility(const CustomOptions& game_options, const lgtbot::game::GenericOptions& generic_options, MatchBase& match)
     : game_options_{game_options}
-    , generic_options_(generic_options)
+    , generic_options_{generic_options}
     , match_(match)
     , masker_(match.MatchId(), match.GameName(), generic_options.PlayerNum())
     , achievement_counts_(generic_options.PlayerNum())
@@ -72,7 +72,9 @@ void PublicStageUtility::Eliminate(const PlayerID pid)
 
 void PublicStageUtility::HookUnreadyPlayers()
 {
-    for (PlayerID pid = 0; pid < PlayerNum(); ++pid) {
+    const uint32_t n = generic_options_.PlayerNum();
+    for (uint32_t i = 0; i < n; ++i) {
+        const PlayerID pid{i};
         if (!IsReady(pid)) {
             Hook(pid);
         }

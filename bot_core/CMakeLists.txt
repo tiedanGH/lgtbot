@@ -1,28 +1,13 @@
 cmake_minimum_required(VERSION 3.0)
-project(BotCore LANGUAGES CXX C)
-
-set(CMAKE_SYSTEM_VERSION 1)
-
-# Default build with Debug
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug)
-endif()
 
 set(CMAKE_CXX_STANDARD 20)
 
 find_package(Protobuf REQUIRED)
-find_package(absl REQUIRED)
-
-# Generate protobuf sources for the IPC protocol
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS
-  ${CMAKE_CURRENT_SOURCE_DIR}/../match_process/match_ipc.proto
-)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -latomic")
 endif()
 
-# generate version info
 EXECUTE_PROCESS(
     COMMAND git describe --tags --always
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -32,11 +17,11 @@ EXECUTE_PROCESS(
 )
 if (GET_GIT_VERSION_FAILED)
     message("-- Get Git Describe failed, will sign unpublished version: ${GET_GIT_VERSION_FAILED}")
-    set(MAKE_VERSiON_GIT_HEAD_VERSION "<unpublished version>")
+    set(MAGE_VERSION_GIT_HEAD_VERSION "<unpublished version>")
 else()
     message("-- Current Git Describe: ${MAGE_VERSION_GIT_HEAD_VERSION}")
-    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/version.cc.in" "${CMAKE_CURRENT_BINARY_DIR}/version.cc")
 endif()
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/version.cc.in" "${CMAKE_CURRENT_BINARY_DIR}/version.cc")
 
 list(APPEND SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/bot_core.cc
@@ -53,19 +38,18 @@ list(APPEND SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/game_config_client.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/subprocess.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../match_process/ipc_frame.cc
-  ${PROTO_SRCS}
+  ${MATCH_PROCESS_PROTO_GEN_DIR}/match_ipc.pb.cc
 )
 if (CMAKE_SYSTEM_NAME MATCHES "Windows")
-  list(APPEND SOURCE_FLIES ${CMAKE_CURRENT_SOURCE_DIR}/dllmain.cc)
+  list(APPEND SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/dllmain.cc)
 endif()
 
 find_package(Threads REQUIRED)
-list(APPEND THIRD_PARTIES Threads::Threads protobuf::libprotobuf
-  absl::log absl::log_internal_check_op absl::strings absl::base)
+list(APPEND THIRD_PARTIES Threads::Threads protobuf::libprotobuf)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
   list(APPEND THIRD_PARTIES
-    dl      # load shared libraries dynamicly on linux
+    dl
     atomic
   )
 endif()
@@ -75,7 +59,9 @@ list(APPEND THIRD_PARTIES gflags)
 
 add_library(bot_core_static STATIC ${SOURCE_FILES})
 target_link_libraries(bot_core_static ${THIRD_PARTIES})
-target_include_directories(bot_core_static PRIVATE ${CMAKE_BINARY_DIR})
+target_include_directories(bot_core_static PRIVATE
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${MATCH_PROCESS_PROTO_GEN_DIR}/..)
 add_dependencies(bot_core_static match_game_runner config_runner)
 target_compile_definitions(bot_core_static PRIVATE
   MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
@@ -84,7 +70,9 @@ target_compile_definitions(bot_core_static PRIVATE
 
 add_library(bot_core SHARED ${SOURCE_FILES})
 target_link_libraries(bot_core ${THIRD_PARTIES})
-target_include_directories(bot_core PRIVATE ${CMAKE_BINARY_DIR})
+target_include_directories(bot_core PRIVATE
+  ${CMAKE_CURRENT_BINARY_DIR}
+  ${MATCH_PROCESS_PROTO_GEN_DIR}/..)
 add_dependencies(bot_core match_game_runner config_runner)
 target_compile_definitions(bot_core PRIVATE
   MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
@@ -92,11 +80,9 @@ target_compile_definitions(bot_core PRIVATE
 )
 
 if (WITH_TEST)
-  enable_testing()
   find_package(GTest REQUIRED)
   list(APPEND THIRD_PARTIES GTest::GTest GTest::Main)
 
-  # Build test_game plugin (dylib) for test_bot
   set(TEST_GAME_SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/test_game/mygame.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/game_main.cc
@@ -106,8 +92,26 @@ if (WITH_TEST)
     ${CMAKE_CURRENT_SOURCE_DIR}/../game_framework/player_ready_masker.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/../utility/html.cc
   )
-  # test_game_plugin is placed in a dedicated directory (test_game_plugins/test_game/)
-  # so that test_bot loads ONLY this plugin, avoiding symbol conflicts with other game plugins.
+  set(TEST_GAME_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test_game)
+  if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    execute_process(
+      COMMAND bash -c "cd ${TEST_GAME_DIR} && printf 0x%x `stat -c %s rule.md | awk '{print $1 + 16}'`"
+      OUTPUT_VARIABLE TEST_GAME_RULE_SIZE)
+    set(TEST_GAME_RULE_BINARY ${CMAKE_CURRENT_BINARY_DIR}/test_game_rule.o)
+    if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
+      add_custom_target(test_game_rule_binary ALL
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMAND cd ${TEST_GAME_DIR} && aarch64-linux-gnu-objcopy --input binary --output elf64-littleaarch64 --binary-architecture aarch64 --rename-section .data=.rodata,CONTENTS,ALLOC,LOAD,READONLY,DATA --pad-to ${TEST_GAME_RULE_SIZE} rule.md ${TEST_GAME_RULE_BINARY}
+        BYPRODUCTS ${TEST_GAME_RULE_BINARY}
+        COMMENT "Build test_game rule binary")
+    else()
+      add_custom_target(test_game_rule_binary ALL
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMAND cd ${TEST_GAME_DIR} && objcopy --input binary --output elf64-x86-64 --binary-architecture i386:x86-64 --rename-section .data=.rodata,CONTENTS,ALLOC,LOAD,READONLY,DATA --pad-to ${TEST_GAME_RULE_SIZE} rule.md ${TEST_GAME_RULE_BINARY}
+        BYPRODUCTS ${TEST_GAME_RULE_BINARY}
+        COMMENT "Build test_game rule binary")
+    endif()
+  endif()
   set(TEST_GAME_PLUGIN_PARENT_DIR ${CMAKE_BINARY_DIR}/test_game_plugins)
   set(TEST_GAME_PLUGIN_DIR ${TEST_GAME_PLUGIN_PARENT_DIR}/test_game)
   add_custom_target(make_test_game_plugin_dir ALL
@@ -116,6 +120,10 @@ if (WITH_TEST)
         ${CMAKE_CURRENT_SOURCE_DIR}/test_game/rule.md ${TEST_GAME_PLUGIN_DIR}/rule.md)
   add_library(test_game_plugin SHARED ${TEST_GAME_SOURCE_FILES})
   add_dependencies(test_game_plugin make_test_game_plugin_dir)
+  if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    add_dependencies(test_game_plugin test_game_rule_binary)
+    target_link_libraries(test_game_plugin ${TEST_GAME_RULE_BINARY})
+  endif()
   target_compile_definitions(test_game_plugin PUBLIC
     GAME_ACHIEVEMENT_FILENAME="${CMAKE_CURRENT_SOURCE_DIR}/test_game/achievements.h"
     GAME_OPTION_FILENAME="${CMAKE_CURRENT_SOURCE_DIR}/test_game/options.h"
@@ -124,9 +132,7 @@ if (WITH_TEST)
   target_include_directories(test_game_plugin PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/test_game
     ${CMAKE_CURRENT_SOURCE_DIR}/..)
-  if (WITH_GLOG)
-    target_link_libraries(test_game_plugin glog::glog)
-  endif()
+  # glog is linked into test_bot only; plugin resolves LOG symbols from the executable (ENABLE_EXPORTS).
   set_target_properties(test_game_plugin PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${TEST_GAME_PLUGIN_DIR}
     OUTPUT_NAME "libgame"
@@ -138,16 +144,17 @@ if (WITH_TEST)
   target_link_libraries(test_bot ${THIRD_PARTIES})
   target_include_directories(test_bot PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_BINARY_DIR})
+    ${CMAKE_CURRENT_BINARY_DIR}
+    ${MATCH_PROCESS_PROTO_GEN_DIR}/..)
   add_dependencies(test_bot match_game_runner config_runner test_game_plugin)
   target_compile_definitions(test_bot PRIVATE
     MATCH_GAME_RUNNER_PATH="$<TARGET_FILE:match_game_runner>"
     CONFIG_RUNNER_PATH="$<TARGET_FILE:config_runner>"
     TEST_GAME_PLUGIN_DIR="${TEST_GAME_PLUGIN_PARENT_DIR}"
     TEST_BOT)
+  set_target_properties(test_bot PROPERTIES ENABLE_EXPORTS ON)
   add_test(NAME test_bot COMMAND test_bot)
 
-  # Build test_game unit test (game-level, no IPC, tests timer/checkout/score logic directly)
   add_library(test_game_for_test_lib OBJECT ${TEST_GAME_SOURCE_FILES})
   target_compile_definitions(test_game_for_test_lib PUBLIC
     GAME_ACHIEVEMENT_FILENAME="${CMAKE_CURRENT_SOURCE_DIR}/test_game/achievements.h"
@@ -159,6 +166,9 @@ if (WITH_TEST)
     ${CMAKE_CURRENT_SOURCE_DIR}/..)
   if (WITH_GLOG)
     target_link_libraries(test_game_for_test_lib glog::glog)
+  endif()
+  if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    add_dependencies(test_game_for_test_lib test_game_rule_binary)
   endif()
 
   add_executable(test_test_game
@@ -176,7 +186,11 @@ if (WITH_TEST)
   if (WITH_GLOG)
     target_link_libraries(test_test_game glog::glog)
   endif()
-  add_test(NAME test_test_game COMMAND test_test_game)
+  if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    add_dependencies(test_test_game test_game_rule_binary)
+    target_link_libraries(test_test_game ${TEST_GAME_RULE_BINARY})
+  endif()
+  add_test(NAME test_test_game COMMAND test_test_game --resource_dir "${CMAKE_CURRENT_SOURCE_DIR}/test_game")
 
   add_executable(test_db test_db.cc db_manager.cc score_calculation.cc)
   target_link_libraries(test_db ${THIRD_PARTIES})
@@ -186,4 +200,3 @@ if (WITH_TEST)
   target_link_libraries(test_match_score ${THIRD_PARTIES})
   add_test(NAME test_match_score COMMAND test_match_score)
 endif()
-

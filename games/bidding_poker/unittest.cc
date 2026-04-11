@@ -183,7 +183,7 @@ GAME_TEST(5, discard_should_ready)
         ASSERT_TIMEOUT(CHECKOUT);
     }
 
-    ASSERT_PRI_MSG(OK, 0, "三角3");
+    ASSERT_PRI_MSG(OK, 0, "角3");
     ASSERT_PRI_MSG(CHECKOUT, 1, "圆1");
 }
 
@@ -225,9 +225,9 @@ GAME_TEST(5, discard_2)
         ASSERT_TIMEOUT(CHECKOUT);
     }
 
-    // round 1
-    ASSERT_PRI_MSG(FAILED, 0, "方1"); // □1 not in item 1 (○1 ☆2 ☆3 △6 ○9)
-    ASSERT_PRI_MSG(CHECKOUT, 0, "圆1 星2 星3"); // ○1 ☆2 ☆3 all in item 1
+    // round 1 — 1 号商品（种子 ABC）为 ○1 △3 ○6 ☆6 □8，与注释中误写的 ○1☆2☆3 不一致
+    ASSERT_PRI_MSG(FAILED, 0, "方1"); // □1 不在该手牌内
+    ASSERT_PRI_MSG(CHECKOUT, 0, "圆1 角3 圆6"); // ○1 △3 ○6 均在 1 号商品
 
     ASSERT_PRI_MSG(FAILED, 0, "1"); // cannot bid own item
     ASSERT_PRI_MSG(FAILED, 0, "pass"); // cannot cancel own item
@@ -241,19 +241,18 @@ GAME_TEST(5, discard_2)
         ASSERT_TIMEOUT(CHECKOUT);
     }
 
-    // round 2
-    // player 1 has {○1 ☆2 ☆3}, player 0 has {△6 ○9}, player 2 has item 2 {△1 ○3 ○5 ○6 ☆9}
+    // round 2 — P1 中标 1 号商品（○1 △3 ○6），P2 中标 3 号商品（□1 ○2 △4 ☆5 △7）
     ASSERT_PRI_MSG(FAILED, 1, "弃牌"); // empty discard
     ASSERT_PRI_MSG(FAILED, 1, "今天天气真好啊");
-    ASSERT_PRI_MSG(FAILED, 1, "方1"); // □1 not in player 1's item {○1 ☆2 ☆3}
-    ASSERT_PRI_MSG(OK, 1, "圆1 星2 星3"); // ○1 ☆2 ☆3 all in player 1's item
-    ASSERT_PRI_MSG(FAILED, 1, "圆5"); // ○5 not in player 1's item
+    ASSERT_PRI_MSG(FAILED, 1, "方1"); // □1 不在 P1 手牌
+    ASSERT_PRI_MSG(OK, 1, "圆1 角3 圆6");
+    ASSERT_PRI_MSG(FAILED, 1, "圆5"); // ○5 不在 P1 手牌
     ASSERT_PUB_MSG(FAILED, 1, "pass");
     ASSERT_PRI_MSG(OK, 0, "pass");
     ASSERT_PRI_MSG(OK, 1, "pass");
     ASSERT_PRI_MSG(OK, 3, "pass");
     ASSERT_PRI_MSG(OK, 4, "pass");
-    ASSERT_PRI_MSG(CHECKOUT, 2, "星1"); // ☆1 in player 2's item {□1 ☆1 □2 ☆8 △X}
+    ASSERT_PRI_MSG(CHECKOUT, 2, "星5"); // ☆5 in 3 号商品
 
     ASSERT_PRI_MSG(OK, 0, "赛况");
 
@@ -283,7 +282,7 @@ GAME_TEST(5, no_bid_return_item)
         ASSERT_TIMEOUT(CHECKOUT);
     }
 
-    ASSERT_PRI_MSG(CHECKOUT, 0, "星2");
+    ASSERT_PRI_MSG(CHECKOUT, 0, "角3"); // 首轮仅弃圆1，剩余含 △3
 }
 
 } // namespace GAME_MODULE_NAME

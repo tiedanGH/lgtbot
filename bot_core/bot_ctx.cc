@@ -24,6 +24,7 @@ static_assert(false, "Not support OS");
 #endif
 
 #include "utility/log.h"
+#include "utility/process_signals.h"
 #include "bot_core/db_manager.h"
 #include "bot_core/match.h"
 #include "bot_core/msg_sender.h"
@@ -146,6 +147,7 @@ std::variant<GameHandleMap, const char*> BotCtx::LoadGameModules(const char* con
                                                                    const char* const config_runner_path,
                                                                    const char* const conf_path)
 {
+    lgtbot::InstallDefaultSignalHandlersOnce();
     GameHandleMap game_handles;
     if (games_path == nullptr) {
         return game_handles;

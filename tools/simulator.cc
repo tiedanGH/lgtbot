@@ -15,6 +15,7 @@
 
 #include "bot_core/bot_core.h"
 #include "bot_core/msg_sender.h"
+#include "utility/process_signals.h"
 
 #if __linux__
 #include "linenoise/linenoise.h"
@@ -156,6 +157,7 @@ bool handle_request(void* bot, const std::string_view line)
 
 int main(int argc, char** argv)
 {
+    lgtbot::InstallDefaultSignalHandlersOnce();
     //std::locale::global(std::locale("")); // this line can make number with comma
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     const LGTBot_Option option{

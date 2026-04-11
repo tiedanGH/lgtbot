@@ -606,8 +606,14 @@ void Match::StartReadThread_()
         }
         Match& match;
     };
-    read_thread_ = std::thread([this, cbs = Callbacks{*this}]() mutable {
-        game_child_->RunReadLoop(cbs);
+    // Capture the child pointer by value: PrepareTerminate_/UnbindMatchSide_ may move
+    // game_child_ out of Match before this thread runs, but the MatchChildClient object
+    // stays alive until the cleanup queue joins this thread and resets the moved unique_ptr.
+    MatchChildClient* const child_for_read = game_child_.get();
+    read_thread_ = std::thread([child_for_read, cbs = Callbacks{*this}]() mutable {
+        if (child_for_read) {
+            child_for_read->RunReadLoop(cbs);
+        }
     });
 }
 
