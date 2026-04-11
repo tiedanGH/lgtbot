@@ -175,6 +175,7 @@ int main(int argc, char** argv)
             .handle_messages = HandleMessages,
         },
     };
+    std::cout << "Loading game modules..." << std::endl;
     const char* errmsg = nullptr;
     void* const bot = LGTBot_Create(&option, &errmsg);
     if (!bot) {
