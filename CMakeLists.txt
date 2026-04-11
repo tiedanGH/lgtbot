@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.14)
 project(BotCore LANGUAGES CXX C)
 
 set(CMAKE_SYSTEM_VERSION 1)
@@ -29,6 +29,18 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsigned-char -g -Wno-invalid-utf8")
 
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/json/include)
 
+# On Apple Silicon, Homebrew installs under /opt/homebrew while legacy x86
+# Homebrew remnants may still linger in /usr/local. Prepend /opt/homebrew so
+# find_package() prefers the native ARM build, and exclude /usr/local from
+# library search so that bare library names (e.g. the "gflags" string in
+# glog's INTERFACE_LINK_LIBRARIES) resolve from the same prefix as the
+# config-mode targets, avoiding rpath cycle warnings.
+# On x86 Mac, /opt/homebrew does not exist, so this block is a no-op there.
+if (APPLE AND EXISTS /opt/homebrew)
+  list(PREPEND CMAKE_PREFIX_PATH /opt/homebrew)
+  list(APPEND CMAKE_IGNORE_PATH /usr/local/lib /usr/local/include)
+endif()
+
 if (WITH_IMAGE)
   find_package(gflags REQUIRED)
 
@@ -37,7 +49,33 @@ if (WITH_IMAGE)
     "Prefer Qt5 WebKit for markdown2image; if unavailable, use Qt6 WebEngine when installed"
     ON)
 
-  find_package(Qt5 QUIET COMPONENTS Gui Widgets WebKit WebKitWidgets)
+  # Guard Qt5 find_package: Qt5CoreConfig.cmake derives its install prefix from
+  # its own location (get_filename_component 3 levels up), then checks that
+  # <prefix>/mkspecs/... exists. When Qt5 is partially installed (e.g. missing
+  # mkspecs), find_package(Qt5) raises a hard CMake error even with QUIET.
+  # Pre-flight: compute the same prefix and skip Qt5 if mkspecs is absent.
+  find_file(_qt5_core_cfg_path Qt5CoreConfig.cmake
+    PATHS
+      /usr/local/lib/cmake/Qt5Core
+      /usr/lib/cmake/Qt5Core
+      /usr/lib64/cmake/Qt5Core
+    NO_DEFAULT_PATH)
+  set(_qt5_usable FALSE)
+  if (_qt5_core_cfg_path)
+    # install prefix = Qt5CoreConfig.cmake dir / ../../.. (3 levels up)
+    get_filename_component(_qt5_prefix "${_qt5_core_cfg_path}" DIRECTORY)
+    get_filename_component(_qt5_prefix "${_qt5_prefix}" DIRECTORY)
+    get_filename_component(_qt5_prefix "${_qt5_prefix}" DIRECTORY)
+    get_filename_component(_qt5_prefix "${_qt5_prefix}" DIRECTORY)
+    if (EXISTS "${_qt5_prefix}/mkspecs")
+      set(_qt5_usable TRUE)
+    else()
+      message(STATUS "markdown2image: Qt5 installation broken (${_qt5_prefix}/mkspecs missing); skipping Qt5")
+    endif()
+  endif()
+  if (_qt5_usable)
+    find_package(Qt5 QUIET COMPONENTS Gui Widgets WebKit WebKitWidgets)
+  endif()
   find_package(Qt6 QUIET COMPONENTS Gui Widgets WebEngineWidgets)
 
   set(_md2img_qt5_ok FALSE)
@@ -106,6 +144,21 @@ if (WITH_TEST)
 endif()
 
 if (WITH_CORE)
+  # Use config mode (protobuf-config.cmake shipped with the library) rather than
+  # the legacy FindProtobuf.cmake module bundled with CMake. Protobuf >= 22
+  # depends on abseil; the CMake module predates this and does not declare the
+  # dependency, causing link failures. The config-mode target carries the full
+  # INTERFACE_LINK_LIBRARIES graph. MODULE_COMPATIBLE makes protobuf_generate_cpp
+  # available alongside the config-mode targets.
+  # CMP0077 NEW: option() must not clear a normal variable already set by the
+  # caller; without this, protobuf-options.cmake's option(protobuf_MODULE_COMPATIBLE)
+  # would silently reset the value we set below.
+  cmake_policy(SET CMP0077 NEW)
+  set(protobuf_MODULE_COMPATIBLE TRUE)
+  find_package(protobuf CONFIG REQUIRED)
+  if (NOT TARGET protobuf::libprotobuf)
+    message(FATAL_ERROR "protobuf config-mode package did not export protobuf::libprotobuf")
+  endif()
   add_subdirectory(match_process)
   add_subdirectory(bot_core)
 endif()

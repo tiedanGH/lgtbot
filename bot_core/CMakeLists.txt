@@ -1,8 +1,19 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.14)
 
 set(CMAKE_CXX_STANDARD 20)
 
-find_package(Protobuf REQUIRED)
+# Use config mode (protobuf-config.cmake shipped with the library) rather than
+# the legacy FindProtobuf.cmake module bundled with CMake. Protobuf >= 22
+# depends on abseil; the CMake module predates this and does not declare the
+# dependency, causing link failures. The config-mode target carries the full
+# INTERFACE_LINK_LIBRARIES graph. MODULE_COMPATIBLE makes protobuf_generate_cpp
+# available alongside the config-mode targets.
+# CMP0077 NEW: option() must not clear a normal variable already set by the
+# caller; without this, protobuf-options.cmake's option(protobuf_MODULE_COMPATIBLE)
+# would silently reset the value we set below.
+cmake_policy(SET CMP0077 NEW)
+set(protobuf_MODULE_COMPATIBLE TRUE)
+find_package(protobuf CONFIG REQUIRED)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -latomic")
@@ -23,6 +34,11 @@ else()
 endif()
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/version.cc.in" "${CMAKE_CURRENT_BINARY_DIR}/version.cc")
 
+# GENERATED property set by protobuf_generate_cpp is only visible within its
+# own directory scope (CMake < 3.20). Mark the files explicitly here so that
+# CMake does not try to verify their existence at configure time.
+set_source_files_properties(${MATCH_PROCESS_PROTO_SRCS} PROPERTIES GENERATED TRUE)
+
 list(APPEND SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/bot_core.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/bot_ctx.cc
@@ -38,7 +54,7 @@ list(APPEND SOURCE_FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/game_config_client.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/subprocess.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../match_process/ipc_frame.cc
-  ${MATCH_PROCESS_PROTO_GEN_DIR}/match_ipc.pb.cc
+  ${MATCH_PROCESS_PROTO_SRCS}
 )
 if (CMAKE_SYSTEM_NAME MATCHES "Windows")
   list(APPEND SOURCE_FILES ${CMAKE_CURRENT_SOURCE_DIR}/dllmain.cc)
@@ -137,6 +153,10 @@ if (WITH_TEST)
     LIBRARY_OUTPUT_DIRECTORY ${TEST_GAME_PLUGIN_DIR}
     OUTPUT_NAME "libgame"
     PREFIX "")
+  if (APPLE)
+    # macOS requires explicit permission for unresolved symbols in dylibs.
+    target_link_options(test_game_plugin PRIVATE -undefined dynamic_lookup)
+  endif()
 
   add_executable(test_bot
     test_bot.cc

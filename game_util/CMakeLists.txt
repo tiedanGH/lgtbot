@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.14)
 project(BotUnittest LANGUAGES CXX C)
 
 set(CMAKE_SYSTEM_VERSION 1)
