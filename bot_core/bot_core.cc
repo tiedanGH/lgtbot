@@ -13,6 +13,7 @@
 
 #include "utility/msg_checker.h"
 #include "utility/log.h"
+#include "utility/process_signals.h"
 #include "game_framework/game_main.h"
 #include "bot_core/db_manager.h"
 #include "bot_core/match.h"
@@ -68,7 +69,8 @@ void* LGTBot_Create(const LGTBot_Option* const options, const char** const p)
 {
     static bool is_inited = false;
     if (!is_inited) {
-#ifdef WITH_GLOG
+        lgtbot::InstallDefaultSignalHandlersOnce();
+#if defined(WITH_GLOG) && !defined(TEST_BOT)
         google::InitGoogleLogging("lgtbot");
 #endif
         std::srand(std::chrono::steady_clock::now().time_since_epoch().count());

@@ -44,7 +44,9 @@ bool ChildConfigSession::LoadModule(const std::string& lib_path, const std::stri
 #endif
     if (!mod) {
 #if defined(__linux__) || defined(__APPLE__)
-        error_out = dlerror() ? dlerror() : "dlopen failed";
+        // dlerror() must be called at most once per failure — a second call may return nullptr.
+        const char* const err = dlerror();
+        error_out = err ? err : "dlopen failed";
 #else
         error_out = "LoadLibrary failed";
 #endif

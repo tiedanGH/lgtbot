@@ -31,6 +31,45 @@ include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/json/include)
 
 if (WITH_IMAGE)
   find_package(gflags REQUIRED)
+
+  # markdown2image: default to Qt5 WebKit (e.g. RHEL 8); auto-fall back to Qt6 WebEngine when Qt5 WebKit is missing.
+  option(MARKDOWN2IMAGE_USE_QT5WEBKIT
+    "Prefer Qt5 WebKit for markdown2image; if unavailable, use Qt6 WebEngine when installed"
+    ON)
+
+  find_package(Qt5 QUIET COMPONENTS Gui Widgets WebKit WebKitWidgets)
+  find_package(Qt6 QUIET COMPONENTS Gui Widgets WebEngineWidgets)
+
+  set(_md2img_qt5_ok FALSE)
+  if (TARGET Qt5::WebKitWidgets AND TARGET Qt5::WebKit AND TARGET Qt5::Widgets AND TARGET Qt5::Gui)
+    set(_md2img_qt5_ok TRUE)
+  endif()
+  set(_md2img_qt6_ok FALSE)
+  if (TARGET Qt6::WebEngineWidgets AND TARGET Qt6::Widgets AND TARGET Qt6::Gui)
+    set(_md2img_qt6_ok TRUE)
+  endif()
+
+  if (MARKDOWN2IMAGE_USE_QT5WEBKIT)
+    if (_md2img_qt5_ok)
+      set(_md2img_use_qt5 TRUE)
+    elseif (_md2img_qt6_ok)
+      set(_md2img_use_qt5 FALSE)
+      message(STATUS "markdown2image: Qt5 WebKit not found; using Qt6 WebEngine instead")
+    else()
+      message(FATAL_ERROR "WITH_IMAGE=ON requires Qt5 WebKit (qt5-qtwebkit + devel) and/or Qt6 WebEngine. Install one of them, or configure with -DWITH_IMAGE=OFF.")
+    endif()
+  else()
+    if (_md2img_qt6_ok)
+      set(_md2img_use_qt5 FALSE)
+    elseif (_md2img_qt5_ok)
+      set(_md2img_use_qt5 TRUE)
+      message(STATUS "markdown2image: Qt6 WebEngine not found; using Qt5 WebKit")
+    else()
+      message(FATAL_ERROR "WITH_IMAGE=ON requires Qt6 WebEngine and/or Qt5 WebKit. Install one of them, or configure with -DWITH_IMAGE=OFF.")
+    endif()
+  endif()
+
+  set(USE_QT5WEBKIT "${_md2img_use_qt5}" CACHE BOOL "Forwarded to markdown2image: use Qt5 WebKit backend" FORCE)
   add_subdirectory(third_party/markdown2image)
 endif()
 

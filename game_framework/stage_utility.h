@@ -104,7 +104,10 @@ class PublicStageUtility
     static void TimerCallbackPrivate_(void* const p, const uint64_t alert_sec);
 
     const CustomOptions& game_options_;
-    const GenericOptions& generic_options_;
+    // Stored by value: callers such as unit tests may pass a temporary GenericOptions that does not
+    // outlive the stage (e.g. StartGame() used a stack local). A dangling reference caused PlayerNum()
+    // to read garbage and HookUnreadyPlayers to loop until heap corruption.
+    GenericOptions generic_options_;
     MatchBase& match_;
     PlayerReadyMasker masker_;
     std::vector<AchievementCounts> achievement_counts_;

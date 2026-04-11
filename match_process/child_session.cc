@@ -130,10 +130,9 @@ bool ChildGameSession::LoadModule(const std::string& lib_path, std::string& erro
     void* const mod = dlopen(lib_path.c_str(), RTLD_NOW);
 #endif
     if (!mod) {
-#ifdef __linux__
-        error_out = dlerror() ? dlerror() : "dlopen failed";
-#elif defined(__APPLE__)
-        error_out = dlerror() ? dlerror() : "dlopen failed";
+#if defined(__linux__) || defined(__APPLE__)
+        const char* const err = dlerror();
+        error_out = err ? err : "dlopen failed";
 #else
         error_out = "LoadLibrary failed";
 #endif

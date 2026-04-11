@@ -320,13 +320,19 @@ void MainStage::FirstStageFsm(StageFsm::SubStageFsmSetter setter)
 
 void MainStage::MatchOver_()
 {
+    // Snapshot stats before the final BoardHtml: achievements only need counts, not a second pass.
+    std::vector<game_util::alchemist::AreaStatistic> area_stats;
+    area_stats.reserve(players_.size());
+    for (const auto& player : players_) {
+        area_stats.push_back(player.board_->GetAreaStatistic());
+    }
     Global().Boardcast() << Markdown(BoardHtml("## 终局"));
     if (!GAME_OPTION(种子).empty() || GAME_OPTION(颜色) < 6 ||
             GAME_OPTION(点数) < 6) {
         return; // in this case, we do not save achievement
     }
-    for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-        const auto result = players_[pid].board_->GetAreaStatistic();
+    for (PlayerID pid = 0; pid.Get() < players_.size(); ++pid) {
+        const auto& result = area_stats[pid.Get()];
         if (result.card_count_ == 0 && result.stone_count_ == 0 &&
                 players_[pid].score_ >= WinScoreThreshold(GAME_OPTION(模式))) {
             Global().Achieve(pid, Achievement::片甲不留);

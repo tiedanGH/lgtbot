@@ -61,7 +61,7 @@ const char* const k_role_rules[Occupation::Count()] {
         - 如果伤害是 10，则可以指定 1 或 2 个代号
     - 【侦探】侦查的结果，是攻击指令中**最靠前**的角色，例如：当刺客执行「攻击 B A C 5」时，侦探侦查到的结果是「攻击 B」)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::双子_邪)) */ R"EOF(【双子 | 平民/杀手阵营
+    [static_cast<uint32_t>(Occupation(Occupation::双子_邪))] = R"EOF(【双子 | 平民/杀手阵营
 - 场上有两位【双子】，分别在「杀手阵营」和「平民阵营」，每位【双子】都知道双方的代号和阵营
 - 【双子】不能成为【双子】攻击的目标，包括自己
 - 如果【双子】中的一方死亡，另一方存活，则从下一回合起，存活方将加入死亡方的阵营（如果【双子】的死亡导致游戏结束，则存活方阵营**不发生**改变）)EOF",
@@ -83,53 +83,53 @@ const char* const k_role_rules[Occupation::Count()] {
     - 每种伤害值 N 只能使用一次)EOF",
 
     // civilian team
-    /* static_cast<uint32_t>(Occupation(Occupation::平民)) */ R"EOF(【平民 | 平民阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::平民))] = R"EOF(【平民 | 平民阵营】
 - 无特殊能力)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::圣女)) */ R"EOF(【圣女 | 平民阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::圣女))] = R"EOF(【圣女 | 平民阵营】
 - 不允许连续两回合使用「攻击 <代号>」指令，不受治愈次数的限制
 - 攻击「平民阵营」角色不扣除 HP)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::侦探)) */ R"EOF(【侦探 | 平民阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::侦探))] = R"EOF(【侦探 | 平民阵营】
 - 特殊技能「侦查 <代号>」：
     - 首回合不允许使用，且不允许连续两回合使用，此外次数不限
     - 当前回合结束时，将被私信告知指定角色的行动**种类**和行动**目标**（HP 具体数值保密），结果只可能有三种：「攻击 <代号>」、「治愈 <代号>」或「其它」（除攻击和治愈外的其它行动，包括 pass 等）
     - 可对死亡的角色使用（参见【恶灵】）
     - 侦查到的结果**取决于角色的行动指令**（*例如，有角色 A 打算攻击【杀手】B，结果本回合【替身】C 使用了挡刀技能，尽管实际扣除 HP 的是 C，但【侦探】侦查到的结果却是「A 攻击 B」*）)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::灵媒)) */ R"EOF(【灵媒 | 平民阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::灵媒))] = R"EOF(【灵媒 | 平民阵营】
 - 特殊技能「通灵 <代号>」：
     - 一局内仅限一次，被指定的角色**需已死亡**
     - 当前回合结束时，会被私信告知该角色的职位，若为【恶灵】，则他下回合起**失去行动能力**)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::守卫)) */ R"EOF(【守卫 | 平民阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::守卫))] = R"EOF(【守卫 | 平民阵营】
 - 特殊技能「盾反 <代号> <血量> (<代号> <血量>)...」：
     - 预测指定的 1 或 2 名角色下一回合的血量（如「盾反 A 70 B 50」），若预测其中某名角色成功，且该角色不是【替身】挡刀的目标，则当前回合**攻击**该角色造成的减 HP 效果会被转移到**伤害来源**身上（视为对这名角色**盾反成功**）
     - 次数不限，但不允许相邻两回合指定同一名角色
     - 当前回合结束时，会被私信告知对那些角色盾反成功)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::双子_正)) */ R"EOF(【双子 | 平民/杀手阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::双子_正))] = R"EOF(【双子 | 平民/杀手阵营】
 - 场上有两位【双子】，分别在「杀手阵营」和「平民阵营」，每位【双子】都知道双方的代号和阵营
 - 【双子】不能成为【双子】攻击的目标，包括自己
 - 如果【双子】中的一方死亡，另一方存活，则从下一回合起，存活方将加入死亡方的阵营（如果【双子】的死亡导致游戏结束，则存活方阵营**不发生**改变）)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::骑士)) */ R"EOF(【骑士 | 平民阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::骑士))] = R"EOF(【骑士 | 平民阵营】
 - 游戏开始时【骑士】的中之人会被公布
 - 【骑士】不知道自己的代号
 - 当【骑士】攻击某名自己外的角色时，若也恰好受到该角色的攻击，则该角色的攻击伤害为 0，且【骑士】可以知晓该情况)EOF",
 
     // special team
-    /* static_cast<uint32_t>(Occupation(Occupation::初版内奸)) */ R"EOF(【初版内奸 | 第三方阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::初版内奸))] = R"EOF(【初版内奸 | 第三方阵营】
 - 当 **【初版内奸】死亡**时，【初版内奸】失败
 - 开局时知道【杀手】和所有【平民】的代号，但不知道代号与职位的对应关系
 - 【杀手】死亡后的下一回合，【初版内奸】可执行「攻击 <代号> 25」和「治愈 <代号> 15」的行动指令)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::内奸)) */ R"EOF(【内奸 | 第三方阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::内奸))] = R"EOF(【内奸 | 第三方阵营】
 - 当 **【内奸】死亡**时，【内奸】失败
 - 开局时知道【杀手】的中之人和所有【平民】的中之人
 - 【杀手】死亡后的下一回合，【内奸】可执行「攻击 <代号> 25」和「治愈 <代号> 15」的行动指令)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::特工)) */ R"EOF(【特工 | 第三方阵营】
+    [static_cast<uint32_t>(Occupation(Occupation::特工))] = R"EOF(【特工 | 第三方阵营】
 - 当「平民阵营」和「杀手阵营」同时满足失败条件时，【特工】取得单独胜利，否则【特工】失败（达到最大回合限制时，【特工】也会失败）
 - 无法使用「攻击 <代号>」
 - 当某角色死亡时，你获知他当前所在阵营
@@ -144,7 +144,7 @@ const char* const k_role_rules[Occupation::Count()] {
     - 使用该技能的前提条件是对这些角色累积了隐藏伤害
     - 该技能效果等同于 <攻击 代号 血量 (<代号> <血量>)...>，即 <释放> 造成的伤害可以被挡刀或盾反，【侦探】侦查的结果，是指令中**最靠前**的角色，例如：当特工执行「释放 B A C」时，侦探侦查到的结果是「攻击 B」)EOF",
 
-    /* static_cast<uint32_t>(Occupation(Occupation::人偶)) */ R"EOF(【人偶 | NPC】
+    [static_cast<uint32_t>(Occupation(Occupation::人偶))] = R"EOF(【人偶 | NPC】
 - 不会做出任何行动)EOF",
 
 };
@@ -648,7 +648,7 @@ class RoleManager
             }
         }
         assert(false);
-        std::unreachable();
+        __builtin_unreachable();
     }
 
     RoleBase* GetRole(const Occupation occupation)
@@ -2245,17 +2245,17 @@ MainStage::RoleMaker MainStage::k_role_makers_[Occupation::Count()] {
     [static_cast<uint32_t>(Occupation(Occupation::魔女))] = &MainStage::MakeRole_<WitchRole>,
     [static_cast<uint32_t>(Occupation(Occupation::囚犯))] = &MainStage::MakeRole_<PrisonerRole>,
     // civilian team
-    /* static_cast<uint32_t>(Occupation(Occupation::平民)) */ &MainStage::MakeRole_<CivilianRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::圣女)) */ &MainStage::MakeRole_<GoddessRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::侦探)) */ &MainStage::MakeRole_<DetectiveRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::灵媒)) */ &MainStage::MakeRole_<SorcererRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::守卫)) */ &MainStage::MakeRole_<GuardRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::双子_正)) */ &MainStage::MakeRole_<TwinRole<false>>,
-    /* static_cast<uint32_t>(Occupation(Occupation::骑士)) */ &MainStage::MakeRole_<KnightRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::平民))] = &MainStage::MakeRole_<CivilianRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::圣女))] = &MainStage::MakeRole_<GoddessRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::侦探))] = &MainStage::MakeRole_<DetectiveRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::灵媒))] = &MainStage::MakeRole_<SorcererRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::守卫))] = &MainStage::MakeRole_<GuardRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::双子_正))] = &MainStage::MakeRole_<TwinRole<false>>,
+    [static_cast<uint32_t>(Occupation(Occupation::骑士))] = &MainStage::MakeRole_<KnightRole>,
     // special team
-    /* static_cast<uint32_t>(Occupation(Occupation::初版内奸)) */ &MainStage::MakeRole_<FirstVersionTraitorRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::内奸)) */ &MainStage::MakeRole_<TraitorRole>,
-    /* static_cast<uint32_t>(Occupation(Occupation::特工)) */ &MainStage::MakeRole_<AgentRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::初版内奸))] = &MainStage::MakeRole_<FirstVersionTraitorRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::内奸))] = &MainStage::MakeRole_<TraitorRole>,
+    [static_cast<uint32_t>(Occupation(Occupation::特工))] = &MainStage::MakeRole_<AgentRole>,
 };
 
 auto* MakeMainStage(MainStageFactory factory) { return factory.Create<MainStage>(); }

@@ -12,6 +12,8 @@ bool WriteAll(FILE* out, const void* data, const size_t len)
     while (off < len) {
         const size_t n = fwrite(p + off, 1, len - off, out);
         if (n == 0) {
+            // With SIGPIPE ignored (see utility/process_signals.h), fwrite typically fails instead of killing the process;
+            // callers treat false as a closed / broken IPC stream.
             return false;
         }
         off += n;

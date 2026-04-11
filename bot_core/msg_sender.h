@@ -5,6 +5,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 #include <functional>
@@ -27,7 +29,36 @@ template <typename IdType>
 Name(IdType) -> Name<IdType>;
 
 struct Image { std::string path_; };
-struct Markdown { std::string_view data_; uint32_t width_ = 600; };
+// Own markdown text: many call sites pass `Markdown(F(), w)` where `F()` returns a temporary
+// `std::string`; a `string_view` into that temporary would dangle before `SaveMarkdown` runs.
+struct Markdown {
+    std::string content_;
+    uint32_t width_{600};
+
+    Markdown()
+        : content_()
+        , width_(600)
+    {
+    }
+
+    explicit Markdown(std::string content, const uint32_t width = 600)
+        : content_(std::move(content))
+        , width_(width)
+    {
+    }
+
+    explicit Markdown(const char* const content, const uint32_t width = 600)
+        : content_(content ? content : "")
+        , width_(width)
+    {
+    }
+
+    explicit Markdown(const std::string_view sv, const uint32_t width = 600)
+        : content_(sv)
+        , width_(width)
+    {
+    }
+};
 
 template <typename T> concept CanToString = requires(T&& t) { std::to_string(std::forward<T>(t)); };
 
@@ -250,7 +281,7 @@ MsgSenderBase::MsgSenderGuard& MsgSenderBase::MsgSenderGuard::operator<<(const I
 
 MsgSenderBase::MsgSenderGuard& MsgSenderBase::MsgSenderGuard::operator<<(const Markdown& markdown_msg)
 {
-    sender_->SaveMarkdown(markdown_msg.data_.data(), markdown_msg.width_);
+    sender_->SaveMarkdown(markdown_msg.content_.c_str(), markdown_msg.width_);
     return *this;
 }
 
