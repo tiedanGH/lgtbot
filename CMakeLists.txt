@@ -67,10 +67,23 @@ if (WITH_IMAGE)
     get_filename_component(_qt5_prefix "${_qt5_prefix}" DIRECTORY)
     get_filename_component(_qt5_prefix "${_qt5_prefix}" DIRECTORY)
     get_filename_component(_qt5_prefix "${_qt5_prefix}" DIRECTORY)
-    if (EXISTS "${_qt5_prefix}/mkspecs")
+    # Qt's CMake files derive prefix from .../lib(64)/cmake/Qt5Core; on RHEL/Fedora
+    # that is /usr while mkspecs lives under lib64/qt5/mkspecs, not <prefix>/mkspecs.
+    set(_qt5_mkspecs_ok FALSE)
+    foreach (_qt5_mkspecs_dir
+        "${_qt5_prefix}/mkspecs"
+        "${_qt5_prefix}/lib64/qt5/mkspecs"
+        "${_qt5_prefix}/lib/qt5/mkspecs"
+        "${_qt5_prefix}/share/qt5/mkspecs")
+      if (EXISTS "${_qt5_mkspecs_dir}")
+        set(_qt5_mkspecs_ok TRUE)
+        break()
+      endif()
+    endforeach()
+    if (_qt5_mkspecs_ok)
       set(_qt5_usable TRUE)
     else()
-      message(STATUS "markdown2image: Qt5 installation broken (${_qt5_prefix}/mkspecs missing); skipping Qt5")
+      message(STATUS "markdown2image: Qt5 installation broken (no mkspecs next to ${_qt5_prefix}); skipping Qt5")
     endif()
   endif()
   if (_qt5_usable)
@@ -144,20 +157,23 @@ if (WITH_TEST)
 endif()
 
 if (WITH_CORE)
-  # Use config mode (protobuf-config.cmake shipped with the library) rather than
-  # the legacy FindProtobuf.cmake module bundled with CMake. Protobuf >= 22
-  # depends on abseil; the CMake module predates this and does not declare the
-  # dependency, causing link failures. The config-mode target carries the full
-  # INTERFACE_LINK_LIBRARIES graph. MODULE_COMPATIBLE makes protobuf_generate_cpp
-  # available alongside the config-mode targets.
+  # Prefer protobuf's CMake package (config mode): protobuf >= 22 pulls abseil and
+  # the bundled FindProtobuf module does not model that, which can break linking.
+  # EL8 and similar only ship protobuf-devel + CMake's FindProtobuf (module mode),
+  # so fall back when protobuf-config.cmake is not installed.
   # CMP0077 NEW: option() must not clear a normal variable already set by the
   # caller; without this, protobuf-options.cmake's option(protobuf_MODULE_COMPATIBLE)
   # would silently reset the value we set below.
   cmake_policy(SET CMP0077 NEW)
   set(protobuf_MODULE_COMPATIBLE TRUE)
-  find_package(protobuf CONFIG REQUIRED)
+  find_package(protobuf CONFIG QUIET)
   if (NOT TARGET protobuf::libprotobuf)
-    message(FATAL_ERROR "protobuf config-mode package did not export protobuf::libprotobuf")
+    find_package(Protobuf MODULE REQUIRED)
+  endif()
+  if (NOT TARGET protobuf::libprotobuf)
+    message(FATAL_ERROR
+      "Could not find protobuf (no protobuf::libprotobuf). Install a build with "
+      "protobuf-config.cmake, or system protobuf-devel for CMake FindProtobuf.")
   endif()
   add_subdirectory(match_process)
   add_subdirectory(bot_core)

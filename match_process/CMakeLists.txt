@@ -3,18 +3,7 @@ project(MatchProcess LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 
-# Use config mode (protobuf-config.cmake shipped with the library) rather than
-# the legacy FindProtobuf.cmake module bundled with CMake. Protobuf >= 22
-# depends on abseil; the CMake module predates this and does not declare the
-# dependency, causing link failures. The config-mode target carries the full
-# INTERFACE_LINK_LIBRARIES graph. MODULE_COMPATIBLE makes protobuf_generate_cpp
-# available alongside the config-mode targets.
-# CMP0077 NEW: option() must not clear a normal variable already set by the
-# caller; without this, protobuf-options.cmake's option(protobuf_MODULE_COMPATIBLE)
-# would silently reset the value we set below.
-cmake_policy(SET CMP0077 NEW)
-set(protobuf_MODULE_COMPATIBLE TRUE)
-find_package(protobuf CONFIG REQUIRED)
+# protobuf: find_package in parent ../CMakeLists.txt (config and/or module).
 
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS
   ${CMAKE_CURRENT_SOURCE_DIR}/match_ipc.proto)

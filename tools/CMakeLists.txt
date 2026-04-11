@@ -25,5 +25,14 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     set(SIMULATOR_SOURCE_FILES ${SIMULATOR_SOURCE_FILES} ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/linenoise/linenoise.c)
 endif()
 add_executable(simulator ${SIMULATOR_SOURCE_FILES})
-target_link_libraries(simulator bot_core_static gflags)
+target_link_libraries(simulator PRIVATE bot_core_static gflags)
+# Linux game plugins omit glog in libgame.so and resolve LOG() from the host
+# binary (see games/CMakeLists.txt). Link glog here and export symbols like
+# test_bot / match_game_runner so dlopen(plugins/.../libgame.so) succeeds.
+if (WITH_GLOG)
+  target_link_libraries(simulator PRIVATE glog::glog)
+  if (CMAKE_SYSTEM_NAME MATCHES "Linux")
+    set_target_properties(simulator PROPERTIES ENABLE_EXPORTS ON)
+  endif()
+endif()
 
