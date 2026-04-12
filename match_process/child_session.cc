@@ -75,6 +75,9 @@ class ReplySender final : public MsgSenderBase
 
     void Flush() override
     {
+        if (reply_.items_size() == 0) {
+            return;
+        }
         lgtbot::ipc::GameResponse resp;
         *resp.mutable_reply() = reply_;
         session_.SendProto(resp);

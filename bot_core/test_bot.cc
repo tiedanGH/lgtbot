@@ -85,6 +85,11 @@ class MockDBManager : public DBManagerBase
     std::map<UserID, std::vector<std::string>> user_achievements_;
 };
 
+// When non-null, HandleMessages appends each message (as a rendered string) to this vector
+// instead of (or in addition to) printing it.  Tests set this to capture outgoing messages
+// for assertion.
+static std::vector<std::string>* g_captured_messages = nullptr;
+
 void HandleMessages(void* handler, const char* const id, const int is_uid, const LGTBot_Message* messages, const size_t size)
 {
     std::string s = is_uid ? "[BOT -> USER_" : "[BOT -> GROUP_";
@@ -110,6 +115,9 @@ void HandleMessages(void* handler, const char* const id, const int is_uid, const
         }
     }
     std::cout << s << std::endl;
+    if (g_captured_messages) {
+        g_captured_messages->push_back(s);
+    }
 }
 
 void GetUserName(void* handler, char* buffer, size_t size, const char* const user_id)
@@ -1205,6 +1213,35 @@ TEST_F(TestBot, get_achievement)
   ASSERT_EQ("普通成就", db_manager().user_achievements_[UserID("1")][0]);
   ASSERT_EQ("普通成就", db_manager().user_achievements_[UserID("2")][0]);
   ASSERT_EQ("普通成就", db_manager().user_achievements_[UserID("2")][1]);
+}
+
+// Public mode reply must not produce a bare "@uid\n" with no text body.
+//
+// Root cause: MsgSenderGuard::~MsgSenderGuard calls Flush(), so every
+// `reply() << "text"` inside a game handler already sends a ReplyResp and
+// clears reply_.items before returning.  The subsequent flush_out() call in
+// HandleExecute then sends a *second*, empty ReplyResp.  The host process
+// wraps each ReplyResp in a new PublicReplyMsgSender guard (which prepends
+// "@uid\n"), so the empty one produces a bare "@uid\n" message.
+//
+// Fix: ReplySender::Flush() skips sending when items is empty.
+TEST_F(TestBot, pub_game_request_reply_has_no_extra_bare_at_message)
+{
+  ASSERT_PRI_MSG(EC_OK, k_admin_qq, "%配置 测试游戏 最大玩家数 2");
+  ASSERT_PUB_MSG(EC_OK, "1", "1", "#新游戏 测试游戏 单机");
+
+  std::vector<std::string> captured;
+  g_captured_messages = &captured;
+  // "准备" writes nothing to reply but triggers Boardcast messages via stage
+  // transitions.  Before the fix, flush_out() would also emit a bare "@1\n".
+  ASSERT_PUB_MSG(EC_GAME_REQUEST_CHECKOUT, "1", "1", "准备");
+  g_captured_messages = nullptr;
+
+  // There must be no message consisting solely of "@1\n".
+  const std::string bare_at = "[BOT -> GROUP_1]\n@1\n";
+  for (const auto& msg : captured) {
+      EXPECT_NE(bare_at, msg) << "Got a bare @-only reply; flush_out() sent an empty ReplyResp";
+  }
 }
 
 // Subprocess Kill
