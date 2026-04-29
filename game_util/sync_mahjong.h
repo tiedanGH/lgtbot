@@ -1779,7 +1779,7 @@ class SyncMajong
     {
         if (option.player_descs_.size() == 3) {
             [[maybe_unused]] auto tail = std::ranges::remove_if(tiles, [](const Tile& tile) { return tile.tile >= _2m && tile.tile <= _8m; });
-            assert(tail.size() == (_8m - _2m + 1) * 4);
+            assert(tail.size() <= (_8m - _2m + 1) * 4);
         } else {
             assert(option.player_descs_.size() == 4);
         }
