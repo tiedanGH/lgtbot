@@ -31,7 +31,11 @@ const GameProperties k_properties{
 uint64_t MaxPlayerNum(const CustomOptions& options) { return GET_OPTION_VALUE(options, 最大玩家数); }
 uint32_t Multiple(const CustomOptions& options) { return 1; }
 const MutableGenericOptions k_default_generic_options;
-const std::vector<RuleCommand> k_rule_commands;
+const std::vector<RuleCommand> k_rule_commands = {
+    RuleCommand("查看测试游戏的特殊规则细节",
+            []() { return "这是测试规则细节"; },
+            VoidChecker("细节")),
+};
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
     InitOptionsCommand("单机模式",

@@ -1260,6 +1260,24 @@ TEST_F(TestBot, subprocess_killed_during_game)
   ASSERT_PRI_MSG(EC_OK, "1", "#新游戏 测试游戏");
 }
 
+// Rule Command
+
+TEST_F(TestBot, custom_rule_valid_command)
+{
+  std::vector<std::string> captured;
+  g_captured_messages = &captured;
+  ASSERT_PRI_MSG(EC_OK, "1", "#规则 测试游戏 细节");
+  g_captured_messages = nullptr;
+  ASSERT_FALSE(captured.empty());
+  EXPECT_NE(std::string::npos, captured[0].find("这是测试规则细节"))
+      << "Expected rule detail text, got: " << captured[0];
+}
+
+TEST_F(TestBot, custom_rule_invalid_command)
+{
+  ASSERT_PRI_MSG(EC_INVALID_ARGUMENT, "1", "#规则 测试游戏 不存在的指令");
+}
+
 int main(int argc, char** argv)
 {
   lgtbot::InstallDefaultSignalHandlersOnce();

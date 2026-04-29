@@ -395,7 +395,17 @@ static ErrCode show_custom_rule(BotCtx& bot, const UserID uid, const std::option
         reply() << "[错误] 查看失败：未知的游戏名，请通过「" META_COMMAND_SIGN "游戏列表」查看游戏名称";
         return EC_REQUEST_UNKNOWN_GAME;
     };
-    reply() << it->second.Info().rule_;
+    std::string args_str;
+    for (const auto& arg : args) {
+        args_str += arg;
+        args_str += " ";
+    }
+    const auto result = it->second.ConfigClient().HandleRuleCommand(args_str);
+    if (!result.has_value()) {
+        reply() << "[错误] 查看失败：未知的规则指令，请通过「" META_COMMAND_SIGN "规则 " << gamename << "」查看具体规则指令";
+        return EC_INVALID_ARGUMENT;
+    }
+    reply() << *result;
     return EC_OK;
 }
 

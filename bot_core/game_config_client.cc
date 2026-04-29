@@ -269,6 +269,31 @@ lgtbot::game::InitOptionsResult GameConfigClient::InitOptions(const std::string&
     return lgtbot::game::INVALID_INIT_OPTIONS_COMMAND;
 }
 
+std::optional<std::string> GameConfigClient::HandleRuleCommand(const std::string& args)
+{
+    std::lock_guard<std::mutex> lk(mutex_);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (!EnsureRunning_()) {
+            return std::nullopt;
+        }
+        lgtbot::ipc::ConfigRequest req;
+        req.mutable_handle_rule_command()->set_args(args);
+        lgtbot::ipc::ConfigResponse resp;
+        std::string req_bytes, resp_bytes;
+        if (!req.SerializeToString(&req_bytes)) return std::nullopt;
+        if (!SendRecv_(req_bytes, resp_bytes)) continue;
+        if (!resp.ParseFromString(resp_bytes)) { Stop_(); continue; }
+        if (!resp.has_rule_command()) {
+            return std::nullopt;
+        }
+        if (!resp.rule_command().ok()) {
+            return std::nullopt;
+        }
+        return resp.rule_command().text();
+    }
+    return std::nullopt;
+}
+
 void GameConfigClient::WatchdogRun_()
 {
     for (;;) {

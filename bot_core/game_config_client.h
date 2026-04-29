@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -61,6 +62,10 @@ class GameConfigClient
                                                 uint32_t& multiple,
                                                 uint32_t& bench,
                                                 bool& is_formal);
+
+    // Calls HandleRuleCommand with the given args string.
+    // Returns nullopt if the command is not recognized, otherwise returns the result text.
+    std::optional<std::string> HandleRuleCommand(const std::string& args);
 
     // Shut down the subprocess if it is running (called on bot shutdown).
     void Shutdown();

@@ -76,6 +76,8 @@ bool ChildConfigSession::LoadModule(const std::string& lib_path, const std::stri
     if (!error_out.empty()) { return false; }
     module_.init_options_ = reinterpret_cast<init_options_command_handler>(sym("HandleInitOptionsCommand"));
     if (!error_out.empty()) { return false; }
+    module_.handle_rule_command_ = reinterpret_cast<rule_command_handler>(sym("HandleRuleCommand"));
+    if (!error_out.empty()) { return false; }
 
     default_options_ = game_options_ptr(module_.alloc_opt_(), module_.del_opt_);
     if (!default_options_) {
@@ -220,6 +222,19 @@ bool ChildConfigSession::HandleInitOptions(const lgtbot::ipc::InitOptionsReq& re
     return true;
 }
 
+bool ChildConfigSession::HandleRuleCommand(const lgtbot::ipc::HandleRuleCommandReq& req)
+{
+    lgtbot::ipc::ConfigResponse resp;
+    auto* r = resp.mutable_rule_command();
+    const char* const result = module_.handle_rule_command_ ? module_.handle_rule_command_(req.args().c_str()) : nullptr;
+    r->set_ok(result != nullptr);
+    if (result) {
+        r->set_text(result);
+    }
+    SendProto(resp);
+    return true;
+}
+
 int ChildConfigSession::RunLoop()
 {
     for (;;) {
@@ -254,6 +269,9 @@ int ChildConfigSession::RunLoop()
             break;
         case lgtbot::ipc::ConfigRequest::kInitOptions:
             HandleInitOptions(req.init_options());
+            break;
+        case lgtbot::ipc::ConfigRequest::kHandleRuleCommand:
+            HandleRuleCommand(req.handle_rule_command());
             break;
         default: {
             lgtbot::ipc::ConfigResponse err_resp;

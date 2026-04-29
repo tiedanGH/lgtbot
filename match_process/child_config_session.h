@@ -51,6 +51,7 @@ class ChildConfigSession
     using max_player_num_handler = uint64_t(*)(const lgtbot::game::GameOptionsBase*);
     using multiple_handler = uint32_t(*)(const lgtbot::game::GameOptionsBase*);
     using init_options_command_handler = lgtbot::game::InitOptionsResult(*)(const char*, lgtbot::game::GameOptionsBase*, lgtbot::game::MutableGenericOptions*);
+    using rule_command_handler = const char*(*)(const char*);
 
     struct ModuleFns
     {
@@ -60,6 +61,7 @@ class ChildConfigSession
         max_player_num_handler max_player_num_{};
         multiple_handler multiple_{};
         init_options_command_handler init_options_{};
+        rule_command_handler handle_rule_command_{};
     };
 
     using game_options_ptr = std::unique_ptr<lgtbot::game::GameOptionsBase,
@@ -73,6 +75,7 @@ class ChildConfigSession
     bool HandleQueryFormal();
     bool HandleGetAppliedLog();
     bool HandleInitOptions(const lgtbot::ipc::InitOptionsReq& req);
+    bool HandleRuleCommand(const lgtbot::ipc::HandleRuleCommandReq& req);
 
     lgtbot::ipc::ConfigResponse MakeOptionUpdateResp(bool ok) const;
 
