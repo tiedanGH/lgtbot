@@ -252,8 +252,7 @@ class MainStage : public MainGameStage<RoundStage, SelectStage, ExtraCardStage, 
 {
   public:
     MainStage(StageUtility&& utility)
-        : StageFsm(std::move(utility),
-            MakeStageCommand(*this, "查看蜂巢初始状态", &MainStage::Info_, VoidChecker("赛况")))
+        : StageFsm(std::move(utility))
         , round_(0)
         , alive_(Global().PlayerNum())
         , player_out_(Global().PlayerNum(), 0)
@@ -560,14 +559,6 @@ class MainStage : public MainGameStage<RoundStage, SelectStage, ExtraCardStage, 
     void ComputeRankScores_();
 
     std::string ApplyImmediateTalentEffects_(PlayerID pid, Talent talent);
-
-  private:
-    CompReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
-    {
-        reply() << Markdown(CombHtml("## 第 " + std::to_string(round_) + " 回合"));
-        return StageErrCode::OK;
-    }
-
 };
 
 // Include talent effects, UI rendering, and battle settlement implementations
@@ -649,7 +640,8 @@ class RoundStage : public SubGameStage<>
     // Normal round: all players get the same card
     RoundStage(MainStage& main_stage, const uint64_t round, const AreaCard& card)
             : StageFsm(main_stage, "第" + std::to_string(round) + "回合",
-                MakeStageCommand(*this, "放置砖块到指定位置（0 为弃牌）", &RoundStage::Set_, ArithChecker<uint32_t>(0, 19, "位置")))
+                MakeStageCommand(*this, "放置砖块到指定位置（0 为弃牌）", &RoundStage::Set_, ArithChecker<uint32_t>(0, 19, "位置")),
+                MakeStageCommand(*this, "查看游戏进展情况与本轮砖块", &RoundStage::Info_, VoidChecker("赛况")))
             , round_(round)
             , is_initial_(round == 1)
             , comb_html_(main_stage.CombHtml("## 第 " + std::to_string(round) + " 回合"))
@@ -848,6 +840,21 @@ class RoundStage : public SubGameStage<>
         }
     }
 
+    // 「赛况」回复：当前最新棋盘 + 本轮砖块图。盘面用 CombHtml 实时生成（不复用 comb_html_ 缓存）。
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        reply() << Markdown{Main().CombHtml("## 第 " + std::to_string(round_) + " 回合")};
+        if (is_initial_) {
+            reply() << Markdown(InitialCardHtml_(), 300);
+        } else if (HasForesee(Main().special_event_) && Main().next_card_.has_value()) {
+            reply() << Markdown(ForeseeCardHtml_(), 64);
+        } else {
+            const std::string style = "<style>body{margin:0;}</style>" + GetStyle(Global().ResourceDir());
+            reply() << Markdown(style + shared_card_.ToHtml(Global().ResourceDir()), 64);
+        }
+        return StageErrCode::OK;
+    }
+
     std::string ForeseeCardHtml_()
     {
         const std::string img_path = Global().ResourceDir();
@@ -893,7 +900,8 @@ class SelectStage : public SubGameStage<>
   public:
     SelectStage(MainStage& main_stage, const uint64_t round)
             : StageFsm(main_stage, "公共配牌阶段",
-                MakeStageCommand(*this, "选择并放置砖块（卡牌ID 位置，位置 0 为弃牌）", &SelectStage::Select_, ArithChecker<uint32_t>(1, 20, "选卡"), ArithChecker<uint32_t>(0, 19, "位置")))
+                MakeStageCommand(*this, "选择并放置砖块（卡牌ID 位置，位置 0 为弃牌）", &SelectStage::Select_, ArithChecker<uint32_t>(1, 20, "选卡"), ArithChecker<uint32_t>(0, 19, "位置")),
+                MakeStageCommand(*this, "查看游戏进展情况与可选砖块", &SelectStage::Info_, VoidChecker("赛况")))
             , round_(round)
             , comb_html_(main_stage.CombHtml("## 第 " + std::to_string(round) + " 回合[公共配牌阶段]"))
     {
@@ -1123,6 +1131,14 @@ class SelectStage : public SubGameStage<>
         sender() << Markdown(SelectCardHtml_(), 300);
     }
 
+    // 「赛况」回复：当前最新棋盘 + 剩余待选卡总图（含选卡顺序头像）。
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        reply() << Markdown{Main().CombHtml("## 第 " + std::to_string(round_) + " 回合[公共配牌阶段]")};
+        reply() << Markdown(SelectCardHtml_(), 300);
+        return StageErrCode::OK;
+    }
+
     const uint64_t round_;
     std::vector<PlayerID> current_players_;
     std::vector<AreaCard> tmp_cards_;
@@ -1139,7 +1155,8 @@ class ExtraCardStage : public SubGameStage<>
             : StageFsm(main_stage, "额外砖块选择阶段",
                 MakeStageCommand(*this, "放置额外砖块到指定位置（0 为弃牌）", &ExtraCardStage::Set_, ArithChecker<uint32_t>(0, 19, "位置")),
                 MakeStageCommand(*this, "选择砖块并放置（砖块序号 位置，位置 0 为弃牌）", &ExtraCardStage::Choose_,
-                    ArithChecker<uint32_t>(1, 10, "砖块序号"), ArithChecker<uint32_t>(0, 19, "位置")))
+                    ArithChecker<uint32_t>(1, 10, "砖块序号"), ArithChecker<uint32_t>(0, 19, "位置")),
+                MakeStageCommand(*this, "查看游戏进展情况和需放置的额外砖块", &ExtraCardStage::Info_, VoidChecker("赛况")))
     {
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
             if (Main().player_out_[pid] == 0 && !Main().players_[pid].extra_card_queue_.empty()) {
@@ -1265,6 +1282,48 @@ class ExtraCardStage : public SubGameStage<>
             }
             Global().Boardcast() << Markdown(style + card_table.ToString(), 300);
         }
+    }
+
+    // 「赛况」回复：当前最新棋盘；若请求者正是 pending 队列首位且有待办，额外私聊行动提示与砖块图。
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        reply() << Markdown{Main().CombHtml("## 第 " + std::to_string(Main().round_) + " 回合[额外砖块选择阶段]")};
+
+        auto& player = Main().players_[pid];
+        if (pending_players_.empty() || pending_players_.front() != pid || player.extra_card_queue_.empty()) {
+            return StageErrCode::OK;
+        }
+
+        const auto& entry = player.extra_card_queue_.front();
+        {
+            auto sender = reply();
+            if (entry.cards.size() > 1) {
+                const int32_t choose_count = entry.place_all ? static_cast<int32_t>(entry.cards.size()) : 1;
+                sender << "「" << entry.source << "」可选择 " << choose_count << " 张，请输入「砖块序号 位置」：";
+                for (size_t i = 0; i < entry.cards.size(); ++i) {
+                    sender << " " << (i + 1) << "." << entry.cards[i].CardName();
+                }
+            } else {
+                sender << "通过「" << entry.source << "」获得额外砖块 " << entry.cards[0].CardName()
+                       << "，请放置（剩余 " << player.extra_card_queue_.size() << " 张）";
+            }
+        }
+
+        // 砖块图：单卡直接小图；多卡走带序号的表格图
+        const std::string img_path = Global().ResourceDir();
+        const std::string style = "<style>body{margin:0;}</style>" + GetStyle(img_path);
+        if (entry.cards.size() == 1) {
+            reply() << Markdown(style + entry.cards[0].ToHtml(img_path), 64);
+        } else {
+            html::Table card_table(1, entry.cards.size() * 2);
+            card_table.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" ");
+            for (size_t i = 0; i < entry.cards.size(); ++i) {
+                card_table.Get(0, i * 2).SetContent(std::to_string(i + 1) + ".");
+                card_table.Get(0, i * 2 + 1).SetContent(entry.cards[i].ToHtml(img_path));
+            }
+            reply() << Markdown(style + card_table.ToString(), 300);
+        }
+        return StageErrCode::OK;
     }
 
     // Place a card for a player (handles transform, fill/discard, forge check)
@@ -1587,7 +1646,8 @@ class TalentStage : public SubGameStage<>
   public:
     TalentStage(MainStage& main_stage)
             : StageFsm(main_stage, "天赋选择阶段",
-                MakeStageCommand(*this, "选择天赋", &TalentStage::Choose_, ArithChecker<uint32_t>(1, 5, "天赋序号")))
+                MakeStageCommand(*this, "选择天赋", &TalentStage::Choose_, ArithChecker<uint32_t>(1, 5, "天赋序号")),
+                MakeStageCommand(*this, "查看游戏进展情况和天赋候选列表", &TalentStage::Info_, VoidChecker("赛况")))
     {
     }
 
@@ -1703,6 +1763,27 @@ class TalentStage : public SubGameStage<>
         Global().HookUnreadyPlayers();
     }
 
+    // 「赛况」回复：当前最新棋盘；若请求者自己的候选池非空再附自己的候选清单。
+    // 没触发条件 / 已选完 / 被「我全都要」吞掉 → 候选池为空 → 无需追加。
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        reply() << Markdown{Main().CombHtml("## 第 " + std::to_string(Main().round_) + " 回合[天赋选择阶段]")};
+
+        auto& player = Main().players_[pid];
+        if (player.talent_pool_.empty()) {
+            return StageErrCode::OK;
+        }
+
+        auto sender = reply();
+        sender << "您当前的候选天赋：\n";
+        for (size_t i = 0; i < player.talent_pool_.size(); ++i) {
+            sender << (i + 1) << ". " << TalentName(player.talent_pool_[i])
+                   << "（" << (IsGradeA(player.talent_pool_[i]) ? "A级" : "B级") << "）——"
+                   << TalentDescription(player.talent_pool_[i]) << "\n";
+        }
+        return StageErrCode::OK;
+    }
+
     virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override
     {
         Main().player_leave_[pid] = true;
@@ -1794,7 +1875,8 @@ class ActiveTalentStage : public SubGameStage<>
                     VoidChecker("乾坤大挪移"), ArithChecker<uint32_t>(1, 19, "位置1"), ArithChecker<uint32_t>(1, 19, "位置2")),
                 MakeStageCommand(*this, "「关键选择」：选择一个未获得的B级天赋", &ActiveTalentStage::KeyChoice_,
                     VoidChecker("关键选择"), AlterChecker<int>(MakeGradeBTalentOptionMap())),
-                MakeStageCommand(*this, "跳过主动天赋发动", &ActiveTalentStage::Pass_, VoidChecker("pass")))
+                MakeStageCommand(*this, "跳过主动天赋发动", &ActiveTalentStage::Pass_, VoidChecker("pass")),
+                MakeStageCommand(*this, "查看游戏进展情况和待执行的主动天赋", &ActiveTalentStage::Info_, VoidChecker("赛况")))
     {
     }
 
@@ -1807,7 +1889,8 @@ class ActiveTalentStage : public SubGameStage<>
                 continue;
             }
             auto sender = Global().Boardcast();
-            sender << At(pid) << " 可发动主动天赋：\n";
+            sender << At(pid) << " 可发动主动天赋：\n"
+                                 "（发动「主动天赋」需先输入“天赋名称”作为指令前缀）\n";
             const auto& player = Main().players_[pid];
             for (const auto talent : player.talents_) {
                 const auto& state = player.talent_states_.at(talent);
@@ -1820,6 +1903,40 @@ class ActiveTalentStage : public SubGameStage<>
             }
         }
         Global().StartTimer(GAME_OPTION(局时));
+    }
+
+    // 「赛况」回复：当前最新棋盘；若请求者自己有待发动主动天赋再附自己的主动天赋提示与图片。
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, MsgSenderBase& reply)
+    {
+        reply() << Markdown{Main().CombHtml("## 第 " + std::to_string(Main().round_) + " 回合[主动天赋阶段]")};
+
+        if (!PlayerNeedsAction_(pid)) {
+            return StageErrCode::OK;
+        }
+
+        {
+            auto sender = reply();
+            sender << "您可发动的主动天赋：\n";
+            const auto& player = Main().players_[pid];
+            for (const auto talent : player.talents_) {
+                const auto& state = player.talent_states_.at(talent);
+                if (!state->HasPendingActiveChoice(player)) continue;
+                sender << state->ActivePrompt(player) << "\n";
+            }
+        }
+        // 单独发图（image_html 走单独的 Markdown 块）
+        {
+            const auto& player = Main().players_[pid];
+            for (const auto talent : player.talents_) {
+                const auto& state = player.talent_states_.at(talent);
+                if (!state->HasPendingActiveChoice(player)) continue;
+                const std::string image_html = state->ActiveImageHtml(player);
+                if (!image_html.empty()) {
+                    reply() << Markdown(image_html, 1000);
+                }
+            }
+        }
+        return StageErrCode::OK;
     }
 
   private:
@@ -1905,7 +2022,7 @@ class ActiveTalentStage : public SubGameStage<>
         }
         auto& player = Main().players_[pid];
         if (!player.HasTalent(Talent::乾坤大挪移)) {
-            reply() << "[错误] 你没有天赋「乾坤大挪移」";
+            reply() << "[错误] 您没有天赋「乾坤大挪移」";
             return StageErrCode::FAILED;
         }
         ScoreResult result{player.comb_->BaseScore(), player.comb_->LineCount(), 0};
@@ -1930,7 +2047,7 @@ class ActiveTalentStage : public SubGameStage<>
         }
         auto& player = Main().players_[pid];
         if (!player.HasTalent(Talent::关键选择)) {
-            reply() << "[错误] 你没有天赋「关键选择」";
+            reply() << "[错误] 您没有天赋「关键选择」";
             return StageErrCode::FAILED;
         }
         ScoreResult result{player.comb_->BaseScore(), player.comb_->LineCount(), 0};

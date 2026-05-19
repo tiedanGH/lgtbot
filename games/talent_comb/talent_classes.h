@@ -590,7 +590,7 @@ class QiankunMoveTalent : public TalentBase
 
     std::string ActivePrompt(const Player& player) const override
     {
-        return "「乾坤大挪移」：输入“乾坤大挪移 位置1 位置2”交换两个位置，或输入“pass”放弃";
+        return "「乾坤大挪移」：输入“乾坤大挪移 <位置1> <位置2>”交换两个位置，或输入“pass”放弃";
     }
 
     std::string OnActivePass(Player& player) override
@@ -664,7 +664,7 @@ class KeyChoiceTalent : public TalentBase
 
     std::string ActivePrompt(const Player& player) const override
     {
-        return "「关键选择」：输入“关键选择 B级天赋完整名称”选择一个可选B级天赋，或输入“pass”放弃";
+        return "「关键选择」：输入“关键选择 <天赋名称>”选择一个未获得的B级天赋，或输入“pass”放弃";
     }
 
     std::string ActiveImageHtml(const Player& player) const override
