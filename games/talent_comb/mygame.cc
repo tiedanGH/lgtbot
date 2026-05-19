@@ -24,6 +24,7 @@
 #include "utility/random.h"
 
 #include "talent_comb.h"
+#include "talent_order.h"
 
 namespace lgtbot {
 
@@ -53,15 +54,104 @@ static std::string TalentRuleText(const int talent_id)
     return "【" + std::string(info.name) + "】\n等级：" + std::string(info.grade) + "\n" + info.description;
 }
 
+// 「游戏规则细节」命令的三种分支文本：游戏阶段 / 特殊事件 / 天赋结算优先级
+static constexpr const char* k_phase_rule = R"EOF(### 游戏阶段
+每个回合按以下顺序依次执行各阶段：
+1. **砖块放置阶段**：每位玩家获得一张砖块（普通轮从卡池1抽取，选牌轮从卡池2选取），选择放置位置或弃牌
+2. **战前额外砖块阶段**（如有）：处理战前触发的额外砖块，如「锻造」合成的砖块等
+3. **天赋选择阶段**（如有）：达成连线条件（每3条线）的玩家从3个天赋中选择1个
+4. **主动天赋阶段**（如有）：处理主动类天赋行动，也可 `pass` 放弃发动
+5. **对战阶段**（第3回合起）：随机配对进行分数比拼，分低者扣血，同时结算中毒伤害与淘汰判定
+6. **战后额外砖块阶段**（如有）：处理战后触发的额外砖块，如「三年之期」存储到期的砖块、「劫掠」从被淘汰玩家处获得的砖块等
+
+所有阶段结束后进入下一回合，重复以上流程直到仅剩1名玩家存活或卡池耗尽。)EOF";
+
+static constexpr const char* k_event_rule = R"EOF(### 特殊事件
+- **大的要来了：** 卡池中没有1
+- **两极分化：** 卡池中没有5
+- **大的没了：** 卡池中没有9
+- **天降恩泽：** 第一轮每人发一个癞子
+- **调色盘：** 卡池中添加大量癞子
+- **有1吗：** 每行1额外加12分
+- **小透不算挂：** 提前公布下一轮的卡
+- **？？？：** 天降恩泽 + 调色盘 + 有1吗 + 小透不算挂)EOF";
+
+// 把 talent_order.h 的 k_talent_order_table 渲染成玩家可读的"天赋结算顺序"文本。
+// 元表里的每一条对应一个 hook 的固定优先级数组，未列出的 hook 走"按玩家持有顺序"分发。
+// 改动顺序只需更新 talent_order.h，本展示自动同步。
+static std::string MakeTalentOrderRuleText()
+{
+    std::string text = "### 天赋结算顺序\n";
+    for (const auto& entry : k_talent_order_table) {
+        text += "\n【";
+        text += entry.label;
+        text += "】\n  ";
+        for (std::size_t i = 0; i < entry.size; ++i) {
+            if (i > 0) text += "➡️";
+            text += TalentName(entry.begin[i]);
+        }
+    }
+    return text;
+}
+
+// 查找天赋详情：输入完整天赋名命中即返回详情，未命中则列出 A/B 级全部天赋名清单供玩家参考。
+static std::string LookupTalentRuleText(const std::string& name)
+{
+    // 容错：去掉用户输入首尾空白
+    const auto trim = [](std::string s) {
+        const auto first = s.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) return std::string{};
+        const auto last = s.find_last_not_of(" \t\r\n");
+        return s.substr(first, last - first + 1);
+    };
+    const std::string trimmed = trim(name);
+    for (int i = 0; i < static_cast<int>(Talent::COUNT); ++i) {
+        const Talent t = static_cast<Talent>(i);
+        if (TalentName(t) == trimmed) {
+            return TalentRuleText(i);
+        }
+    }
+    // 未命中：返回完整清单
+    const auto& grade_a = GradeATalents();
+    const auto& grade_b = GradeBTalents();
+    std::string text = "【A级天赋(" + std::to_string(grade_a.size()) + "个)】\n";
+    bool first = true;
+    for (const Talent t : grade_a) {
+        if (!first) text += "、";
+        text += TalentName(t);
+        first = false;
+    }
+    text += "\n\n【B级天赋(" + std::to_string(grade_b.size()) + "个)】\n";
+    first = true;
+    for (const Talent t : grade_b) {
+        if (!first) text += "、";
+        text += TalentName(t);
+        first = false;
+    }
+    return text;
+}
+
 const std::vector<RuleCommand> k_rule_commands = {
-    RuleCommand("查看指定天赋效果",
-            [](const int talent_id) -> const char* const
+    RuleCommand("查看游戏规则细节和结算优先级",
+            [](const int type) -> const char* const
             {
-                static std::string rule_text;
-                rule_text = TalentRuleText(talent_id);
-                return rule_text.c_str();
+                static const std::string order_rule = MakeTalentOrderRuleText();
+                switch (type) {
+                    case 0: return k_phase_rule;
+                    case 1: return k_event_rule;
+                    case 2: return order_rule.c_str();
+                }
+                return "";
             },
-            AlterChecker<int>(MakeTalentOptionMap())),
+            AlterChecker<int>({{"游戏阶段", 0}, {"特殊事件", 1}, {"优先级", 2}})),
+    RuleCommand("查看指定天赋效果（或查看完整列表）",
+                [](const std::string& name) -> const char* const
+                {
+                    static std::string rule_text;
+                    rule_text = LookupTalentRuleText(name);
+                    return rule_text.c_str();
+                },
+                AnyArg("天赋名", "绝地反击")),
 };
 
 bool AdaptOptions(MsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
@@ -163,8 +253,7 @@ class MainStage : public MainGameStage<RoundStage, SelectStage, ExtraCardStage, 
   public:
     MainStage(StageUtility&& utility)
         : StageFsm(std::move(utility),
-            MakeStageCommand(*this, "查看蜂巢初始状态", &MainStage::Info_, VoidChecker("赛况")),
-            MakeStageCommand(*this, "查看指定天赋效果", &MainStage::TalentRule_, AlterChecker<int>(MakeTalentOptionMap())))
+            MakeStageCommand(*this, "查看蜂巢初始状态", &MainStage::Info_, VoidChecker("赛况")))
         , round_(0)
         , alive_(Global().PlayerNum())
         , player_out_(Global().PlayerNum(), 0)
@@ -311,6 +400,9 @@ class MainStage : public MainGameStage<RoundStage, SelectStage, ExtraCardStage, 
                              int64_t my_battle_score, int64_t opp_battle_score, std::string& result);
     void ApplyVictoryTalents_(PlayerID winner, bool mirror,
                               int64_t my_battle_score, int64_t opp_battle_score, std::string& result);
+    void ApplyBattleEndTalents_(PlayerID pid, bool mirror,
+                                int64_t my_battle_score, int64_t opp_battle_score,
+                                int32_t outcome, std::string& result);
     void DoEliminationAfterBattle_(MsgSenderBase::MsgSenderGuard& sender);
     std::optional<PlayerID> FindKillerFromFightMap_(PlayerID victim) const;
     void DoPoison_();
@@ -476,11 +568,6 @@ class MainStage : public MainGameStage<RoundStage, SelectStage, ExtraCardStage, 
         return StageErrCode::OK;
     }
 
-    CompReqErrCode TalentRule_(const PlayerID pid, const bool is_public, MsgSenderBase& reply, const int talent_id)
-    {
-        reply() << TalentRuleText(talent_id);
-        return StageErrCode::OK;
-    }
 };
 
 // Include talent effects, UI rendering, and battle settlement implementations
@@ -1251,9 +1338,6 @@ class ExtraCardStage : public SubGameStage<>
     void CheckForgeAfterPlace_(PlayerID pid)
     {
         auto& player = Main().players_[pid];
-        static constexpr Talent k_extra_card_action_end_order[] = {
-            Talent::锻造,
-        };
         for (const auto talent : k_extra_card_action_end_order) {
             if (!player.HasTalent(talent)) continue;
             const auto notify = player.talent_states_.at(talent)->OnExtraCardActionEnd(player);
@@ -1972,12 +2056,6 @@ void MainStage::StartNewRound_(SubStageFsmSetter& setter)
         if (player_out_[pid] != 0) continue;
         auto& player = players_[pid];
         const TalentRoundContext context{IsSelectionRound(round_), HasValuableOne(special_event_)};
-        static constexpr Talent k_round_start_order[] = {
-            Talent::零号位,
-            Talent::冥想,
-            Talent::利滚利,
-            Talent::临时用品,
-        };
         for (const auto talent : k_round_start_order) {
             if (!player.HasTalent(talent)) continue;
             const std::string message = player.talent_states_.at(talent)->OnRoundStart(player, context);
@@ -2086,10 +2164,6 @@ void MainStage::NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason,
         if (player_out_[pid] != 0) continue;
         auto& player = players_[pid];
         const TalentPlacementContext context{HasValuableOne(special_event_)};
-        static constexpr Talent k_placement_end_order[] = {
-            Talent::以退为进,
-            Talent::完美块,
-        };
         for (const auto talent : k_placement_end_order) {
             if (player.HasTalent(talent)) {
                 player.talent_states_.at(talent)->OnPlacementStageEnd(player, context);
@@ -2107,10 +2181,6 @@ void MainStage::NextStageFsm(SelectStage& sub_stage, const CheckoutReason reason
         if (player_out_[pid] != 0) continue;
         auto& player = players_[pid];
         const TalentPlacementContext context{HasValuableOne(special_event_)};
-        static constexpr Talent k_placement_end_order[] = {
-            Talent::以退为进,
-            Talent::完美块,
-        };
         for (const auto talent : k_placement_end_order) {
             if (player.HasTalent(talent)) {
                 player.talent_states_.at(talent)->OnPlacementStageEnd(player, context);
@@ -2149,10 +2219,6 @@ void MainStage::NextStageFsm(ExtraCardStage& sub_stage, const CheckoutReason rea
         if (player_out_[pid] != 0) continue;
         auto& player = players_[pid];
         const TalentPlacementContext context{HasValuableOne(special_event_)};
-        static constexpr Talent k_placement_end_order[] = {
-            Talent::以退为进,
-            Talent::完美块,
-        };
         for (const auto talent : k_placement_end_order) {
             if (player.HasTalent(talent)) {
                 player.talent_states_.at(talent)->OnPlacementStageEnd(player, context);

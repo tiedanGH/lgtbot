@@ -26,6 +26,7 @@ inline std::string TalentBase::AfterScoreUpdatedOnCardPlaced(Player& player, uin
                                                              const TalentCardPlacedContext& context, int32_t old_permanent_extra) { return ""; }
 inline std::string TalentBase::OnDefeat(Player& player, const TalentDefeatContext& context, int32_t& damage) { return ""; }
 inline std::string TalentBase::OnVictory(Player& player, const TalentVictoryContext& context) { return ""; }
+inline std::string TalentBase::OnBattleEnd(Player& player, const TalentBattleEndContext& context) { return ""; }
 inline std::string TalentBase::OnPreBattleExtraCards(Player& player, const TalentPreBattleExtraContext& context) { return ""; }
 inline std::string TalentBase::OnExtraCardActionEnd(Player& player) { return ""; }
 inline bool TalentBase::HasPendingActiveChoice(const Player& player) const { return false; }
@@ -1961,24 +1962,14 @@ class BattleHardenedTalent : public TalentBase
 
     int32_t PermanentExtraScore(Player& player, int32_t current_extra) override { return accumulated; }
 
-    std::string OnVictory(Player& player, const TalentVictoryContext& context) override
+    // 走 OnBattleEnd 而非 OnVictory/OnDefeat，平局也应记账。
+    std::string OnBattleEnd(Player& player, const TalentBattleEndContext& context) override
     {
-        Accrue(player, context.my_battle_score, context.opponent_battle_score, context.has_valuable_one);
-        return "";
-    }
-
-    std::string OnDefeat(Player& player, const TalentDefeatContext& context, int32_t& damage) override
-    {
-        Accrue(player, context.my_battle_score, context.opponent_battle_score, context.has_valuable_one);
-        return "";
-    }
-
-    // 命中条件即时记账 +3，并立刻刷新 permanent_extra_，避免分数详情/总分滞后到下次 UpdateScore。
-    void Accrue(Player& player, int64_t my_score, int64_t opp_score, bool has_valuable_one)
-    {
-        if (std::abs(my_score - opp_score) > 5) return;
+        if (std::abs(context.my_battle_score - context.opponent_battle_score) > 5) return "";
         accumulated += 3;
-        player.UpdateScore(ScoreResult{player.comb_->BaseScore(), player.comb_->LineCount(), 0}, has_valuable_one);
+        // 命中条件即时刷新 permanent_extra_，避免分数详情/总分滞后到下次 UpdateScore。
+        player.UpdateScore(ScoreResult{player.comb_->BaseScore(), player.comb_->LineCount(), 0}, context.has_valuable_one);
+        return "";
     }
 
     int32_t accumulated = 0;
