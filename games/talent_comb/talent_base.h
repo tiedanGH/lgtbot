@@ -313,7 +313,6 @@ class DeadlyMagicTalent;
 class TriForceTalent;
 class EmergencyRescueTalent;
 class WantAllTalent;
-class PandoraBoxTalent;
 class CompoundInterestTalent;
 class DysonSphereTalent;
 class DiscardScorerTalent;
@@ -326,6 +325,7 @@ class QiankunMoveTalent;
 class KeyChoiceTalent;
 class LifeGameTalent;
 class YZoneTalent;
+class TempWildTalent;
 
 class BloodlustTalent;
 class StillUsefulTalent;
@@ -346,7 +346,6 @@ class NoMoreThanThreeTalent;
 class SlotMachineTalent;
 class DigitReverseTalent;
 class LoserBladeTalent;
-class TempWildTalent;
 class BandageTalent;
 class HerbalGrowthTalent;
 class AngelRoundTalent;
@@ -366,6 +365,7 @@ class BattleHardenedTalent;
 class FatalRhythmTalent;
 class TimeAnchorTalent;
 class RhythmRemnantTalent;
+class PandoraBoxTalent;
 
 std::unique_ptr<TalentBase> CreateTalentState(Talent talent);
 

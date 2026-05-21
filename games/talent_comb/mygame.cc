@@ -322,11 +322,6 @@ class MainStage : public MainGameStage<RoundStage, SelectStage, ExtraCardStage, 
 
         // Pool2 (cards2_): for round 1 initial + selection rounds, 54 base cards, no wild
         cards2_ = GenerateBaseCards(special_event_);
-        if (HasColorful(special_event_)) {
-            cards2_.emplace_back(); // +3 wild for colorful
-            cards2_.emplace_back();
-            cards2_.emplace_back();
-        }
         SeededShuffle(cards2_.begin(), cards2_.end(), pool2_rng_);
 
         it_ = cards_.begin();
