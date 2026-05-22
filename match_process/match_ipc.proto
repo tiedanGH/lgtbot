@@ -141,6 +141,15 @@ message QueryMatchOptionInfoReq {
   string          init_options_args   = 3;
 }
 
+// Validate one option string against [applied_options_log + text] applied to a
+// fresh options object. Returns ok + the resulting max_player/multiple. Does
+// NOT mutate the config_runner's default_options_ or applied_options_log_:
+// per-match config commands must not leak into the global default state.
+message TryMatchOptionReq {
+  repeated string applied_options_log = 1;
+  string          text                = 2;
+}
+
 message ConfigRequest {
   oneof req {
     QueryOptionInfoReq      query_option_info       = 1;
@@ -152,6 +161,7 @@ message ConfigRequest {
     bool                    shutdown                = 7;  // true = terminate
     HandleRuleCommandReq    handle_rule_command     = 8;
     QueryMatchOptionInfoReq query_match_option_info = 9;
+    TryMatchOptionReq       try_match_option        = 10;
   }
 }
 

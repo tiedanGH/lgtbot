@@ -67,11 +67,17 @@ ErrCode MatchManager::NewMatch(GameHandle& game_handle, const std::string_view i
                         << game_handle.Info().name_ << "」查看所有的预设指令";
                 return EC_INVALID_ARGUMENT;
             }
-            game_handle.UpdateCachedLimits(max_player, multiple);
+            // Note: do NOT call game_handle.UpdateCachedLimits here. Init options
+            // are per-match, so leaking the result into the GameHandle's global
+            // cache would change what every subsequent match (and the game list)
+            // sees. The per-match max_player/multiple are passed to the Match
+            // directly via Match::InitOptions instead.
         }
         Match::InitOptions options;
         options.bench_computers_to_player_num_ = bench;
         options.is_formal_ = is_formal;
+        options.max_player_ = max_player;
+        options.multiple_ = multiple;
         options.applied_options_log_ = game_handle.ConfigClient().GetAppliedLog();
         options.init_options_args_ = std::string(init_options_args);
         new_match = std::make_shared<Match>(bot_, mid, game_handle, std::move(options), uid, gid);

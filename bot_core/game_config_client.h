@@ -53,6 +53,15 @@ class GameConfigClient
     // Returns false on failure.
     bool SetDefaultOption(const std::string& text, uint64_t& max_player, uint32_t& multiple);
 
+    // Validate one option against [applied_options_log + text]. Returns false
+    // if the option string is rejected; on success returns the resulting
+    // max_player and multiple. Does NOT mutate the config_runner's global
+    // default_options_ or applied_options_log_.
+    bool TryMatchOption(const std::vector<std::string>& applied_options_log,
+                        const std::string& text,
+                        uint64_t& max_player,
+                        uint32_t& multiple);
+
     // Sets the default formal/informal flag for new matches.
     bool SetDefaultFormal(bool is_formal);
 
