@@ -41,7 +41,7 @@ const GameProperties k_properties {
     .description_ = "云顶之巢 + 天赋系统，在战斗中获得天赋强化，成为最后的胜者",
 };
 uint64_t MaxPlayerNum(const CustomOptions& options) { return 8; }
-uint32_t Multiple(const CustomOptions& options) { return 2; }
+uint32_t Multiple(const CustomOptions& options) { return GET_OPTION_VALUE(options, 种子).empty() ? 2 : 0; }
 const MutableGenericOptions k_default_generic_options;
 
 static std::string TalentRuleText(const int talent_id)
