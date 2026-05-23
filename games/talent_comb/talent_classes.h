@@ -1245,7 +1245,7 @@ class ThreeYearTalent : public TalentBase
 class ForgeTalent : public TalentBase
 {
   public:
-    ForgeTalent() : TalentBase({"B", Talent::锻造, "锻造", "弃牌时，按顺序获得砖块三个方向数字的碎片，集齐三个方向的碎片合成一枚砖块放置"}) {}
+    ForgeTalent() : TalentBase({"B", Talent::锻造, "锻造", "弃牌时，按顺序获得砖块三个方向数字的碎片，集齐三个方向的碎片合成一枚砖块放置"}, false) {}
 
     std::string BoardDisplay(const Player& player) const override
     {

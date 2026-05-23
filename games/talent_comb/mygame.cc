@@ -81,7 +81,7 @@ static constexpr const char* k_event_rule = R"EOF(### 特殊事件
 // 改动顺序只需更新 talent_order.h，本展示自动同步。
 static std::string MakeTalentOrderRuleText()
 {
-    std::string text = "### 天赋结算顺序\n";
+    std::string text = "### 天赋结算顺序\n```\n";
     for (const auto& entry : k_talent_order_table) {
         text += "\n【";
         text += entry.label;
@@ -91,6 +91,7 @@ static std::string MakeTalentOrderRuleText()
             text += TalentName(entry.begin[i]);
         }
     }
+    text += "\n```";
     return text;
 }
 
