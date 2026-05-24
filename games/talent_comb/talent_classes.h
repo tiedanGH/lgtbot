@@ -1365,7 +1365,7 @@ class SlotMachineTalent : public TalentBase
 class DigitReverseTalent : public TalentBase
 {
   public:
-    DigitReverseTalent() : TalentBase({"B", Talent::两极反转, "两极反转", "你的1视为9，你的9视为1"}) {}
+    DigitReverseTalent() : TalentBase({"B", Talent::两极反转, "两极反转", "你的1视为9，你的9视为1"}, false) {}
 
     bool IsCompatibleWithSpecialEvent(SpecialEvent event) const override
     {
