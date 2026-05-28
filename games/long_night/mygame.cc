@@ -639,6 +639,7 @@ class RoundStage : public SubGameStage<>
 
         bool ready_status = HandleGridInteraction(player, sender, false);
         if (ready_status) return StageErrCode::READY;
+        // Global().SaveMarkdown(Main().board.GetBoard(Main().board.grid_map), (GRID_SIZE + WALL_SIZE) * (GAME_OPTION(边长) + 1));   // 调试：单步调试用
 
         if (GAME_OPTION(谋定后动)) {
             step++;
@@ -1139,10 +1140,10 @@ bool RoundStage::HandleGridInteraction(Player& player, MsgSenderBase::MsgSenderG
         }
     } else if (sound == Sound::PAPA) {
         if (hide) {
-            sender << prefix << "移动发出【啪啪声】（隐匿中，不会向其他人发出声响）";
+            sender << prefix << "移动发出【" PAPA_STR "声】（隐匿中，不会向其他人发出声响）";
         } else {
             player.UpdateSoundRecord(sound);
-            sender << prefix << GetRandomHint(papa_hints) << "\n移动发出【啪啪声】，请其他玩家留意私信声响信息！";
+            sender << prefix << GetRandomHint(papa_hints) << "\n移动发出【" PAPA_STR "声】，请其他玩家留意私信声响信息！";
             SendSoundMessage(player.x, player.y, sound, false);
             player.achievement.trigger_sound = true;
         }
@@ -1252,8 +1253,8 @@ void RoundStage::SendSoundMessage(const int fromX, const int fromY, const Sound 
             if (Main().board.IsNearJammer(pid)) {
                 // 被[屏蔽器]影响
                 switch (sound) {
-                    case Sound::SHASHA: sound_message = step_info + "你感到地面有所振动，那是踩动草木（沙沙）特有的动静；但周围？却没有任何声音？"; break;
-                    case Sound::PAPA:   sound_message = step_info + "你感到地面有所振动，那是踩动水体（啪啪）特有的动静；但周围？却没有任何声音？"; break;
+                    case Sound::SHASHA: sound_message = step_info + "你感到地面有所振动，那是踩动草木（" SHASHA_STR "）特有的动静；但周围？却没有任何声音？"; break;
+                    case Sound::PAPA:   sound_message = step_info + "你感到地面有所振动，那是踩动水体（" PAPA_STR "）特有的动静；但周围？却没有任何声音？"; break;
                     case Sound::BOSS:   sound_message = "[BOSS-米诺陶斯] 你感到地面正在剧烈振动！但是，声响好像来自四面八方？"; break;
                     default:            sound_message = "[错误] 未知声音类型：被屏蔽的未知声音";
                 }
@@ -1275,8 +1276,8 @@ void RoundStage::SendSoundMessage(const int fromX, const int fromY, const Sound 
                     }
                 } else {
                     switch (sound) {
-                        case Sound::SHASHA: sound_message = step_info + "你听见了来自【" + direction + "方】的沙沙声！"; break;
-                        case Sound::PAPA:   sound_message = step_info + "你听见了来自【" + direction + "方】的啪啪声！"; break;
+                        case Sound::SHASHA: sound_message = step_info + "你听见了来自【" + direction + "方】的" SHASHA_STR "声！"; break;
+                        case Sound::PAPA:   sound_message = step_info + "你听见了来自【" + direction + "方】的" PAPA_STR "声！"; break;
                         case Sound::BOSS:   sound_message = "[BOSS-米诺陶斯] 你听见了来自【" + direction + "方】的巨大响声！"; break;
                         default:            sound_message = "[错误] 未知声音类型：不同格子来自【" + direction + "方】的未知声音";
                     }
