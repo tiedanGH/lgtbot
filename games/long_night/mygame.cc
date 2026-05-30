@@ -1006,7 +1006,7 @@ class RoundStage : public SubGameStage<>
     // ========== 成员函数 ==========
     bool HandleGridInteraction(Player& player, MsgSenderBase::MsgSenderGuard& sender, const bool multiple_mode);
     bool PlayerCatch(Player& player, MsgSenderBase::MsgSenderGuard& sender);
-    void SendSoundMessage(const int fromX, const int fromY, const Sound sound, const bool to_all);
+    void SendSoundMessage(const int fromX, const int fromY, const Sound sound, const bool to_all, const bool is_first_sound = false);
     void HandleMinotaurBossAction(Boss& boss, string& boss_record, MsgSenderBase::MsgSenderGuard& sender);
     void HandleBangBangBossAction(Boss& boss, string& boss_record, MsgSenderBase::MsgSenderGuard& sender);
 };
@@ -1129,22 +1129,26 @@ bool RoundStage::HandleGridInteraction(Player& player, MsgSenderBase::MsgSenderG
     }
     /* ========== Sound ========== */
     Sound sound = Main().board.GetSound(grid, GAME_OPTION(特殊事件));
-    if (sound == Sound::SHASHA) {
+    if (sound == Sound::SHASHA || sound == Sound::PAPA) {
+        const bool is_shasha = (sound == Sound::SHASHA);
+        const char* terrain_label = is_shasha ? "【树丛】" : "【" PAPA_STR "声】";
+        const char* action_verb   = is_shasha ? "移动进入" : "移动发出";
+
         if (hide) {
-            sender << prefix << "移动进入【树丛】（隐匿中，不会向其他人发出声响）";
+            sender << prefix << action_verb << terrain_label << "（隐匿中，不会向其他人发出声响）";
         } else {
+            const bool is_first_sound = !player.achievement.trigger_sound;
             player.UpdateSoundRecord(sound);
-            sender << prefix << GetRandomHint(grass_hints) << "\n移动进入【树丛】，请其他玩家留意私信声响信息！";
-            SendSoundMessage(player.x, player.y, sound, false);
-            player.achievement.trigger_sound = true;
-        }
-    } else if (sound == Sound::PAPA) {
-        if (hide) {
-            sender << prefix << "移动发出【" PAPA_STR "声】（隐匿中，不会向其他人发出声响）";
-        } else {
-            player.UpdateSoundRecord(sound);
-            sender << prefix << GetRandomHint(papa_hints) << "\n移动发出【" PAPA_STR "声】，请其他玩家留意私信声响信息！";
-            SendSoundMessage(player.x, player.y, sound, false);
+            sender << prefix
+                   << GetRandomHint(is_shasha ? std::span<const std::string_view>(grass_hints)
+                                              : std::span<const std::string_view>(papa_hints))
+                   << "\n" << action_verb << terrain_label;
+            if (is_first_sound) {
+                sender << "！本局首次发声，不会向其他人发出声响";
+            } else {
+                sender << "，请其他玩家留意私信声响信息！";
+            }
+            SendSoundMessage(player.x, player.y, sound, false, is_first_sound);
             player.achievement.trigger_sound = true;
         }
     }
@@ -1241,8 +1245,20 @@ bool RoundStage::PlayerCatch(Player& player, MsgSenderBase::MsgSenderGuard& send
 }
 
 // 私信其他玩家发送声响信息
-void RoundStage::SendSoundMessage(const int fromX, const int fromY, const Sound sound, const bool to_all)
+void RoundStage::SendSoundMessage(const int fromX, const int fromY, const Sound sound, const bool to_all, const bool is_first_sound)
 {
+    // 首次声响保护：仅占位填充传播记录（保持 propagation.size() == PlayerNum 不变量），不私信任何方向
+    if (is_first_sound) {
+        const auto n = Global().PlayerNum();
+        for (PlayerID pid = 0; pid < n; ++pid) {
+            if (sound == Sound::BOSS) {
+                Main().board.boss.AddSoundPropagation("首次");
+            } else {
+                Main().board.players[currentPlayer].AddSoundPropagation("首次");
+            }
+        }
+        return;
+    }
     for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
         if ((pid != currentPlayer || to_all) && Main().board.players[pid].out == 0) {
             string direction = Main().board.GetSoundDirection(fromX, fromY, Main().board.players[pid]);
