@@ -123,6 +123,12 @@ enum class HideMode {
     STEP,   // 单步隐匿
 };
 
+enum class StopInfo {
+    NONE,       // 无
+    PRIVATE,    // 私信
+    PUBLIC,     // 公开
+};
+
 enum class Texture {
     CLASSIC,    // 经典材质
     RETRO,      // 复古材质
