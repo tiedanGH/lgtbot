@@ -95,16 +95,12 @@ GAME_TEST(4, auto_explore_toggles_hook)
     ASSERT_PRI_MSG(OK, 1, "继续");
     ASSERT_PRI_MSG(OK, 2, "继续");
     ASSERT_PRI_MSG(CONTINUE, 3, "继续");
-    ASSERT_TIMEOUT(CHECKOUT);
 
-    // 挂机玩家不再被等待，仍然只需其余三人行动即可推进回合
-    ASSERT_PRI_MSG(OK, 1, "继续");
-    ASSERT_PRI_MSG(OK, 2, "继续");
-    ASSERT_PRI_MSG(CONTINUE, 3, "继续");
-    ASSERT_TIMEOUT(CHECKOUT);
-
-    // 关闭后无人挂机，四人全部行动完毕即可立刻结算
+    // 等待窗口内关闭自动探险，本回合改为等待该玩家亲自选择
     ASSERT_PRI_MSG(OK, 0, "自动探险");
+    ASSERT_PRI_MSG(CHECKOUT, 0, "继续");
+
+    // 关闭后的下一回合无人挂机，四人全部行动完毕才结算
     ASSERT_PRI_MSG(OK, 1, "继续");
     ASSERT_PRI_MSG(OK, 2, "继续");
     ASSERT_PRI_MSG(OK, 3, "继续");
@@ -121,8 +117,7 @@ GAME_TEST(4, unhook_restores_normal_round)
 
     // 其余三人仍在挂机且不再阻塞，玩家 0 行动后只需等待最短窗口
     ASSERT_PRI_MSG(CONTINUE, 0, "继续");
-    ASSERT_TIMEOUT(CHECKOUT);
-    ASSERT_FINISHED(false);
+    ASSERT_TIMEOUT(CHECKOUT);  // 此次结算会翻开第 5 张牌，游戏可能已经结束
 }
 
 // 挂机玩家直接撤离，本回合结算时必须真的离开秘境
@@ -148,7 +143,12 @@ GAME_TEST(4, hooked_player_retreat_in_short_round)
     ASSERT_PRI_MSG(OK, 0, "撤离");
     ASSERT_TIMEOUT(CHECKOUT);
 
-    ASSERT_PRI_MSG(FAILED, 0, "继续");
+    if (this->main_stage_->IsOver()) {
+        // 第 5 张牌恰好团灭了留守的三人；玩家 0 先一步撤离，金币应当保住
+        ASSERT_GT(this->main_stage_->PlayerScore(PlayerID{0u}), 0);
+    } else {
+        ASSERT_PRI_MSG(FAILED, 0, "继续");  // 已撤离的玩家不能再行动
+    }
 }
 
 GAME_TEST(4, hooked_player_can_still_choose)
@@ -170,8 +170,7 @@ GAME_TEST(4, timeout_enters_hook_state)
 
     // 玩家 1~3 超时后进入挂机，本回合只需玩家 0 行动，随后走完最短等待窗口
     ASSERT_PRI_MSG(CONTINUE, 0, "继续");
-    ASSERT_TIMEOUT(CHECKOUT);
-    ASSERT_FINISHED(false);
+    ASSERT_TIMEOUT(CHECKOUT);  // 此次结算会翻开第 5 张牌
 }
 
 GAME_TEST(4, status_command_is_available)
