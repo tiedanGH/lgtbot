@@ -438,8 +438,9 @@ class TurnStage : public SubGameStage<>
         Global().Boardcast() << "轮到 " << At(cur) << " 移动\n"
                 "可一次输入多个方向连续移动。方向：上下左右 / UDLR / sxzy\n"
                 "每步时限 " << GAME_OPTION(行动时限) << " 秒，超时判负\n"
-                << (Main().mode_ == GameMode::DRAW_WHILE_WALK
-                        ? "\n[边走边画] 可私信「<编号><方向>」往继续加墙\n" : "")
+                << (Main().mode_ != GameMode::DRAW_WHILE_WALK ? ""
+                        : turn_ == 1 ? "\n[边走边画] 第一回合不能加墙\n"
+                                     : "\n[边走边画] 可私信「<编号><方向>」往继续加墙\n")
                 << Markdown(Main().board.GetDualBoard(-1, turn_, static_cast<int>(cur)), Board::DualImageWidth(Main().size_));
         Global().StartTimer(GAME_OPTION(行动时限));
     }
@@ -466,6 +467,10 @@ class TurnStage : public SubGameStage<>
         }
         if (is_public) {
             reply() << "[错误] 请私信裁判加墙";
+            return StageErrCode::FAILED;
+        }
+        if (turn_ == 1) {
+            reply() << "[错误] 边走边画：第一回合不能加墙";
             return StageErrCode::FAILED;
         }
         vector<WallRef> refs;
@@ -499,9 +504,11 @@ class TurnStage : public SubGameStage<>
             maze.MarkAdded(ref);
         }
         reply() << "已追加 " << refs.size() << " 面墙，当前共 " << maze.WallCount() << " / " << Main().wall_limit_
-                << " 面\n对手不会收到任何提示，新墙在被撞上之前保持隐藏\n"
+                << " 面\n对手会得知加墙数量，新墙在被撞上之前保持隐藏\n"
                 << Markdown(Main().board.GetSingleBoard(Main().Opponent(pid), static_cast<int>(pid)),
                         Board::ImageWidth(Main().size_));
+        // 公布加墙数量
+        Global().Boardcast() << At(pid) << " 在迷宫中追加了 " << refs.size() << " 面墙";
         return StageErrCode::OK;
     }
 
@@ -686,10 +693,30 @@ void MainStage::NextStageFsm(DrawStage& sub_stage, const CheckoutReason reason, 
             }
         }
     }
-    // 系统随机决定先手玩家
-    cur_pid_ = static_cast<PlayerID>(g() % 2);
     turn_ = 1;
-    Global().Boardcast() << "双方迷宫均已提交，对战开始！\n先手：" << At(cur_pid_);
+    {
+        auto sender = Global().Boardcast();
+        sender << "双方迷宫均已提交，对战开始！\n";
+        if (mode_ == GameMode::DRAW_WHILE_WALK) {
+            // 边走边画：公布双方墙数，用墙更少的一方先手，墙数相同则随机
+            const int count_0 = players[0].maze.WallCount();
+            const int count_1 = players[1].maze.WallCount();
+            sender << "[边走边画] 双方墙数：\n"
+                   << At(PlayerID(0)) << "：" << count_0 << " 面\n"
+                   << At(PlayerID(1)) << "：" << count_1 << " 面\n";
+            if (count_0 != count_1) {
+                cur_pid_ = PlayerID(count_0 < count_1 ? 0 : 1);
+                sender << "用墙更少的一方先手：" << At(cur_pid_);
+            } else {
+                cur_pid_ = static_cast<PlayerID>(g() % 2);
+                sender << "墙数相同，随机决定先手：" << At(cur_pid_);
+            }
+        } else {
+            // 系统随机决定先手玩家
+            cur_pid_ = static_cast<PlayerID>(g() % 2);
+            sender << "先手：" << At(cur_pid_);
+        }
+    }
     setter.Emplace<TurnStage>(*this, turn_);
 }
 

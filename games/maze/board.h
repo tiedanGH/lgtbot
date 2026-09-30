@@ -148,6 +148,7 @@ class Board
     static constexpr const char* COLOR_WHITE_CELL = "#FFFFFF";  // 黑白模式：偶数通路
     static constexpr const char* COLOR_FOG = "#9C9C9C";         // 黑白模式：尚未公布的格子，方块内画问号
     static constexpr const char* COLOR_NEW_WALL = "#C06BD8";    // 边走边画：对战阶段追加、尚未被撞出的墙
+    static constexpr const char* COLOR_HIT_NEW_WALL = "#9B2787"; // 边走边画：对战阶段追加、已被撞出的墙
 
     /* ========== 迷宫绘制 ========== */
     std::string GetMaze(const MazeOptions& options) const
@@ -312,7 +313,7 @@ class Board
     std::string WallColor(const Maze& maze, const WallRef& ref, const WallView view) const
     {
         if (maze.IsRevealed(ref)) {
-            return COLOR_WALL;
+            return maze.IsAdded(ref) ? COLOR_HIT_NEW_WALL : COLOR_WALL;
         }
         if (view == WallView::TRUTH) {
             if (!maze.WallValue(ref)) {
@@ -378,14 +379,6 @@ class Board
     }
 
     // 能看到真实墙体的视角下，边走边画模式追加一项新墙图例
-    std::vector<LegendItem> NewWallItems() const
-    {
-        if (mode_ != GameMode::DRAW_WHILE_WALK) {
-            return {};
-        }
-        return {{COLOR_NEW_WALL, "新加的墙"}};
-    }
-
     std::string GetDrawLegend() const
     {
         std::vector<LegendItem> items = {
@@ -398,24 +391,32 @@ class Board
 
     std::string GetLegend(const LegendKind kind = LegendKind::PUBLIC) const
     {
+        const bool draw_while_walk = (mode_ == GameMode::DRAW_WHILE_WALK);
         std::vector<LegendItem> items = {
             {COLOR_START, "起点"},
             {COLOR_GOAL, "终点"},
             {COLOR_VISITED, "走过格子"},
             {COLOR_WALL, "撞出的墙"},
         };
-        uint32_t column = 4;
+        if (draw_while_walk) {
+            items.push_back({COLOR_HIT_NEW_WALL, "撞出新墙"});
+        }
         switch (kind) {
             case LegendKind::FINAL:
                 items.push_back({COLOR_HIDDEN, "隐藏的墙"});
-                items = Append(std::move(items), NewWallItems());
+                if (draw_while_walk) {
+                    items.push_back({COLOR_NEW_WALL, "新加的墙"});
+                }
                 items.push_back({COLOR_PASSABLE, "无墙"});
                 break;
             case LegendKind::PRIVATE:
                 items.push_back({COLOR_HIDDEN, "绘制的墙"});
-                items = Append(std::move(items), NewWallItems());
+                if (draw_while_walk) {
+                    items.push_back({COLOR_NEW_WALL, "新加的墙"});
+                }
                 items.push_back({COLOR_PASSABLE, "已知通路"});
-                if (mode_ != GameMode::BLACK_WHITE) {
+                // 黑白与边走边画的私信视角项数偏多，省掉这一项才能压进两行
+                if (mode_ == GameMode::NORMAL) {
                     items.push_back({COLOR_UNKNOWN, "尚未探明"});
                 }
                 break;
@@ -424,7 +425,7 @@ class Board
                 items.push_back({COLOR_UNKNOWN, "尚未探明"});
                 break;
         }
-        return MakeLegend(Append(std::move(items), ParityItems()), column);
+        return MakeLegend(Append(std::move(items), ParityItems()), 4);
     }
 
     static std::vector<LegendItem> Append(std::vector<LegendItem> items, const std::vector<LegendItem>& extra)

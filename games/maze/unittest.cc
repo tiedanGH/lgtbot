@@ -336,23 +336,30 @@ GAME_TEST(2, draw_while_walk_add_wall)
     ASSERT_PRI_MSG(OK, 0, "墙数 8");
     START_GAME();
 
-    // 预留墙壁：只放 5 面，留 3 面给对战阶段
+    // 0 号放 5 面，1 号只放 3 面，用墙更少的 1 号先手
     ASSERT_PRI_MSG(OK, 0, k_safe_walls);
-    ASSERT_PRI_MSG(OK, 1, k_safe_walls);
+    ASSERT_PRI_MSG(OK, 1, "7右 8右 12右");
     ASSERT_PRI_MSG(OK, 0, "提交");
     ASSERT_PRI_MSG(CHECKOUT, 1, "提交");
 
-    // 非行动方不能加墙；行动方必须私信
-    int accepted = 0;
-    for (uint64_t pid = 0; pid < 2; ++pid) {
-        ASSERT_PUB_MSG(FAILED, pid, "18右");
-        if (!CHECK_PRI_MSG(FAILED, pid, "18右")) {
-            ++accepted;
+    // 第一回合谁都不能加墙：0 号不是自己的回合，1 号虽是行动方但处在第一回合
+    ASSERT_PRI_MSG(FAILED, 0, "18右");
+    ASSERT_PRI_MSG(FAILED, 1, "18右");
+    ASSERT_PUB_MSG(FAILED, 1, "18右");
+
+    // 先手是 1 号：0 号任何方向都无法行动，1 号至少有一个方向可以行动
+    const char* const directions[] = {"上", "下", "左", "右"};
+    for (const char* const direct : directions) {
+        ASSERT_PRI_MSG(FAILED, 0, direct);
+    }
+    bool acted = false;
+    for (const char* const direct : directions) {
+        if (!CHECK_PRI_MSG(FAILED, 1, direct)) {
+            acted = true;
+            break;
         }
     }
-    ASSERT_EQ(1, accepted);
-
-    ASSERT_FINISHED(false);
+    ASSERT_TRUE(acted);
 }
 
 // 边走边画模式：超出墙壁上限与重复位置都会被拒绝
@@ -404,17 +411,22 @@ GAME_TEST(2, draw_while_walk_play_until_game_over)
 
     const char* const directions[] = {"上", "下", "左", "右"};
     uint32_t seed = 31415926;
+    int added = 0;
     for (int i = 0; i < 8000 && !this->main_stage_->IsOver(); ++i) {
         seed = seed * 1103515245u + 12345u;
         const char* const direct = directions[(seed >> 16) % 4];
         for (uint64_t pid = 0; pid < 2 && !this->main_stage_->IsOver(); ++pid) {
             // 行动之余不断尝试加墙，加不了的会被拒绝，不影响对局推进
-            this->PrivateRequest(pid, std::to_string((seed >> 8) % 25 + 1) + "右");
+            if (CHECK_PRI_MSG(OK, pid, std::to_string((seed >> 8) % 25 + 1) + "右")) {
+                ++added;
+            }
             this->PrivateRequest(pid, direct);
         }
     }
 
     ASSERT_FINISHED(true);
+    // 第二回合起加墙必须能够成功
+    ASSERT_LT(0, added);
 }
 
 } // namespace GAME_MODULE_NAME

@@ -263,17 +263,6 @@ class Maze
         (ref.horizontal ? added_h_[ref.c][ref.r] : added_v_[ref.c][ref.r]) = true;
     }
 
-    int AddedCount() const
-    {
-        int count = 0;
-        for (const auto& ref : AllWallSlots()) {
-            if (IsAdded(ref)) {
-                ++count;
-            }
-        }
-        return count;
-    }
-
     // 该方向是否已经确定无法通行：地图边界，或已经被撞出来的墙体
     bool IsKnownBlocked(const Pos& pos, const Direct direct) const
     {
