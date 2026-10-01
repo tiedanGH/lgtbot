@@ -1,0 +1,2747 @@
+// Copyright (c) 2018-present, JiaQi Yu <github.com/tiedanGH>. All rights reserved.
+//
+// This source code is licensed under LGPLv2 (found in the LICENSE file).
+//
+// 【区块数据】全部区块的名称、地形、附着、墙面、传送门、按钮与标注（JSON）
+// 修改后须先运行 tools/tool_block_validator.sh 校验，确认无错误后再构建实装
+//
+// 键为区块编号：普通区块 "1"、逃生舱 "E1"、特殊区块 "S1"；同类区块的先后顺序即游戏中的目录顺序
+// 区块：
+//   name     名称
+//   type     主要地形（主题分类，取值同 ground.type）；含热源的区块须为「热源」，热源与小太阳互斥规则依赖此标记
+//   attach   主要附着（可选，取值同 ground.attach）；含小太阳的区块须为「小太阳」
+//   cells    9 个格子：
+//     pos                  坐标（y 行、x 列，0~2）
+//     ground.type          空地 / 树丛 / 浆果丛 / 水洼 / 传送门 / 单向传送门 / 陷阱 / 热源 / 心脏 / 逃生舱
+//     ground.attach        （可选）按钮 / 炸弹 / 箱子 / 小太阳 / 屏蔽器 / 金币
+//     ground.portal_to     传送门的目标格 {"y", "x"}：传送门必填（可指向自身）
+//     ground.button_doors  按下按钮时切换的门 [{"y", "x", "side"}]：按钮必填，side 为 top / bottom / left / right
+//     ground.label         （可选）格子上的标注（图鉴中传送门配对、按钮编号等字母）
+//     top / bottom / left / right  四面墙：type 为 空 / 普通 / 树篱 / 门 / 门 (开)；wall 为是否有墙；label（可选）为墙面标注；attach（可选）为墙面附着
+
+// 下一行（R"json( 所在行）的行号，供校验工具把 JSON 语法错误定位到本文件
+inline constexpr int k_block_json_line = __LINE__ + 1;
+inline constexpr std::string_view k_block_json = R"json(
+{
+  "1": {"name": "水廊", "type": "水洼", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "2": {"name": "表里空间A", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "3": {"name": "旋转楼道A", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "4": {"name": "缠绕走廊A", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "5": {"name": "水花大厅", "type": "水洼", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "6": {"name": "表里空间B", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "7": {"name": "旋转楼道B", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "8": {"name": "缠绕走廊B", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "9": {"name": "藏书阁A", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "10": {"name": "藏书阁B", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "11": {"name": "横廊", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "12": {"name": "竖廊", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "13": {"name": "镜面迷宫A", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "14": {"name": "镜面迷宫B", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "15": {"name": "伪装亚空间", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "16": {"name": "隐藏房间", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 1}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "传送门", "portal_to": {"y": 1, "x": 1}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "17": {"name": "植物园A", "type": "水洼", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "18": {"name": "植物园B", "type": "水洼", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "19": {"name": "换鞋区A", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "20": {"name": "换鞋区B", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "21": {"name": "转角A", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "22": {"name": "转角B", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "23": {"name": "捕鸟陷阱A", "type": "陷阱", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "24": {"name": "捕鸟陷阱B", "type": "陷阱", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "25": {"name": "岩浆井A", "type": "热源", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "热源"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "26": {"name": "岩浆井B", "type": "热源", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "热源"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "热源"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "27": {"name": "仓库A", "type": "空地", "attach": "箱子", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地", "attach": "箱子"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "28": {"name": "仓库B", "type": "空地", "attach": "箱子", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地", "attach": "箱子"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地", "attach": "箱子"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "29": {"name": "湖边A", "type": "水洼", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "30": {"name": "湖边B", "type": "水洼", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "31": {"name": "捕兽陷阱", "type": "陷阱", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "32": {"name": "空间裂隙", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 1, "x": 2}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 1, "x": 0}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "33": {"name": "长廊", "type": "空地", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门", "label": "A"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "label": "A", "button_doors": [{"y": 0, "x": 0, "side": "bottom"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "label": "B", "button_doors": [{"y": 2, "x": 2, "side": "top"}]},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门", "label": "B"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "34": {"name": "忏悔室", "type": "空地", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地", "attach": "按钮", "label": "A", "button_doors": [{"y": 0, "x": 1, "side": "bottom"}]},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "label": "D", "button_doors": [{"y": 1, "x": 0, "side": "right"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门", "label": "A"}, "bottom": {"wall": true, "type": "门", "label": "C"}, "left": {"wall": true, "type": "门", "label": "D"}, "right": {"wall": true, "type": "门", "label": "B"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "label": "B", "button_doors": [{"y": 1, "x": 2, "side": "left"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地", "attach": "按钮", "label": "C", "button_doors": [{"y": 2, "x": 1, "side": "top"}]},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "35": {"name": "旋转门A", "type": "空地", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "label": "A", "button_doors": [{"y": 0, "x": 1, "side": "bottom"}, {"y": 1, "x": 1, "side": "bottom"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门", "label": "A"}, "bottom": {"wall": true, "type": "门", "label": "A"}, "left": {"wall": true, "type": "门", "label": "B"}, "right": {"wall": true, "type": "门", "label": "B"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "门"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "label": "B", "button_doors": [{"y": 1, "x": 0, "side": "right"}, {"y": 1, "x": 1, "side": "right"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "36": {"name": "旋转门B", "type": "空地", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "label": "A", "button_doors": [{"y": 0, "x": 1, "side": "bottom"}, {"y": 1, "x": 2, "side": "left"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门", "label": "A"}, "bottom": {"wall": true, "type": "门", "label": "B"}, "left": {"wall": true, "type": "门 (开)", "label": "B"}, "right": {"wall": true, "type": "门 (开)", "label": "A"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "label": "B", "button_doors": [{"y": 1, "x": 0, "side": "right"}, {"y": 2, "x": 1, "side": "top"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "37": {"name": "会客厅", "type": "树丛", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛", "attach": "按钮", "button_doors": [
+        {"y": 0, "x": 1, "side": "top"}, {"y": 1, "x": 0, "side": "top"}, {"y": 1, "x": 0, "side": "bottom"}, {"y": 1, "x": 2, "side": "top"},
+        {"y": 1, "x": 2, "side": "bottom"}, {"y": 2, "x": 1, "side": "bottom"}
+      ]},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "38": {"name": "公共厕所", "type": "水洼", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": true, "type": "门"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛", "attach": "按钮", "button_doors": [
+        {"y": 0, "x": 0, "side": "bottom"}, {"y": 0, "x": 0, "side": "right"}, {"y": 0, "x": 2, "side": "bottom"}, {"y": 0, "x": 2, "side": "left"},
+        {"y": 2, "x": 0, "side": "top"}, {"y": 2, "x": 0, "side": "right"}, {"y": 2, "x": 2, "side": "top"}, {"y": 2, "x": 2, "side": "left"}
+      ]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "39": {"name": "女卫生间", "type": "陷阱", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱", "attach": "按钮", "button_doors": [
+        {"y": 0, "x": 2, "side": "bottom"}, {"y": 0, "x": 2, "side": "left"}, {"y": 1, "x": 1, "side": "top"}, {"y": 1, "x": 1, "side": "bottom"},
+        {"y": 1, "x": 1, "side": "left"}, {"y": 1, "x": 1, "side": "right"}, {"y": 2, "x": 0, "side": "top"}, {"y": 2, "x": 0, "side": "right"}
+      ]},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "40": {"name": "男卫生间", "type": "陷阱", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱", "attach": "按钮", "button_doors": [
+        {"y": 0, "x": 2, "side": "bottom"}, {"y": 0, "x": 2, "side": "left"}, {"y": 1, "x": 1, "side": "top"}, {"y": 1, "x": 1, "side": "bottom"},
+        {"y": 1, "x": 1, "side": "left"}, {"y": 1, "x": 1, "side": "right"}, {"y": 2, "x": 0, "side": "top"}, {"y": 2, "x": 0, "side": "right"}
+      ]},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "41": {"name": "红石迷宫A", "type": "树丛", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛", "attach": "按钮", "button_doors": [
+        {"y": 0, "x": 0, "side": "top"}, {"y": 0, "x": 0, "side": "bottom"}, {"y": 0, "x": 0, "side": "left"}, {"y": 0, "x": 0, "side": "right"},
+        {"y": 0, "x": 2, "side": "top"}, {"y": 0, "x": 2, "side": "bottom"}, {"y": 0, "x": 2, "side": "left"}, {"y": 0, "x": 2, "side": "right"},
+        {"y": 2, "x": 0, "side": "top"}, {"y": 2, "x": 0, "side": "bottom"}, {"y": 2, "x": 0, "side": "left"}, {"y": 2, "x": 0, "side": "right"},
+        {"y": 2, "x": 2, "side": "top"}, {"y": 2, "x": 2, "side": "bottom"}, {"y": 2, "x": 2, "side": "left"}, {"y": 2, "x": 2, "side": "right"}
+      ]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门"}
+    }
+  ]},
+  "42": {"name": "红石迷宫B", "type": "树丛", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛", "attach": "按钮", "button_doors": [
+        {"y": 0, "x": 0, "side": "top"}, {"y": 0, "x": 0, "side": "bottom"}, {"y": 0, "x": 0, "side": "left"}, {"y": 0, "x": 0, "side": "right"},
+        {"y": 0, "x": 2, "side": "top"}, {"y": 0, "x": 2, "side": "bottom"}, {"y": 0, "x": 2, "side": "left"}, {"y": 0, "x": 2, "side": "right"},
+        {"y": 2, "x": 0, "side": "top"}, {"y": 2, "x": 0, "side": "bottom"}, {"y": 2, "x": 0, "side": "left"}, {"y": 2, "x": 0, "side": "right"},
+        {"y": 2, "x": 2, "side": "top"}, {"y": 2, "x": 2, "side": "bottom"}, {"y": 2, "x": 2, "side": "left"}, {"y": 2, "x": 2, "side": "right"}
+      ]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "门 (开)"}
+    }
+  ]},
+  "43": {"name": "小太阳", "type": "空地", "attach": "小太阳", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地", "attach": "小太阳"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "44": {"name": "屏蔽器", "type": "空地", "attach": "屏蔽器", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地", "attach": "屏蔽器"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "45": {"name": "提款机A", "type": "传送门", "attach": "金币", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 0, "x": 2, "side": "bottom"}, {"y": 1, "x": 1, "side": "bottom"}, {"y": 1, "x": 1, "side": "right"}, {"y": 2, "x": 0, "side": "right"}]},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地", "attach": "金币"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 0, "x": 2, "side": "bottom"}, {"y": 1, "x": 1, "side": "bottom"}, {"y": 1, "x": 1, "side": "right"}, {"y": 2, "x": 0, "side": "right"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "46": {"name": "提款机B", "type": "传送门", "attach": "金币", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 0, "x": 2, "side": "left"}, {"y": 1, "x": 1, "side": "top"}, {"y": 1, "x": 1, "side": "left"}, {"y": 2, "x": 0, "side": "top"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门 (开)"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地", "attach": "金币"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 0, "x": 2, "side": "left"}, {"y": 1, "x": 1, "side": "top"}, {"y": 1, "x": 1, "side": "left"}, {"y": 2, "x": 0, "side": "top"}]},
+      "top": {"wall": true, "type": "门 (开)"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "47": {"name": "后花园A", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "48": {"name": "后花园B", "type": "树丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "49": {"name": "花园宝藏", "type": "陷阱", "attach": "金币", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地", "attach": "金币"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地", "attach": "金币"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "50": {"name": "园艺孔雀", "type": "浆果丛", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "浆果丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "树篱"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "树篱"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    }
+  ]},
+  "51": {"name": "巨大的心房", "type": "心脏", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "心脏"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E1": {"name": "逃生长廊A", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E2": {"name": "逃生长廊B", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E3": {"name": "逃生长廊C", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E4": {"name": "逃生长廊D", "type": "空地", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E5": {"name": "快速逃生通道A", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E6": {"name": "快速逃生通道B", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E7": {"name": "亚空间逃生舱A", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E8": {"name": "亚空间逃生舱B", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E9": {"name": "逃生地道A", "type": "陷阱", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E10": {"name": "逃生地道B", "type": "陷阱", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E11": {"name": "隐蔽逃生通道A", "type": "空地", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 2, "x": 1, "side": "left"}]},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "门"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E12": {"name": "隐蔽逃生通道B", "type": "空地", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "门"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "门"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 0, "x": 1, "side": "right"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E13": {"name": "银行金库", "type": "传送门", "attach": "屏蔽器", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "label": "A", "button_doors": [{"y": 1, "x": 1, "side": "bottom"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱", "attach": "屏蔽器"},
+      "top": {"wall": true, "type": "门", "label": "B"}, "bottom": {"wall": true, "type": "门", "label": "A"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "label": "B", "button_doors": [{"y": 1, "x": 1, "side": "top"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E14": {"name": "三箱之力", "type": "空地", "attach": "箱子", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地", "attach": "箱子"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "逃生舱", "attach": "箱子"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地", "attach": "箱子"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E15": {"name": "花园密道A", "type": "树丛", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 1, "x": 1, "side": "right"}, {"y": 2, "x": 1, "side": "bottom"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "树篱"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": true, "type": "树篱"}, "bottom": {"wall": true, "type": "树篱"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "树篱"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "树篱"}, "bottom": {"wall": true, "type": "门"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "树篱"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "E16": {"name": "花园密道B", "type": "树丛", "attach": "按钮", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "树篱"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "门"}, "bottom": {"wall": true, "type": "树篱"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "树篱"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "门 (开)"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "树丛"},
+      "top": {"wall": true, "type": "树篱"}, "bottom": {"wall": true, "type": "树篱"}, "left": {"wall": true, "type": "门 (开)"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "逃生舱"},
+      "top": {"wall": true, "type": "树篱"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "空地", "attach": "按钮", "button_doors": [{"y": 1, "x": 1, "side": "left"}, {"y": 0, "x": 1, "side": "top"}]},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "S1": {"name": "实验场", "type": "热源", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "树丛"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "热源"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "树丛"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "水洼"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "S2": {"name": "原子空间", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}, "label": "A"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}, "label": "B"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "水洼"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}, "label": "B"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}, "label": "A"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "S3": {"name": "原子阱", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}, "label": "A"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}, "label": "B"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "空地"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "陷阱"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}, "label": "B"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "空地"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}, "label": "A"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    }
+  ]},
+  "S4": {"name": "黑洞", "type": "传送门", "cells": [
+    {
+      "pos": {"y": 0, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 2}, "label": "A"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 1}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 1}, "label": "B"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 0, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 2, "x": 0}, "label": "C"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 1, "x": 2}, "label": "D"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 1}, "ground": {"type": "传送门", "portal_to": {"y": 1, "x": 1}, "label": "E(E)"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 1, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 1, "x": 0}, "label": "D"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": true, "type": "普通"}, "left": {"wall": false, "type": "空"}, "right": {"wall": false, "type": "空"}
+    },
+    {
+      "pos": {"y": 2, "x": 0}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 2}, "label": "C"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": false, "type": "空"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 1}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 1}, "label": "B"},
+      "top": {"wall": false, "type": "空"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": true, "type": "普通"}
+    },
+    {
+      "pos": {"y": 2, "x": 2}, "ground": {"type": "传送门", "portal_to": {"y": 0, "x": 0}, "label": "A"},
+      "top": {"wall": true, "type": "普通"}, "bottom": {"wall": false, "type": "空"}, "left": {"wall": true, "type": "普通"}, "right": {"wall": false, "type": "空"}
+    }
+  ]}
+}
+)json";

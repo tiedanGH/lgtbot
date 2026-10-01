@@ -80,6 +80,8 @@ class PlayerAchievement
     bool catch_without_moving = false;
     // 【牛头魅魔】
     bool boss_chase_four_steps = false;
+    // 【拆弹专家】
+    bool defuse_four_bombs() const { return defuse_count >= 4; }
 
     PlayerAchievement(const vector<pair<int, int>>& pos): blocks(std::move(pos))
     {
@@ -95,6 +97,9 @@ class PlayerAchievement
             catch_everyone_4p = true;   // 成就【嗜杀成性】
         }
     }
+
+    // [拆弹专家]辅助：成功拆除一个炸弹
+    void recordDefuse() { ++defuse_count; }
 
     // [乒铃乓啷]辅助
     void visitGrid(GridType g) {
@@ -163,6 +168,8 @@ class PlayerAchievement
     int count = 0;
     // [嗜杀成性]辅助
     int catch_count = 0;
+    // [拆弹专家]辅助
+    int defuse_count = 0;
 };
 
 
@@ -376,6 +383,20 @@ class Player
 
     void NewExtraPriContent(const string& content, const string& style) { if (!move_record.empty()) move_record.push_back({{content, false}, style}); }
     void UpdateExtraPriContent(const string& content, const string& style) { if (!move_record.empty()) move_record.back().UpdateExtraPriContent(content, true, style); }
+
+    // [金币] 捕捉时抢夺 victim 持有的全部金币，返回抢得的枚数
+    int StealCoinsFrom(Player& victim)
+    {
+        const int stolen = victim.coins;
+        if (stolen <= 0) return 0;
+        coins += stolen;
+        coins_this_round += stolen;
+        score.coin_score += victim.score.coin_score;
+        victim.coins = 0;
+        victim.coins_this_round = 0;    // 被抢后不再计入本回合公示
+        victim.score.coin_score = 0;
+        return stolen;
+    }
 
     string GetAllMoveRecord(const int query_pid, const int is_public, const bool is_html = true) const
     {

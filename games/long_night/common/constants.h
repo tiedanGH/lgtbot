@@ -39,6 +39,9 @@ inline constexpr int MAX_BOSS_COUNT = 5;    // BOSS数量上限
 inline constexpr int EXTRATIMECRAD_COUNT = 3;
 inline constexpr int EXTRATIMECRAD_TIME = 60;
 
+// 网页草稿本网址
+inline constexpr std::string_view DRAFT_URL = "https://tdgame.tiedan.site/long_night/";
+
 
 /* ========== enum class ========== */
 // 方向
@@ -71,9 +74,9 @@ enum class GridType {
     HEART,      // 巨大的心脏
 };
 
-// 附着
+// 地形附着
 enum class AttachType {
-    EMPTY,      // 空
+    EMPTY,      // 无
     BUTTON,     // 按钮
     BOMB,       // 炸弹
     BOX,        // 箱子
@@ -82,13 +85,18 @@ enum class AttachType {
     COIN,       // 金币
 };
 
-// 墙壁：优先级从低到高，连通性越好优先级理应越高
-enum class Wall {
+// 墙壁类型（map/wall.h）
+enum class WallType {
     EMPTY,      // 空
     NORMAL,     // 墙壁
     HEDGE,      // 树篱
     DOOR,       // 门
     DOOROPEN,   // 门 (开)
+};
+
+// 墙壁附着
+enum class WallAttachType {
+    EMPTY,      // 无
 };
 
 // BOSS
@@ -173,36 +181,44 @@ inline std::string GetGridImage(const GridType type)
 inline std::string GetAttachImage(const AttachType type)
 {
     switch (type) {
-        case AttachType::EMPTY:     return "transparent.png";
+        case AttachType::EMPTY:     return "";
         case AttachType::BUTTON:    return "button.png";
         case AttachType::BOMB:      return "bomb.png";
         case AttachType::BOX:       return "box.png";
         case AttachType::HEATBOX:   return "heat_box.png";
         case AttachType::JAMMERBOX: return "jammer_box.png";
         case AttachType::COIN:      return "coin.png";
-        default:                    return "unknown.png";
     }
+    return "unknown.png";
 }
 
-inline std::string GetWallImage(const Wall wall, const std::string& direction)
+inline std::string GetWallImage(const WallType type, const std::string& direction)
 {
-    switch (wall) {
-        case Wall::EMPTY:       return "empty_" + direction + ".png";
-        case Wall::NORMAL:      return "wall_" + direction + ".png";
-        case Wall::HEDGE:       return "hedge_" + direction + ".png";
-        case Wall::DOOROPEN:    return "dooropen_" + direction + ".png";
-        case Wall::DOOR:        return "door_" + direction + ".png";
-        default:                return "unknown_" + direction + ".png";
+    switch (type) {
+        case WallType::EMPTY:       return "empty_" + direction + ".png";
+        case WallType::NORMAL:      return "wall_" + direction + ".png";
+        case WallType::HEDGE:       return "hedge_" + direction + ".png";
+        case WallType::DOOROPEN:    return "dooropen_" + direction + ".png";
+        case WallType::DOOR:        return "door_" + direction + ".png";
     }
+    return "unknown_" + direction + ".png";
+}
+
+inline std::string GetWallAttachImage(const WallAttachType attach, const std::string& direction)
+{
+    switch (attach) {
+        case WallAttachType::EMPTY: return "";
+    }
+    return "";
 }
 
 // 相反方向
 inline Direct opposite(Direct dir)
 {
     switch (dir) {
-        case Direct::UP: return Direct::DOWN;
-        case Direct::DOWN: return Direct::UP;
-        case Direct::LEFT: return Direct::RIGHT;
+        case Direct::UP:    return Direct::DOWN;
+        case Direct::DOWN:  return Direct::UP;
+        case Direct::LEFT:  return Direct::RIGHT;
         case Direct::RIGHT: return Direct::LEFT;
     }
     throw std::invalid_argument("Invalid direction");
@@ -305,6 +321,74 @@ inline std::string ToFileUrl(const std::string& path)
     return url;
 }
 
+
+/* ========== 规则文本 ========== */
+// 「#规则 漫漫长夜 <参数>」机制细节，下标与 mygame.cc 中 k_rule_commands 的参数映射对应
+inline constexpr const char* rule_details[] = {
+        // [0] 机制
+        R"EOF(《游戏规则和机制细节》
+可选参数列表，使用「)EOF" META_COMMAND_SIGN R"EOF(规则 漫漫长夜 <参数>」查看详情：
+【地形】地形&附着&墙壁机制和特殊情况
+【传送】开局随机和随机传送机制
+【成就】成就触发判定和特殊情况
+【区块】开局区块随机相关机制)EOF",
+
+        // [1] 地形
+        R"EOF(【地形&附着】
+出生在任何地形都不会触发其效果，所有效果均在移动时触发。
+【墙壁】
+相邻区块组合时，边界墙壁发生冲突则只保留优先级更高的墙壁。
+优先级：门(开) > 门 > 树篱 > 墙壁 > 空
+【树篱】
+亚空间的传送不打断冲刺，比如向左出亚空间可继续向左穿过树篱。当玩家随机传送到树篱边，不能直接穿过。
+【炸弹相关】
+炸弹必须要有[进入]并[离开]两步才能引爆。炸弹下到玩家上因为没有[进入]的过程，[离开]不会引爆。同理，随机传送到炸弹上，[离开]也不会引爆。
+[拆弹]也需要[进入]并[停止行动]，放置炸弹直接撞墙，因为没有[进入]的过程，不会拆弹。同理，随机传送到炸弹上，直接[停止行动]也不会拆弹。
+特殊：抓人时脚下有炸弹不会触发拆弹；进入逃生舱不会引爆/拆弹；隐匿状态一样会引爆炸弹；亚空间内下包会放置于传送门入口处；踩中传送门入口的炸弹后，亚空间内移动同样会引爆
+【箱子】
+箱子可以进入地形，但是会被后方的任意附着、墙壁、存活玩家阻挡，但不会被逃生和出局玩家阻挡
+【传送门】
+如果传送门开局时被四周封闭（门(开)、门也算作封闭），对应的传送门将会失效，仅发出啪啪声不会传送（相当于水洼）
+【热源相关】
+玩家出生在热浪区域，如果第1步还在热浪范围会收到提示。如果第1步进入热源，在第2步才会收到热浪提示。
+【金币】
+经过金币时静默拾取，首轮捕捉成功也会抢夺目标全部金币，然后双方随机传送（首轮保护）。
+完整赛况中昵称旁的金币徽章只显示已公示的数量，本回合新获得（含抢夺）要等回合结束公示后才会显示。
+【巨大的心脏】
+隐匿状态下心跳只私信本人。当位于屏蔽器附近时，遇到心跳声可得知自己位于屏蔽器附近。)EOF",
+
+        // [2] 传送
+        R"EOF(【玩家随机传送】
+传送至最大联通区域，不会传送至[有效逃生舱、热源周围8格]、[存活玩家周围8格]、[BOSS当前步数可到达的区域]，但可能传送进[失效逃生舱]区块。如果没有有效候选点，直接在最大联通区域内随机。
+【开局玩家随机】
+所有位置均在同一个最大联通区域内，按照顺序依次尝试（BFS会被[墙壁]、[树篱]、[热源]、[巨大的心脏]、[箱子]阻挡，但不考虑传送门）：
+- 方案1：使用非逃生舱区块，相邻玩家之间的BFS路径距离≥5；每个玩家落点到所有逃生舱的BFS路径距离≥5
+- 方案2：使用非逃生舱区块，仅要求相邻玩家之间的BFS路径距离≥5（不检查逃生舱距离）
+- 方案3：直接使用非逃生舱区块随机分配（不检查距离）
+- 方案4：允许使用逃生舱区块
+- 保险方案：直接从最大连通区域中随机选取位置)EOF",
+
+        // [3] 成就
+        R"EOF(【成就相关】
+[乒铃乓啷]撞箱子不会计数，必须要成功推动箱子，不同的箱子视为同一种地形。引爆/拆弹均会计数，但是算作同一种类型。“单向传送门”和“普通传送门”、“浆果丛”与“树丛”视为同一种地形。
+隐匿状态进入树丛等声响地形，仍可以获得[无声]相关成就。
+巨大的心脏的心跳声不影响[无声]相关成就；但声响被心跳掩盖仍视为发出过声响，无法获得[无声]相关成就。
+[守株待兔]可以直接停止也可以第1步撞墙，[谋定后动模式]走1步抓不会触发此成就。)EOF",
+
+        // [4] 区块
+        R"EOF(【开局区块随机】
+游戏开始时，根据当前游戏模式从对应区块池随机抽取区块。
+默认情况下，逃生舱数量为本局玩家人数的一半；12×12地图固定为4个。
+【热源&小太阳】
+当区块池中同时存在[热源]与[小太阳]时，默认仅随机保留其中一种，不会同时出现在地图中。若区块数量不足以支持该限制，则自动取消该规则，从全部区块随机。
+【自定义模式】
+因自定义模式区块与逃生舱数量可能任意，采用如下规则：
+- 情况1：逃生舱数量不足[默认数量]，使用全部逃生舱
+- 情况2：逃生舱数量充足，且区块数量充足，逃生舱为[默认数量]（优先应用热源互斥规则）
+- 情况3：当逃生舱为[默认数量]时普通区块不足，使用全部普通区块，并额外抽取逃生舱补足至区块总数（必要时取消热源互斥规则）)EOF",
+};
+
+
 /* ========== 游戏文案 ========== */
 inline std::string GetRandomHint(std::span<const std::string_view> hints)
 {
@@ -353,6 +437,7 @@ inline constexpr std::string_view firststep_wall_hints[] = {
     "你知道吗，撞击同一面墙114514次即可将其撞倒！",
     "看来有人认为自己在玩多层迷宫……别想了，这是永久墙壁。",
     "俗话说不撞南墙不回头，但有人撞了南墙也不回头。",
+    "你坚信着的，是正义还是谎言？\n你推理出的，是真理还是幻像？",   // shiga
 };
 // 树丛提示
 inline constexpr std::string_view grass_hints[] = {
@@ -450,6 +535,8 @@ inline constexpr std::string_view exit_hints[] = {
     "当舱门完全关闭的瞬间，你听见系统轻声说：'恭喜，这是第1024次模拟。根据数据，你这次终于选择相信自己了。' 周围突然亮起温暖的阳光，原来真正的逃生舱，一直都在你心里。",
     "逃生舱的显示屏突然亮起一行字：'记住，黑暗只是光明的候车室。' 随着这句话，整个舱体开始散发出柔和的金色光芒，照亮了通往新世界的道路。",
     "逃生舱门关了。\n那个声音还在说：你赢了，这是公平的较量，感谢我给了你逃出来的机会吧。\n你以为我逃出来是你放了手？不。是我在每一面死墙上凿出了自己的路，在每一个人的呼吸声里记住了他们的脚步。\n我不承认追杀能被包装成游戏，不承认那些岔路是“仁慈”，不承认迷宫的规则。\n\n“我要否定漫漫长夜！”",     // shiga
+    "从迷宫中醒来那一刻起，危险便常伴我左右。\n第一次见到他，是在三岔路口。身后米诺陶斯的呼吸声越来越重，我茫然不知该选哪条路。他默默站在一条路尽头，示意我过去。\n后来，他出现在更多地方：在炸弹上，他迫使我停下；在箱子区，他提醒我堵路；在岩浆前，他伸手拦住我的脚步。\n逃生舱门口，他指引我正确的入口，无声地催促。光亮中我用力回头，只看见他仿佛带着微笑，缓缓消散。\n“谢谢你，皮特托先生。”",
+    "我可是深信着，我的逃生一定能够成为离开迷宫的参考。\n如果真的这样……\n赞美我吧。\n把我的丰功伟业传下去，铸造我的铜像，敬仰我。\n称呼我……超高校级的逃生者。",
 #if INCLUDE_RESTRICTED_CONTENT
     "躺在逃生舱内，平日并不虔诚的你颤巍巍地画着十字，双手合十，嘴里念念有词。诸如什么真主阿拉耶稣基督释迦牟利急急如律令之类。前窗仿佛响应了你的号召，一阵白色闪光迅速笼罩了你。正当你诧异得到了哪位神仙的庇佑时，眼前浮现出两个大字。一个振奋人心的声音在你耳边响起：“原神，启动！”",   // 大萝卜姬
     "一阵失重后，舱门终于打开。随着刺眼的白光，在指缝间你看见几个面目可憎的巨人在围观你。很快地你被巨大的餐叉粗暴地刺穿；顾不及对痛觉反应，你便殒命在血盘大口之中。健硕、坚定、智慧、乐观，这些优秀的品质在他们嘴里同样珍贵。",
@@ -508,3 +595,34 @@ inline constexpr std::string_view heart_jammer_hints[] = {
     "是【屏蔽器】？耳朵已经熟悉了这个富有节律的心跳BGM，突然的寂静让你无所适从。",
     "看来是【屏蔽器】。地面借助脚掌传来了固定节奏的震颤，真是即使身处寂静也无法让人忽视这喷薄而出的生命力。",
 };
+
+
+/* ========== 声响信息 ========== */
+// 声响私信文案：jammed 为被屏蔽器屏蔽；direction 为"同格"时使用同格文案
+inline std::string GetSoundMessage(const Sound sound, const std::string& step_info, const std::string& boss_tag,
+                                   const std::string& direction, const bool jammed)
+{
+    if (jammed) {
+        std::string message;
+        switch (sound) {
+        case Sound::SHASHA: message = step_info + "你感到地面有所振动，那是踩动草木（" SHASHA_STR "）特有的动静；但周围？却没有任何声音？"; break;
+        case Sound::PAPA:   message = step_info + "你感到地面有所振动，那是踩动水体（" PAPA_STR "）特有的动静；但周围？却没有任何声音？"; break;
+        case Sound::BOSS:   message = boss_tag + " 你感到地面正在剧烈振动！但是，声响好像来自四面八方？"; break;
+        default:            message = "[错误] 未知声音类型：被屏蔽的未知声音";
+        }
+        return message + "\n声响方向被屏蔽，当前位置附近存在【屏蔽器】";
+    }
+    if (direction == "同格") {
+        switch (sound) {
+        case Sound::SHASHA: return step_info + "\n" + GetRandomHint(grass_sound_hints);
+        case Sound::PAPA:   return step_info + "\n" + GetRandomHint(papa_sound_hints);
+        default:            return "[错误] 未知声音类型：相同格子的未知声音";
+        }
+    }
+    switch (sound) {
+    case Sound::SHASHA: return step_info + "你听见了来自【" + direction + "方】的" SHASHA_STR "声！";
+    case Sound::PAPA:   return step_info + "你听见了来自【" + direction + "方】的" PAPA_STR "声！";
+    case Sound::BOSS:   return boss_tag + " 你听见了来自【" + direction + "方】的巨大响声！";
+    default:            return "[错误] 未知声音类型：不同格子来自【" + direction + "方】的未知声音";
+    }
+}

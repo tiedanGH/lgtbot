@@ -1,4 +1,4 @@
-#include "constants.h"
+#include "common/constants.h"
 
 EXTEND_OPTION("[区块] 先根据模式从区块池抽取 12+4 组成随机池，再抽取地图区块<br>"
     "【经典】仅从**经典区块**中抽取区块　　　【幻变】将从**轮换区块**中随机抽取<br>"

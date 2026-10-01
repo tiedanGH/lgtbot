@@ -1,27 +1,30 @@
 #!/usr/bin/env bash
-# 【测试用工具】导出「漫漫长夜」全部区块的单区块例图（边界墙壁 + 内部 3x3，无外侧虚线边框）
+
+# 【工具】导出「漫漫长夜」全部区块的单区块例图
 #
 # ============================== 如何运行 ==============================
-# 在仓库根目录执行（WSL / Linux）：
-#     bash games/long_night/tool_block_exporter.sh [build_dir] [texture] [out_dir]
+# 在 WSL / Linux 下执行（脚本自行定位仓库根目录，可在任意目录运行）：
+#     bash games/long_night/tools/tool_block_exporter.sh [build_dir] [texture] [out_dir]
 #
-# 参数（均可省略）：
+# 参数（均可省略，路径均相对仓库根目录）：
 #     build_dir  构建目录，默认 build（需已构建出其中的 markdown2image）
 #     texture    材质，classic（默认）/ retro / fresh
 #     out_dir    输出目录，默认 <build_dir>/long_night_blocks
 #
 # 示例：
-#     bash games/long_night/tool_block_exporter.sh
-#     bash games/long_night/tool_block_exporter.sh build retro build/long_night_blocks_retro
+#     bash games/long_night/tools/tool_block_exporter.sh
+#     bash games/long_night/tools/tool_block_exporter.sh build_t fresh
+#     bash games/long_night/tools/tool_block_exporter.sh build retro build/long_night_blocks_retro
 #
 # 输出：<out_dir>/<编号>_<名称>.png，每张 190x190（4 道墙 10px + 3 个方格 50px）
-#       普通区块如 45_提款机A.png；逃生舱带 E 前缀；特殊区块为 S 前缀
+#     普通区块如 45_提款机A.png；逃生舱带 E 前缀；特殊区块为 S 前缀
 #
-# 手动分步运行方式见 tool_block_exporter.cc 顶部注释。
+# 手动分步运行方式见 src/tool_block_exporter.cc 顶部注释。
 # ====================================================================
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"    # games/long_night/tools
+REPO="$(cd "${TOOL_DIR}/../../.." && pwd)"
 BUILD_DIR="${1:-build}"
 TEXTURE="${2:-classic}"
 OUT_DIR="${3:-${BUILD_DIR}/long_night_blocks}"
@@ -33,7 +36,7 @@ EXPORTER="${BUILD_ABS}/tool_block_exporter"
 MD_DIR="${BUILD_ABS}/long_night_blocks_md"
 
 # 单区块尺寸：3 个方格(50px) + 4 道墙壁(10px，含两侧边界墙) = 190px
-# markdown2image 的 --width 实际输出宽度为 width-14，故需加 14
+# markdown2image 的 --width 实际输出宽度为 width-14
 BLOCK_PX=$((50 * 3 + 10 * 4))
 RENDER_WIDTH=$((BLOCK_PX + 14))
 
@@ -45,9 +48,9 @@ if [[ ! -d "${RESOURCE_DIR}" ]]; then
 fi
 
 echo "[1/3] 编译导出工具…"
-g++ -std=c++23 -I"${REPO}" -I"${REPO}/third_party" -O1 -DGAME_MODULE_NAME=long_night \
+g++ -std=c++23 -I"${REPO}" -I"${REPO}/third_party" -I"${REPO}/third_party/json/include" -O1 -DGAME_MODULE_NAME=long_night \
     -o "${EXPORTER}" \
-    "${REPO}/games/long_night/tool_block_exporter.cc" \
+    "${TOOL_DIR}/src/tool_block_exporter.cc" \
     "${REPO}/utility/html.cc"
 
 echo "[2/3] 生成区块 HTML（材质：${TEXTURE}）…"

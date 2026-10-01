@@ -7,3 +7,4 @@ EXTEND_ACHIEVEMENT(乒铃乓啷, "路过或触发 5 种及以上不同的地形"
 EXTEND_ACHIEVEMENT(嗜杀成性, "4人及以上对局中，捕捉所有其他玩家")
 EXTEND_ACHIEVEMENT(守株待兔, "在单个回合中未进行移动并成功捕捉目标玩家")
 EXTEND_ACHIEVEMENT(牛头魅魔, "持续被米诺陶斯锁定，BOSS移动 3 步仍未被抓到")
+EXTEND_ACHIEVEMENT(拆弹专家, "在邦邦或炸弹人模式中，成功拆除至少 4 个炸弹")

@@ -31,11 +31,15 @@ class Boss
     // 显示名称：同类型有多个时带编号
     string GetBossName() const { return GetBossBaseName() + index_label; }
     string GetBossStartInfo() const { return GetBossName() + " " + GetBossDescription(); }
-    // 播报前缀：[BOSS-名称] / 【名称】
+    // BOSS标签：[BOSS-名称]
     string GetBossTag() const { return "[BOSS-" + GetBossName() + "]"; }
-    string GetBossSay() const { return "【" + GetBossName() + "】"; }
+    // BOSS说话：【名称】台词；[静音] 内心想法：【名称】……？（台词）
+    string GetBossSay(const string& words, const bool silence) const
+    {
+        return "【" + GetBossName() + "】" + (silence ? "……？（" + words + "）" : words);
+    }
 
-    // 回合结算行动：由各 BOSS 自行实现（函数体见 mygame.cc）
+    // 回合结算行动：由各 BOSS 自行实现（函数体见本文件末尾 RoundActionImpl）
     virtual void HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) = 0;
 
     // BOSS行为信息
@@ -208,6 +212,13 @@ class MinotaurBoss : public Boss
   public:
     MinotaurBoss(int& size, vector<Player>& players) : Boss(BossType::MINOTAUR, size, players) {}
 
+    // BOSS 规则（「#规则 漫漫长夜 BOSS」）
+    static constexpr const char* k_rule = R"EOF(    【🐮米诺陶斯】
+1、随机生成在地图中，每回合最后行动，首回合锁定最近玩家为目标（公屏显示）
+2、每回合移动步数递增，发现更近玩家则更换目标并重置步数。
+3、BOSS无视地形，移动结束时会发出巨响，如果玩家在其周围会听到喘息声。
+4、BOSS踩到玩家则玩家出局，玩家经过米诺陶斯不会出局。)EOF";
+
     string GetBossBaseName() const override { return "米诺陶斯"; }
     string GetBossIcon() const override { return "🐮"; }
     string GetBossDescription() const override
@@ -223,6 +234,9 @@ class MinotaurBoss : public Boss
     void OnTargetSelected() override { steps = 0; }     // 更换目标重置步数
     void OnMoveBegin() override { steps++; }            // 每回合步数递增
     void OnReachTarget() override { steps = 0; }        // 抓到玩家重置步数
+
+  private:
+    template <class Stage> void RoundActionImpl(Stage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
 };
 
 
@@ -231,6 +245,12 @@ class BangBangBoss : public Boss
 {
   public:
     BangBangBoss(int& size, vector<Player>& players) : Boss(BossType::BANGBANG, size, players) {}
+
+    // BOSS 规则（「#规则 漫漫长夜 BOSS」）
+    static constexpr const char* k_rule = R"EOF(    【💣邦邦】
+1、所有玩家移动后，BOSS以固定速度（3-5 随机）跟着距离最近玩家移动。接触玩家后停止移动，但无法捕捉玩家；追到玩家后，会转移目标到第二近的玩家。
+2、BOSS每回合结束时下一个[炸弹]，[炸弹]的四墙信息将会公开。
+3、BOSS一定每回合都移动，无视地形，转换目标将公屏显示。)EOF";
 
     string GetBossBaseName() const override { return "邦邦"; }
     string GetBossIcon() const override { return "💣"; }
@@ -244,6 +264,9 @@ class BangBangBoss : public Boss
   protected:
     int InitialSteps() const override { return rand() % 3 + 3; }    // 固定速度 3-5 随机
     bool SkipSameCellTarget() const override { return true; }       // 位置相同需强制更换目标
+
+  private:
+    template <class Stage> void RoundActionImpl(Stage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
 };
 
 
@@ -255,4 +278,136 @@ inline std::unique_ptr<Boss> CreateBoss(const BossType type, int& size, vector<P
         case BossType::BANGBANG:    return std::make_unique<BangBangBoss>(size, players);
         default:                    return nullptr;
     }
+}
+
+// 按配置顺序创建全部 BOSS（允许同类型多只）；同类型存在多只时依次编号
+inline vector<std::unique_ptr<Boss>> CreateBosses(const vector<BossType>& types, int& size, vector<Player>& players)
+{
+    vector<std::unique_ptr<Boss>> bosses;
+    for (const BossType type : types) {
+        if (auto boss = CreateBoss(type, size, players); boss) {
+            bosses.push_back(std::move(boss));
+        }
+    }
+    for (size_t i = 0; i < bosses.size(); i++) {
+        int total = 0, index = 0;
+        for (size_t j = 0; j < bosses.size(); j++) {
+            if (bosses[j]->type != bosses[i]->type) continue;
+            total++;
+            if (j <= i) index++;
+        }
+        if (total > 1) bosses[i]->index_label = to_string(index);
+    }
+    return bosses;
+}
+
+// 全部 BOSS 的规则汇总（「#规则 漫漫长夜 BOSS」），新增 BOSS 时在此追加其 k_rule
+inline const char* GetAllBossRules()
+{
+    static const string rules = string("《BOSS 规则和技能》\n") + MinotaurBoss::k_rule + "\n" + BangBangBoss::k_rule;
+    return rules.c_str();
+}
+
+
+/* ========== BOSS 回合结算行动 ========== */
+/* Stage 恒为 RoundStage：由 mygame.cc 末尾 HandleRoundAction 转发调用并完成实例化 */
+
+// 【🐮米诺陶斯】回合结算行动
+template <class Stage>
+void MinotaurBoss::RoundActionImpl(Stage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
+{
+    auto& Main = stage.Main();
+    auto& Global = stage.Global();
+    const bool silence = GET_OPTION_VALUE(Global.Options(), 静音);
+    const string boss_tag = GetBossTag();
+
+    if (BossChangeTarget(false)) {
+        // 更换目标，重置步数
+        boss_record += "发现更近的目标，变更目标至 [" + to_string(target) + "号]";
+        sender << "\n" << boss_tag << " 发现了距离更近的玩家，变更锁定目标至 " << lgtbot::At(target);
+    } else {
+        // 未更换目标，执行移动
+        if (BossMove()) {
+            // 抓住玩家
+            for (const auto pid: Main.board.player_map[x][y]) {
+                Player& catched_player = Main.board.players[pid];
+                if (catched_player.out > 0) continue;
+                catched_player.NewContentRecord("(" + GetBossName() + "捕捉出局)", "end");
+                catched_player.all_record.back() = catched_player.move_record;  // 回合已经结束，需强制更新完整赛况
+                catched_player.out = 1;
+                if (Global.PlayerNum() > 1) Global.Eliminate(pid);
+                catched_player.score.catch_score -= 100;        // 抓人分
+                boss_record += "[" + to_string(pid) + "号] ";
+                sender << "\n" << lgtbot::At(pid);
+            }
+            boss_record += "被BOSS捕捉出局！";
+            sender << "\n被BOSS捕捉出局！";
+            if (Main.Alive_() > 1) {
+                BossChangeTarget(true);    // 重置锁定目标
+                boss_record += "变更目标至 [" + to_string(target) + "号]";
+                sender << "\n\nBOSS更换锁定目标至 " << lgtbot::At(target) << "，同时玩家捕捉目标顺位发生变更！\n";
+                stage.RefreshCatchOrder(sender);    // 捕捉顺位变更
+            }
+        } else {
+            // 未抓住玩家
+            boss_record += "向 [" + to_string(target) + "号] 移动了 " + to_string(steps) + " 步";
+            sender << "\n" << boss_tag << " 向 " << lgtbot::At(target) << " 移动了 " << steps << " 步";
+            if (steps == 3) Main.board.players[target].achievement.boss_chase_four_steps = true;    // 成就【牛头魅魔】
+        }
+        // BOSS移动后发出巨响（[静音] BOSS 同样无声）
+        if (!silence && (Main.Alive_() > 1 || (Global.PlayerNum() == 1 && Main.board.players[0].out == 0))) {
+            UpdateSoundRecord(Sound::BOSS);
+            sender << "\n\n" << GetBossName() << "发出震耳欲聋的巨响！请所有玩家留意私信声响信息！";
+            stage.SendSoundMessage(x, y, Sound::BOSS, true, false, this);
+        }
+    }
+    // BOSS周围8格内获得喘息提示（[静音] 喘息声同样消失）
+    for (auto& player : Main.board.players) {
+        if (!silence && IsBossNearby(player) && player.out == 0) {
+            player.private_record += "\n" + boss_tag + " 你听到来自BOSS沉重的喘息声！";
+            Global.Tell(player.pid) << "「呼……呼……」你听到来自[" << GetBossName() << "]沉重的喘息声！";
+        }
+    }
+}
+
+// 【💣邦邦】回合结算行动
+template <class Stage>
+void BangBangBoss::RoundActionImpl(Stage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
+{
+    auto& Main = stage.Main();
+    const bool silence = GET_OPTION_VALUE(stage.Global().Options(), 静音);
+    const string boss_tag = GetBossTag();
+
+    // 更新目标
+    if (BossChangeTarget(false)) {
+        boss_record += "变更目标至 [" + to_string(target) + "号]，";
+        sender << "\n" << boss_tag << " 发现了距离更近的玩家，变更锁定目标至 " << lgtbot::At(target);
+    }
+    // 每回合一定移动
+    boss_record += "BOSS 移动中...";
+    sender << "\n" << boss_tag << " 移动中...";
+    if (BossMove()) {
+        // 到达玩家位置（不会捕捉）
+        boss_record += "追上了玩家 [" + to_string(target) + "号]，";
+        sender << "\n" << GetBossSay("追到你了 [" + to_string(target) + "号]！你说邦邦不邦邦！", silence);
+        BossChangeTarget(true);    // 重置锁定目标
+        boss_record += "变更目标至 [" + to_string(target) + "号]，";
+        sender << "\n" << boss_tag << " 抵达目标位置，更换新目标 " << lgtbot::At(target);
+    }
+    // 放置炸弹
+    Grid& grid = Main.board.grid_map[x][y];
+    // [巨大的心脏] BOSS无视地形可站上心脏格：跳过放置炸弹与墙壁播报
+    if (grid.Type() == GridType::HEART) {
+        boss_record += "站上了巨大的心脏，未放置炸弹";
+        sender << "\n\n" << GetBossSay("这个巨大的东西是什么？算了，这回合不放炸弹了~", silence);
+        return;
+    }
+    if (grid.Attach() == AttachType::EMPTY) grid.SetAttach(AttachType::BOMB);
+    // 公屏展示炸弹墙壁信息
+    auto [info, md] = Main.board.GetBangBangSurroundingWalls(x, y);
+    string wall_info = GetBossName() + "所在位置的四周墙壁信息，按照 上下左右 顺序分别是：\n" + info;
+    boss_record += "放置炸弹（" + info + "）";
+    sender << "\n\n" << GetBossSay("哈哈，炸弹来喽~", silence)
+           << "\n" << wall_info
+           << "\n" << lgtbot::Markdown(md, (GRID_SIZE + WALL_SIZE * 2) + 40);
 }

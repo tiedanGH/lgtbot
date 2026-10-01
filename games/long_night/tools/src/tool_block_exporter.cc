@@ -2,28 +2,30 @@
 //
 // This source code is licensed under LGPLv2 (found in the LICENSE file).
 //
-// 【测试用工具】导出「漫漫长夜」全部区块的单区块例图（边界墙壁 + 内部 3x3，无外侧虚线边框）
+// 【工具】导出「漫漫长夜」全部区块的单区块例图
 //
 // ============================== 如何运行 ==============================
 //
-// 【方式一（推荐）】一键脚本，自动完成编译 + 导出 + 渲染 PNG：
-//     bash games/long_night/tool_block_exporter.sh                       # 默认 build / classic
-//     bash games/long_night/tool_block_exporter.sh build retro         # 复古材质
-//     bash games/long_night/tool_block_exporter.sh build classic 输出目录
+// 【方式一（推荐）】一键脚本，自动完成编译 + 导出 + 渲染 PNG（参数说明见 tool_block_exporter.sh）：
+//     bash games/long_night/tools/tool_block_exporter.sh                    # 默认 build / classic
+//     bash games/long_night/tools/tool_block_exporter.sh build retro        # 复古材质
+//     bash games/long_night/tools/tool_block_exporter.sh build fresh        # 清新材质
+//     bash games/long_night/tools/tool_block_exporter.sh build classic 输出目录
 //   输出：<输出目录>/<编号>_<名称>.png，默认为 build/long_night_blocks/
-//   前置条件：已构建出 <build_dir>/markdown2image（构建过 long_night 即有）
+//   前置条件：已构建出 <build_dir>/markdown2image
 //
-// 【方式二】手动分步（本文件只负责生成 HTML，渲染交给 markdown2image）：
-//   1. 编译（在仓库根目录执行）
-//        g++ -std=c++23 -I. -Ithird_party -O1 -DGAME_MODULE_NAME=long_night \
+// 【方式二】手动分步（本文件只负责生成 HTML，渲染交给 markdown2image），以下命令均在仓库根目录执行：
+//   1. 编译
+//        g++ -std=c++23 -I. -Ithird_party -Ithird_party/json/include -O1 -DGAME_MODULE_NAME=long_night \
 //            -o build/tool_block_exporter \
-//            games/long_night/tool_block_exporter.cc utility/html.cc
+//            games/long_night/tools/src/tool_block_exporter.cc utility/html.cc
 //   2. 生成每个区块的 HTML
 //        ./build/tool_block_exporter \
 //            --resource "$(pwd)/build/plugins/long_night/resource/" \
 //            --outdir   ./build/blocks_md \
-//            --texture  classic            # 可选：classic（默认）/ retro / fresh
-//            --silence  1                  # 可选：为声响地形标记叉号（静音模式预览）
+//            --texture  classic \
+//            --silence  0
+//      可选参数：--texture classic（默认）/ retro / fresh；--silence 1 为声响地形标记叉号（静音模式预览）
 //   3. 批量渲染为 PNG（--width 需为 区块尺寸+14，见下方 BLOCK_PX 说明）
 //        for f in build/blocks_md/*.md; do
 //            ./build/markdown2image --input "$f" \
@@ -34,7 +36,6 @@
 // 【关于图片尺寸】单区块 = 4 道墙(10px) + 3 个方格(50px) = 190px 见方。
 //   markdown2image 的 --width 实际输出宽度为 width-14，故需传 190+14=204；
 //   同时本工具在 HTML 顶部注入 margin/padding 归零样式，避免页面留白。
-//
 // 【命名规则】普通区块 `<编号>_<名称>.png`（如 45_提款机A.png）；
 //   逃生舱带 E 前缀（E15_花园密道A.png）；特殊区块为 S 前缀（S4_黑洞.png）。
 // ====================================================================
@@ -61,15 +62,19 @@
 #include "bot_core/msg_sender.h"   // ChildMsgSenderBase
 #include "utility/html.h"
 
+// boss.h 回合结算模板用到的框架宏（原定义于 utility/extend_option.h，无法单独包含）
+#ifndef GET_OPTION_VALUE
+#define GET_OPTION_VALUE(option, name) (option).template Option2Value<std::decay_t<decltype(option)>::OPTION_##name>()
+#endif
+
 using namespace std;
 
-// 游戏头文件依赖顺序与 mygame.cc 保持一致
-#include "games/long_night/constants.h"
-#include "games/long_night/player.h"
-#include "games/long_night/grid.h"
-#include "games/long_night/map.h"
-#include "games/long_night/boss.h"
-#include "games/long_night/board.h"
+#include "games/long_night/common/constants.h"
+#include "games/long_night/actor/player.h"
+#include "games/long_night/map/grid.h"
+#include "games/long_night/map/map.h"
+#include "games/long_night/actor/boss.h"
+#include "games/long_night/map/board.h"
 
 namespace {
 
@@ -108,12 +113,12 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // 静音模式：为所有声响地形标记叉号（与游戏内 静音 配置项一致）
+    // [静音模式] 为所有声响地形标记叉号
     const bool silence = Arg(argc, argv, "--silence", "0") == "1";
 
     filesystem::create_directories(out_dir);
 
-    // 使用自定义模式构造 Board，避免抽取区块池；仅用于调用渲染函数
+    // 使用自定义模式构造 Board，避免抽取区块池
     Board board(resource_dir, texture_it->second, BlockMode::CUSTOM, {});
 
     if (silence) board.unitMaps.MarkSilenceMode();
@@ -124,7 +129,7 @@ int main(int argc, char** argv)
     for (const auto& m : board.unitMaps.all_exits)        entries.push_back({"E" + m.id, m.id, m.title, true});
     for (const auto& m : board.unitMaps.all_special_maps) entries.push_back({m.id, m.id, m.title, false});
 
-    // 归零页面外边距，使渲染结果恰好等于区块本身尺寸（无任何边界留白）
+    // 归零页面外边距，使渲染结果恰好等于区块本身尺寸
     const string reset_css = "<style>html,body{margin:0;padding:0;}"
         "table{border-collapse:collapse;border-spacing:0;}</style>";
 
