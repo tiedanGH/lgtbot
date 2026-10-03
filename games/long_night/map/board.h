@@ -87,14 +87,20 @@ class Board
     // 获取玩家信息
     string GetPlayerTable(const int round) const;
     string GetPlayerString() const;
+    // 玩家状态角标（汇总状态角标）
+    vector<string> GetPlayerBadges(const Player& player) const;
+    // 玩家头像（状态角标环绕头像四周）
+    string GetPlayerAvatar(const Player& player) const;
+    // BOSS 图片图标
+    string GetBossImageTag(const Boss& boss, const int size) const;
     // 完整赛况
     string GetAllRecordHtml(const int query_pid, const int is_public) const;
     string GetAllRecordString(const int query_pid, const int is_public) const;
     string GetAllScore() const;
     // 获取四周墙壁信息
     pair<string, string> GetSurroundingWalls(const lgtbot::PlayerID pid) const;
-    // [BOSS-邦邦] 周围墙壁信息
-    pair<string, string> GetBangBangSurroundingWalls(const int x, const int y) const;
+    // BOSS 周围墙壁信息（center：中心格显示的附着）
+    pair<string, string> GetBossSurroundingWalls(const int x, const int y, const AttachType center) const;
 
     // 玩家移动
     // last_direct：本回合上一次成功移动的方向，-1 表示无，用于树篱冲刺判定
@@ -436,7 +442,7 @@ class Board
                 auto [x, y] = pos;
                 if (forbidden[x][y]) return false;
                 for (const auto& boss : bosses) {
-                    if (ManhattanDistance(x, y, boss->x, boss->y, size) <= boss->steps) return false;
+                    if (ManhattanDistance(x, y, boss->x, boss->y, size) <= boss->TeleportAvoidRange()) return false;
                 }
                 return true;
             }

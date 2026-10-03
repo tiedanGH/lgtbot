@@ -46,9 +46,14 @@ const MutableGenericOptions k_default_generic_options;
 
 // 规则文本：机制细节见 common/constants.h 的 rule_details，BOSS 规则见 actor/boss.h 各 BOSS 类的 k_rule
 const std::vector<RuleCommand> k_rule_commands = {
-    RuleCommand("查看所有 BOSS 的规则和技能",
-            []() { return GetAllBossRules(); },
-            VoidChecker("BOSS")),
+    RuleCommand("查看 BOSS 列表与简介，附带名称时查看规则和技能详情",
+            [](const string& name) -> const char* const
+            {
+                static string rule_text;
+                rule_text = GetBossRuleText(name);
+                return rule_text.c_str();
+            },
+            VoidChecker("BOSS", "boss"), OptionalDefaultChecker<AnyArg>("", "BOSS名称", "暴君")),
     RuleCommand("游戏部分隐藏机制：「" META_COMMAND_SIGN "规则 漫漫长夜 机制」查看可用列表帮助",
             [](const int type) { return rule_details[type]; },
             AlterChecker<int>({{"机制", 0}, {"地形", 1}, {"传送", 2}, {"成就", 3}, {"区块", 4}})),
@@ -123,6 +128,8 @@ class MainStage : public MainGameStage<RoundStage>
         , round_(0)
         , player_scores_(Global().PlayerNum(), 0)
         , board(Global().ResourceDir(), GAME_OPTION(纹理), GAME_OPTION(模式), GAME_OPTION(区块))
+        , framework_eliminated_(Global().PlayerNum(), false)
+        , is_computer_(Global().PlayerNum(), false)
     {}
 
     virtual int64_t PlayerScore(const PlayerID pid) const override { return player_scores_[pid]; }
@@ -141,8 +148,25 @@ class MainStage : public MainGameStage<RoundStage>
     // 无逃生舱最后生还判定
     bool withE_win_ = false;
 
+    // 框架淘汰状态：所有真人玩家都被淘汰时，主框架进入自动推演
+    vector<bool> framework_eliminated_;     // 已调用框架淘汰
+    vector<bool> is_computer_;              // 电脑玩家
+
     // 剩余玩家数
     int Alive_() const { return std::count_if(board.players.begin(), board.players.end(), [](const auto& player){ return player.out == 0; }); }
+
+    // 淘汰玩家：始终保留至少一名未被框架淘汰的真人玩家，否则主框架进入自动推演吞终局
+    void EliminatePlayer(const PlayerID pid)
+    {
+        if (Global().PlayerNum() <= 1 || framework_eliminated_[pid]) return;     // 单机模式不淘汰
+        for (PlayerID other = 0; other < Global().PlayerNum(); ++other) {
+            if (other != pid && !framework_eliminated_[other] && !is_computer_[other]) {
+                framework_eliminated_[pid] = true;
+                Global().Eliminate(pid);
+                return;
+            }
+        }
+    }
 
     // 通用模式提示：特殊事件、静音、大地图
     void AppendModeHints(lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
@@ -158,12 +182,28 @@ class MainStage : public MainGameStage<RoundStage>
         }
     }
 
+    // [BOSS] 查看赛况、地图时显示在上方的提示
+    void AppendBossHints(lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
+    {
+        for (const auto& boss : board.bosses) {
+            if (const string hint = boss->GetStatusHint(); !hint.empty()) sender << hint << "\n";
+        }
+    }
+
   private:
     CompReqErrCode BlockInfo_(const PlayerID pid, const bool is_public, lgtbot::ChildMsgSenderBase& reply)
     {
         auto sender = reply();
+        AppendBossHints(sender);
         AppendModeHints(sender);
         sender << Markdown(board.GetAllBlocksInfo(GAME_OPTION(特殊事件), GAME_OPTION(炸弹) > 0), (GRID_SIZE + WALL_SIZE) * 16 + 40);
+        return StageErrCode::OK;
+    }
+
+    // 记录电脑玩家
+    virtual CompReqErrCode OnComputerAct(const PlayerID pid, lgtbot::ChildMsgSenderBase& reply) override
+    {
+        is_computer_[pid] = true;
         return StageErrCode::OK;
     }
 
@@ -259,7 +299,9 @@ class MainStage : public MainGameStage<RoundStage>
             boss->BossInitialize();
             boss->InitBossStartRecord();
             sender << "【BOSS】" + boss->GetBossStartInfo() + "\n";
-            sender << "当前 " << boss->GetBossIcon() << boss->GetBossName() << " 锁定的玩家为 " << At(boss->target) << "\n";
+            if (boss->HasTarget()) {
+                sender << "当前 " << boss->GetBossIcon() << boss->GetBossName() << " 锁定的玩家为 " << At(boss->target) << "\n";
+            }
         }
 
         board.SaveGameStartMap();   // 保存初始盘面
@@ -289,7 +331,10 @@ class MainStage : public MainGameStage<RoundStage>
 
         if (game_end) {
             if (Global().PlayerNum() > 1) {
-                if (all_active_stop) {
+                const bool all_eliminated = std::all_of(board.players.begin(), board.players.end(), [](const auto& player){ return player.out == 1; });
+                if (all_eliminated) {
+                    Global().Boardcast() << "所有玩家均被淘汰，游戏结束！";
+                } else if (all_active_stop) {
                     Global().Boardcast() << "所有玩家均主动停止，游戏结束！";
                 } else {
                     Global().Boardcast() << "玩家剩余 " + to_string(Alive_()) + " 人，游戏结束！";
@@ -306,7 +351,8 @@ class MainStage : public MainGameStage<RoundStage>
 
         // 成就结算
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            const PlayerAchievement& achievement = board.players[pid].achievement;
+            const Player& player = board.players[pid];
+            const PlayerAchievement& achievement = player.achievement;
             if (achievement.exit_without_sound)         Global().Achieve(pid, Achievement::悄无声息);
             if (achievement.explore_all_map)            Global().Achieve(pid, Achievement::环游世界);
             if (achievement.explore_all_map_silently()) Global().Achieve(pid, Achievement::游荡幽灵);
@@ -317,6 +363,7 @@ class MainStage : public MainGameStage<RoundStage>
             if (achievement.catch_without_moving)       Global().Achieve(pid, Achievement::守株待兔);
             if (achievement.boss_chase_four_steps)      Global().Achieve(pid, Achievement::牛头魅魔);
             if (achievement.defuse_four_bombs())        Global().Achieve(pid, Achievement::拆弹专家);
+            if (achievement.regicide_alive(player.out)) Global().Achieve(pid, Achievement::弑君者);
         }
     }
 };
@@ -358,6 +405,7 @@ class RoundStage : public SubGameStage<>
     bool forced_stop;   // [谋定后动] 移动后强制停止（不计入全员主动停止，墙壁信息按停止处理）
     bool is_acting;     // 玩家是否开始行动（时限/挂机判定）
     int last_direct;    // 本回合上一次成功移动方向（-1 无，用于树篱冲刺）
+    TurnRecord turn_record;     // 本次行动统计（玩家结束行动时交给 BOSS 判定）
 
     // 记录门的状态发生改变的次数
     int door_modified;
@@ -375,6 +423,10 @@ class RoundStage : public SubGameStage<>
             }
         }
         Global().Boardcast() << Markdown(Main().board.GetPlayerTable(Main().round_));
+        // [BOSS] 回合开始行动
+        for (const auto& boss : Main().board.bosses) {
+            boss->HandleRoundBegin(*this);
+        }
 
         StartNextPlayerTurn(Main().board.players[currentPlayer]);
 
@@ -419,6 +471,7 @@ class RoundStage : public SubGameStage<>
         forced_stop = false;
         is_acting = false;
         last_direct = -1;
+        turn_record = TurnRecord{};
     }
 
     // 当前玩家开始行动并启动计时
@@ -646,6 +699,7 @@ class RoundStage : public SubGameStage<>
     {
         ActivatePlayerMovingTimer(pid);
         auto sender = reply();
+        Main().AppendBossHints(sender);
         if (show_image) {
             sender << Markdown(Main().board.GetPlayerTable(Main().round_));
         } else {
@@ -670,6 +724,7 @@ class RoundStage : public SubGameStage<>
     {
         ActivatePlayerMovingTimer(pid);
         auto sender = reply();
+        Main().AppendBossHints(sender);
         Main().AppendModeHints(sender);
 
         int query_pid = pid.Get();
@@ -747,11 +802,15 @@ class RoundStage : public SubGameStage<>
     CheckoutErrCode HandleStageOver()
     {
         Player& player = Main().board.players[currentPlayer];
-        // 回合结束始终检查捕捉
-        vector<PlayerID> list = Main().board.player_map[player.x][player.y];
-        if (find(list.begin(), list.end(), player.target) != list.end() && !hide && player.out == 0) {
+        // 回合结束始终检查捕捉（含[暴君]通缉的玩家）
+        if (FindCatchVictim(player).has_value() && !hide && player.out == 0) {
             auto sender = Global().Boardcast();
             PlayerCatch(player, sender);
+        }
+        // [BOSS] 玩家结束行动
+        turn_record.hidden = hide;
+        for (const auto& boss : Main().board.bosses) {
+            boss->HandlePlayerTurnEnd(*this, player, turn_record);
         }
         Grid& grid = Main().board.grid_map[player.x][player.y];
 
@@ -844,6 +903,7 @@ class RoundStage : public SubGameStage<>
     // ========== 成员函数 ==========
     bool MoveOneStep(Player& player, const Direct direction, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender, const bool multiple_mode);
     bool HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender, const bool multiple_mode);
+    std::optional<PlayerID> FindCatchVictim(const Player& player);
     bool PlayerCatch(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
     bool HandleHeartBeat(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
     void AnnounceCoinGains();
@@ -872,4 +932,7 @@ auto* MakeMainStage(MainStageFactory factory) { return factory.Create<MainStage>
  * 函数体见 actor/boss.h 的 RoundActionImpl：此处 RoundStage 已定义，转发调用以完成模板实例化 */
 void MinotaurBoss::HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) { RoundActionImpl(stage, boss_record, sender); }
 void BangBangBoss::HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) { RoundActionImpl(stage, boss_record, sender); }
+void TyrantBoss::HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) { RoundActionImpl(stage, boss_record, sender); }
+void TyrantBoss::HandleRoundBegin(RoundStage& stage) { RoundBeginImpl(stage); }
+void TyrantBoss::HandlePlayerTurnEnd(RoundStage& stage, Player& player, const TurnRecord& turn) { PlayerTurnEndImpl(stage, player, turn); }
 

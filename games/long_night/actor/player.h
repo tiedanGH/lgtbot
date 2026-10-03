@@ -82,6 +82,8 @@ class PlayerAchievement
     bool boss_chase_four_steps = false;
     // 【拆弹专家】
     bool defuse_four_bombs() const { return defuse_count >= 4; }
+    // 【弑君者】
+    bool regicide_alive(const int out) const { return regicide && out != 1; }
 
     PlayerAchievement(const vector<pair<int, int>>& pos): blocks(std::move(pos))
     {
@@ -90,6 +92,8 @@ class PlayerAchievement
 
     // [悄无声息]辅助：触发声音
     bool trigger_sound = false;
+    // [弑君者]辅助：点杀过暴君
+    bool regicide = false;
 
     // [嗜杀成性]辅助
     void recordCatch(const int playerNum) {

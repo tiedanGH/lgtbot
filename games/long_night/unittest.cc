@@ -136,6 +136,45 @@ GAME_TEST(2, heart_blocks_full_map)
     ASSERT_SCORE(0, 0);
 }
 
+// 玩家随机行动直至游戏结束：仅检查流程不会崩溃，并能在请求上限内正常结束
+#define PLAY_RANDOMLY_UNTIL_OVER(player_num, max_requests)                              \
+    do {                                                                                \
+        const char* const k_actions[] = {"上", "下", "左", "右", "停止"};                 \
+        for (int i = 0; i < (max_requests) && !this->main_stage_->IsOver(); i++) {      \
+            const uint32_t pid = i % (player_num);                                      \
+            if (this->match_->IsEliminated(PlayerID{pid})) continue;                    \
+            this->PublicRequest(pid, k_actions[rand() % 5]);                            \
+        }                                                                               \
+        ASSERT_FINISHED(true);                                                          \
+    } while (0)
+
+// [暴君] 谋定后动下每次移动即结束行动，多回合随机推进
+GAME_TEST(4, tyrant_random_play)
+{
+    ASSERT_PRI_MSG(OK, 0, "BOSS 暴君");
+    ASSERT_PRI_MSG(OK, 0, "谋定后动 开启");
+    START_GAME();
+    PLAY_RANDOMLY_UNTIL_OVER(4, 5000);
+}
+
+// [暴君] 一键指令配置，普通行动模式随机推进
+GAME_TEST(3, tyrant_random_play_normal)
+{
+    ASSERT_PRI_MSG(OK, 0, "暴君");
+    START_GAME();
+    PLAY_RANDOMLY_UNTIL_OVER(3, 6000);
+}
+
+// [暴君] 与其他 BOSS 同时存在（含两只暴君）、静音模式（无[噤声]铁律）随机推进
+GAME_TEST(5, tyrant_with_other_bosses_silence)
+{
+    ASSERT_PRI_MSG(OK, 0, "BOSS 暴君 米诺陶斯 邦邦 暴君");
+    ASSERT_PRI_MSG(OK, 0, "静音 开启");
+    ASSERT_PRI_MSG(OK, 0, "谋定后动 开启");
+    START_GAME();
+    PLAY_RANDOMLY_UNTIL_OVER(5, 8000);
+}
+
 } // namespace GAME_MODULE_NAME
 
 } // namespace game

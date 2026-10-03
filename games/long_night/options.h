@@ -41,6 +41,7 @@ EXTEND_OPTION("[模式] BOSS：可空格分隔配置多个，详见「#规则 �
         {"无", BossType::NONE},
         {"米诺陶斯", BossType::MINOTAUR},
         {"邦邦", BossType::BANGBANG},
+        {"暴君", BossType::TYRANT},
     })), (std::vector<BossType>{}))
 EXTEND_OPTION("[模式] 点杀：捕捉改为仅在回合结束时触发，路过不会触发捕捉", 点杀, (BoolChecker("开启", "关闭")), true)
 EXTEND_OPTION("[模式] 隐匿：隐匿后私聊行动，可选回合和单步模式", 隐匿,

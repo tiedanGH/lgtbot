@@ -3,6 +3,16 @@
 namespace lgtbot { namespace game { namespace GAME_MODULE_NAME { class RoundStage; } } }
 using RoundStage = lgtbot::game::GAME_MODULE_NAME::RoundStage;
 
+// 玩家单次行动的统计：由 RoundStage 记录，玩家结束行动时交给各 BOSS 判定（[暴君]铁律）
+struct TurnRecord
+{
+    int moves = 0;              // 成功移动的步数（撞墙不计）
+    bool made_sound = false;    // 发出过声响（首次发声、被心跳掩盖同样计入；隐匿与静音不计）
+    bool caught_player = false; // 捕捉过玩家
+    bool escaped = false;       // 乘坐过逃生舱（含[大乱斗]逃生）
+    bool hidden = false;        // 结束行动时处于隐匿状态
+};
+
 // BOSS 基类：一局游戏中可同时存在多个 BOSS，由 Board::bosses 持有
 class Boss
 {
@@ -25,7 +35,8 @@ class Boss
 
     // BOSS 基础信息
     virtual string GetBossBaseName() const = 0;
-    virtual string GetBossIcon() const = 0;
+    virtual string GetBossIcon() const = 0;             // emoji 图标（文字显示）
+    virtual string GetBossImage() const = 0;            // 图片图标：图片名（图片显示）
     virtual string GetBossDescription() const = 0;      // 开场描述
 
     // 显示名称：同类型有多个时带编号
@@ -41,6 +52,26 @@ class Boss
 
     // 回合结算行动：由各 BOSS 自行实现（函数体见本文件末尾 RoundActionImpl）
     virtual void HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) = 0;
+
+    // ========== 扩展接口 ==========
+    // 回合开始、玩家行动前（[暴君]复活、颁布铁律、公布通缉）
+    virtual void HandleRoundBegin(RoundStage& stage) {}
+    // 玩家结束行动时，每位玩家每回合一次（[暴君]铁律判定、弑君）
+    virtual void HandlePlayerTurnEnd(RoundStage& stage, Player& player, const TurnRecord& turn) {}
+    // 玩家被捕捉后，向捕捉的公屏消息追加内容（[暴君]通缉赏金）
+    virtual void HandlePlayerCaught(Player& catcher, Player& caught, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) {}
+    // 玩家能否被所有玩家捕捉（[暴君]通缉）
+    virtual bool IsWanted(const Player& player) const { return false; }
+    // 玩家状态角标：头像四周、完整赛况昵称旁的图标（resource/badges/ 下的图片名）
+    virtual void AppendPlayerBadges(const Player& player, vector<string>& badges) const {}
+    // 是否有追击目标（[暴君]铁律）
+    virtual bool HasTarget() const { return true; }
+    // 是否在地图上（[暴君]复活）
+    virtual bool IsAlive() const { return true; }
+    // 查看赛况、地图时显示在上方的提示（[暴君]本回合铁律），为空则不显示
+    virtual string GetStatusHint() const { return ""; }
+    // 随机传送需避开的距离：默认避开当前步数可到达的区域
+    virtual int TeleportAvoidRange() const { return steps; }
 
     // BOSS行为信息
     struct BossMoveRecord {
@@ -59,7 +90,7 @@ class Boss
     // 添加BOSS开局记录
     void InitBossStartRecord()
     {
-        NewRecord("【开局】初始锁定玩家为 [" + to_string(target) + "号]", StartRecordSound());
+        NewRecord(HasTarget() ? "【开局】初始锁定玩家为 [" + to_string(target) + "号]" : "【开局】暂无追击目标", StartRecordSound());
     }
 
     string GetBossRecord(const int query_pid, const bool is_public, const bool is_html = true) const
@@ -212,21 +243,30 @@ class MinotaurBoss : public Boss
   public:
     MinotaurBoss(int& size, vector<Player>& players) : Boss(BossType::MINOTAUR, size, players) {}
 
-    // BOSS 规则（「#规则 漫漫长夜 BOSS」）
+    static constexpr const char* k_name = "米诺陶斯";
+    static constexpr const char* k_icon = "🐮";
+    static constexpr const char* k_image = "minotaur";
+    static constexpr const char* k_brief = "追击最近的玩家，步数逐回合递增，追上即捕捉出局；移动后发出巨响";
     static constexpr const char* k_rule = R"EOF(    【🐮米诺陶斯】
 1、随机生成在地图中，每回合最后行动，首回合锁定最近玩家为目标（公屏显示）
 2、每回合移动步数递增，发现更近玩家则更换目标并重置步数。
 3、BOSS无视地形，移动结束时会发出巨响，如果玩家在其周围会听到喘息声。
 4、BOSS踩到玩家则玩家出局，玩家经过米诺陶斯不会出局。)EOF";
 
-    string GetBossBaseName() const override { return "米诺陶斯"; }
-    string GetBossIcon() const override { return "🐮"; }
+    string GetBossBaseName() const override { return k_name; }
+    string GetBossIcon() const override { return k_icon; }
+    string GetBossImage() const override { return k_image; }
     string GetBossDescription() const override
     {
         return "现身于地图中，会在回合结束时追击最近的玩家。BOSS发出震耳欲聋的巨响！请所有玩家留意BOSS开局所在的方位！";
     }
 
     void HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) override;
+    // 角标：被追击的玩家
+    void AppendPlayerBadges(const Player& player, vector<string>& badges) const override
+    {
+        if (player.out == 0 && target == player.pid) badges.push_back(k_image);
+    }
 
   protected:
     int InitialSteps() const override { return 0; }
@@ -246,20 +286,29 @@ class BangBangBoss : public Boss
   public:
     BangBangBoss(int& size, vector<Player>& players) : Boss(BossType::BANGBANG, size, players) {}
 
-    // BOSS 规则（「#规则 漫漫长夜 BOSS」）
+    static constexpr const char* k_name = "邦邦";
+    static constexpr const char* k_icon = "💣";
+    static constexpr const char* k_image = "bangbang";
+    static constexpr const char* k_brief = "以固定速度追击最近的玩家但不捕捉，每回合在落点放置炸弹并公开其四周墙壁";
     static constexpr const char* k_rule = R"EOF(    【💣邦邦】
 1、所有玩家移动后，BOSS以固定速度（3-5 随机）跟着距离最近玩家移动。接触玩家后停止移动，但无法捕捉玩家；追到玩家后，会转移目标到第二近的玩家。
 2、BOSS每回合结束时下一个[炸弹]，[炸弹]的四墙信息将会公开。
 3、BOSS一定每回合都移动，无视地形，转换目标将公屏显示。)EOF";
 
-    string GetBossBaseName() const override { return "邦邦"; }
-    string GetBossIcon() const override { return "💣"; }
+    string GetBossBaseName() const override { return k_name; }
+    string GetBossIcon() const override { return k_icon; }
+    string GetBossImage() const override { return k_image; }
     string GetBossDescription() const override
     {
         return "带着[炸弹]现身于地图中，会在回合结束时追击最近玩家，并在结束位置放置[炸弹]。玩家经过并离开会炸飞并出局！";
     }
 
     void HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) override;
+    // 角标：被追击的玩家
+    void AppendPlayerBadges(const Player& player, vector<string>& badges) const override
+    {
+        if (player.out == 0 && target == player.pid) badges.push_back(k_image);
+    }
 
   protected:
     int InitialSteps() const override { return rand() % 3 + 3; }    // 固定速度 3-5 随机
@@ -270,12 +319,181 @@ class BangBangBoss : public Boss
 };
 
 
+// 【👑暴君】每回合颁布铁律：追捕最近的违反者，其余违反者遭到通缉；可被玩家点杀，复活后优先追捕弑君者
+class TyrantBoss : public Boss
+{
+  public:
+    TyrantBoss(int& size, vector<Player>& players)
+        : Boss(BossType::TYRANT, size, players)
+        , wanted(players.size(), false), wanted_count(players.size(), 0), slayer(players.size(), false) {}
+
+    static constexpr const char* k_name = "暴君";
+    static constexpr const char* k_icon = "👑";
+    static constexpr const char* k_image = "tyrant";
+    static constexpr const char* k_brief = "每回合颁布铁律，追捕并制裁违反者，其余违反者遭到通缉；可被点杀，复活后追捕弑君者";
+    static constexpr const char* k_rule = R"EOF(    【👑暴君】
+1、吾即律法：每回合开始时，公开自己四周墙壁信息、本回合需要遵守的[铁律]，以及被[通缉]的玩家和赏金。
+2、审判：回合结束时，从本回合违反[铁律]的玩家中选择距离最近的作为追捕目标（距离相同则随机），其余违反者遭到[通缉]。已有追捕目标时出现新的违反者，则转移目标；无人违反时保持原目标，没有目标则原地不动。
+3、通缉：被[通缉]的玩家可被所有玩家捕捉，持续至下回合结束。捕捉被[通缉]的玩家可获得赏金，金币数量等于其本局被[通缉]的次数。
+4、立即执行：暴君无视地形，速度初始为 3，每回合 +1；本回合违反铁律的玩家多于 1 人时，速度临时增加违反人数。追上目标即制裁出局。
+5、铁律：第 1 回合从[禁足]（移动不多于 1 步）、[活动]（移动不少于 1 步）中随机；之后每回合从以下随机：
+- 噤声：不得发出声响（静音下不会出现）
+- 仁爱：不得捕捉玩家
+- 牢笼：不得逃生（大乱斗生效）
+- 活动：移动不少于 2~5 步（随回合增长）
+- 禁足：移动不多于 2~5 步（随机）
+- 戒严：结束行动时，不得停留在区块九宫格中随机 3 个位置
+移动步数按成功移动计算，撞墙不计。
+6、弑君：在暴君所在位置结束行动即可点杀暴君（隐匿状态除外），弑君者不会被传送，本回合剩余时间铁律失效。暴君于下回合开始时复活，速度临时提升至 8，并优先追捕弑君者。弑君后成功逃生或存活至最后，可获得成就[弑君者]。)EOF";
+
+    string GetBossBaseName() const override { return k_name; }
+    string GetBossIcon() const override { return k_icon; }
+    string GetBossImage() const override { return k_image; }
+    string GetBossDescription() const override
+    {
+        return "降临于地图中，每回合开始时颁布[铁律]。违反铁律者将被暴君追捕制裁，其余违反者遭到通缉，可被所有玩家捕捉！暴君可被点杀，但会复活并追捕弑君者。";
+    }
+
+    void HandleRoundAction(RoundStage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) override;
+    void HandleRoundBegin(RoundStage& stage) override;
+    void HandlePlayerTurnEnd(RoundStage& stage, Player& player, const TurnRecord& turn) override;
+
+    // [通缉] 捕捉被通缉的玩家获得赏金：金币数量等于其本局被通缉的次数
+    void HandlePlayerCaught(Player& catcher, Player& caught, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) override
+    {
+        if (!wanted[caught.pid]) return;
+        wanted[caught.pid] = false;
+        const int bounty = wanted_count[caught.pid];
+        catcher.coins += bounty;
+        catcher.coins_this_round += bounty;
+        catcher.score.coin_score += bounty * Score::COIN_SCORE;
+        sender << "\n" << lgtbot::At(catcher.pid) << " 捕获了被" << GetBossName() << "通缉的 " << lgtbot::At(caught.pid) << "，获得赏金 " << bounty << " 枚【金币】！";
+    }
+    bool IsWanted(const Player& player) const override { return wanted[player.pid]; }
+    // 角标：弑君者始终显示；追捕目标、通缉中仅在场时显示（通缉图标金币数随赏金增加，最多 3 枚）
+    void AppendPlayerBadges(const Player& player, vector<string>& badges) const override
+    {
+        if (slayer[player.pid]) badges.push_back("regicide");
+        else if (player.out == 0 && chase_target == player.pid) badges.push_back("target");
+        if (player.out == 0 && wanted[player.pid]) {
+            const int bounty = wanted_count[player.pid];
+            badges.push_back(bounty >= 3 ? "wanted_3" : bounty == 2 ? "wanted_2" : "wanted");
+        }
+    }
+    bool HasTarget() const override { return chase_target.has_value() && players[*chase_target].out == 0; }
+    bool IsAlive() const override { return alive; }
+    string GetStatusHint() const override
+    {
+        return GetBossTag() + " 铁律：" + LawText(law) + (alive ? "" : "（已被点杀，本回合失效）");
+    }
+    int TeleportAvoidRange() const override { return -1; }     // 只追捕违反铁律的玩家，随机传送无需避开
+
+  protected:
+    int InitialSteps() const override { return 3; }     // 速度初始为 3，每回合 +1
+
+  private:
+    // 铁律
+    enum class LawType { GROUNDED, ACTIVE, SILENCE, MERCY, CAGE, CURFEW };
+    struct Law
+    {
+        LawType type = LawType::ACTIVE;
+        int limit = 1;                      // [禁足][活动] 步数
+        std::array<bool, 9> curfew{};       // [戒严] 区块内禁止停留的位置（按行：左上、正上、右上……右下）
+    };
+    static constexpr const char* k_curfew_names[9] = {"左上", "正上", "右上", "正左", "中央", "正右", "左下", "正下", "右下"};
+
+    Law law;                                // 本回合铁律
+    string round_walls;                     // 本回合开始时公布的四周墙壁信息
+    bool alive = true;                      // 被点杀后至下回合复活前为 false
+    bool revived = false;                   // 本回合刚复活：速度临时提升至 8
+    std::optional<lgtbot::PlayerID> chase_target;   // 追捕目标（无人违反铁律时为空）
+    std::optional<lgtbot::PlayerID> regicide;       // 弑君者：优先追捕
+    vector<lgtbot::PlayerID> violators;             // 本回合违反铁律的玩家（按行动顺序）
+    vector<bool> wanted;                    // 通缉中：持续至下回合结束
+    vector<int> wanted_count;               // 本局被通缉次数（赏金）
+    vector<bool> slayer;                    // 点杀过本暴君（弑君者角标）
+
+    // 随机颁布铁律：第 1 回合仅[禁足][活动]（1 步）；[静音]下没有[噤声]
+    static Law RandomLaw(const int round, const bool silence)
+    {
+        Law law;
+        if (round <= 1) {
+            law.type = rand() % 2 == 0 ? LawType::GROUNDED : LawType::ACTIVE;
+            return law;
+        }
+        vector<LawType> pool = {LawType::MERCY, LawType::CAGE, LawType::ACTIVE, LawType::GROUNDED, LawType::CURFEW};
+        if (!silence) pool.push_back(LawType::SILENCE);
+        law.type = pool[rand() % pool.size()];
+        if (law.type == LawType::ACTIVE) law.limit = std::min(round, 5);    // 2~5 随回合增长
+        if (law.type == LawType::GROUNDED) law.limit = rand() % 4 + 2;      // 2~5 随机
+        if (law.type == LawType::CURFEW) {
+            int cells[9] = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+            for (int i = 0; i < 3; i++) {
+                std::swap(cells[i], cells[i + rand() % (9 - i)]);
+                law.curfew[cells[i]] = true;
+            }
+        }
+        return law;
+    }
+
+    static string LawText(const Law& law)
+    {
+        switch (law.type) {
+            case LawType::GROUNDED: return "「禁足」移动不得多于 " + to_string(law.limit) + " 步";
+            case LawType::ACTIVE:   return "「活动」移动不得少于 " + to_string(law.limit) + " 步";
+            case LawType::SILENCE:  return "「噤声」不得发出任何声响";
+            case LawType::MERCY:    return "「仁爱」不得捕捉玩家";
+            case LawType::CAGE:     return "「牢笼」不得乘坐逃生舱逃生";
+            case LawType::CURFEW: {
+                string cells;
+                for (int i = 0; i < 9; i++) {
+                    if (law.curfew[i]) cells += (cells.empty() ? "" : "、") + string(k_curfew_names[i]);
+                }
+                return "「戒严」结束行动时不得停留在区块的 " + cells + " 位置";
+            }
+        }
+        return "";
+    }
+
+    // 本次行动是否违反铁律（blocks：各区块左上角坐标）
+    bool Violates(const Player& player, const TurnRecord& turn, const vector<pair<int, int>>& blocks) const
+    {
+        switch (law.type) {
+            case LawType::GROUNDED: return turn.moves > law.limit;
+            case LawType::ACTIVE:   return turn.moves < law.limit;
+            case LawType::SILENCE:  return turn.made_sound;
+            case LawType::MERCY:    return turn.caught_player;
+            case LawType::CAGE:     return turn.escaped;    // [大乱斗] 逃生算违反
+            case LawType::CURFEW:
+                for (const auto& [bx, by] : blocks) {
+                    const int dx = (player.x - bx + size) % size, dy = (player.y - by + size) % size;
+                    if (dx < 3 && dy < 3) return law.curfew[dx * 3 + dy];
+                }
+                return false;   // 不属于任何区块（特殊边长地图空隙）
+        }
+        return false;
+    }
+
+    // 追捕目标、弑君者已出局（被捕捉、逃生等）时放弃追捕
+    void DropLeftTargets()
+    {
+        if (regicide.has_value() && players[*regicide].out > 0) regicide.reset();
+        if (chase_target.has_value() && players[*chase_target].out > 0) chase_target.reset();
+    }
+
+    template <class Stage> void RoundBeginImpl(Stage& stage);
+    template <class Stage> void PlayerTurnEndImpl(Stage& stage, Player& player, const TurnRecord& turn);
+    template <class Stage> void RoundActionImpl(Stage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
+};
+
+
 // BOSS 工厂：按类型创建对应的 BOSS 对象
 inline std::unique_ptr<Boss> CreateBoss(const BossType type, int& size, vector<Player>& players)
 {
     switch (type) {
         case BossType::MINOTAUR:    return std::make_unique<MinotaurBoss>(size, players);
         case BossType::BANGBANG:    return std::make_unique<BangBangBoss>(size, players);
+        case BossType::TYRANT:      return std::make_unique<TyrantBoss>(size, players);
         default:                    return nullptr;
     }
 }
@@ -301,11 +519,32 @@ inline vector<std::unique_ptr<Boss>> CreateBosses(const vector<BossType>& types,
     return bosses;
 }
 
-// 全部 BOSS 的规则汇总（「#规则 漫漫长夜 BOSS」），新增 BOSS 时在此追加其 k_rule
-inline const char* GetAllBossRules()
+// 全部 BOSS 的名称、简介与规则（「#规则 漫漫长夜 BOSS [名称]」）
+struct BossRuleInfo
 {
-    static const string rules = string("《BOSS 规则和技能》\n") + MinotaurBoss::k_rule + "\n" + BangBangBoss::k_rule;
-    return rules.c_str();
+    const char* name;
+    const char* icon;
+    const char* brief;
+    const char* rule;
+};
+inline constexpr BossRuleInfo k_boss_rule_infos[] = {
+    {MinotaurBoss::k_name, MinotaurBoss::k_icon, MinotaurBoss::k_brief, MinotaurBoss::k_rule},
+    {BangBangBoss::k_name, BangBangBoss::k_icon, BangBangBoss::k_brief, BangBangBoss::k_rule},
+    {TyrantBoss::k_name, TyrantBoss::k_icon, TyrantBoss::k_brief, TyrantBoss::k_rule},
+};
+
+// BOSS 规则查询：名称匹配时返回该 BOSS 的规则，否则返回列表与简介
+inline string GetBossRuleText(const string& name)
+{
+    for (const auto& info : k_boss_rule_infos) {
+        if (name == info.name) return info.rule;
+    }
+    string text = "《BOSS 列表》";
+    for (const auto& info : k_boss_rule_infos) {
+        text += "\n【" + string(info.icon) + info.name + "】" + info.brief;
+    }
+    text += "\n\n详细规则和技能：「" META_COMMAND_SIGN "规则 漫漫长夜 BOSS 名称」";
+    return text;
 }
 
 
@@ -335,7 +574,7 @@ void MinotaurBoss::RoundActionImpl(Stage& stage, string& boss_record, lgtbot::Ch
                 catched_player.NewContentRecord("(" + GetBossName() + "捕捉出局)", "end");
                 catched_player.all_record.back() = catched_player.move_record;  // 回合已经结束，需强制更新完整赛况
                 catched_player.out = 1;
-                if (Global.PlayerNum() > 1) Global.Eliminate(pid);
+                Main.EliminatePlayer(pid);
                 catched_player.score.catch_score -= 100;        // 抓人分
                 boss_record += "[" + to_string(pid) + "号] ";
                 sender << "\n" << lgtbot::At(pid);
@@ -404,10 +643,186 @@ void BangBangBoss::RoundActionImpl(Stage& stage, string& boss_record, lgtbot::Ch
     }
     if (grid.Attach() == AttachType::EMPTY) grid.SetAttach(AttachType::BOMB);
     // 公屏展示炸弹墙壁信息
-    auto [info, md] = Main.board.GetBangBangSurroundingWalls(x, y);
+    auto [info, md] = Main.board.GetBossSurroundingWalls(x, y, AttachType::BOMB);
     string wall_info = GetBossName() + "所在位置的四周墙壁信息，按照 上下左右 顺序分别是：\n" + info;
     boss_record += "放置炸弹（" + info + "）";
     sender << "\n\n" << GetBossSay("哈哈，炸弹来喽~", silence)
            << "\n" << wall_info
            << "\n" << lgtbot::Markdown(md, (GRID_SIZE + WALL_SIZE * 2) + 40);
+}
+
+// 【👑暴君】回合开始：复活、颁布铁律，公布所在位置的四周墙壁与通缉名单
+template <class Stage>
+void TyrantBoss::RoundBeginImpl(Stage& stage)
+{
+    auto& Main = stage.Main();
+    const bool silence = GET_OPTION_VALUE(stage.Global().Options(), 静音);
+    DropLeftTargets();
+
+    auto sender = stage.Global().Boardcast();
+    sender << "【回合开始[" << GetBossIcon() << GetBossName() << " 颁布铁律]】";
+    // [弑君] 回合开始时复活：重新随机位置，本回合速度临时提升至 8
+    if (!alive) {
+        alive = true;
+        revived = true;
+        BossSpawn();
+        sender << "\n" << GetBossSay("朕……回来了！", silence)
+               << "\n" << GetBossName() << "复活了！本回合速度临时提升至 8";
+        if (chase_target.has_value()) sender << "，并优先追捕弑君者 " << lgtbot::At(*chase_target);
+        sender << "\n";
+    }
+    // 颁布铁律
+    law = RandomLaw(Main.round_, silence);
+    sender << "\n" << GetBossSay("吾即律法！", silence)
+           << "\n" << LawText(law);
+    // 公开所在位置的四周墙壁信息
+    auto [info, md] = Main.board.GetBossSurroundingWalls(x, y, AttachType::EMPTY);
+    round_walls = info;
+    sender << "\n\n" << GetBossName() << "所在位置的四周墙壁信息，按照 上下左右 顺序分别是：\n" << info
+           << "\n" << lgtbot::Markdown(md, (GRID_SIZE + WALL_SIZE * 2) + 40);
+    // 通缉名单
+    bool any_wanted = false;
+    for (const auto& player : players) {
+        if (!wanted[player.pid] || player.out > 0) continue;
+        sender << (any_wanted ? "\n" : "\n【通缉】可被所有人捕捉，持续至本回合结束：\n")
+               << lgtbot::At(player.pid) << " 赏金 " << wanted_count[player.pid] << " 枚金币";
+        any_wanted = true;
+    }
+}
+
+// 【👑暴君】玩家结束行动：弑君、铁律判定
+template <class Stage>
+void TyrantBoss::PlayerTurnEndImpl(Stage& stage, Player& player, const TurnRecord& turn)
+{
+    auto& Global = stage.Global();
+    const bool silence = GET_OPTION_VALUE(Global.Options(), 静音);
+    // 被点杀后，本回合剩余时间铁律失效
+    if (!alive) return;
+    // [弑君] 在暴君所在位置结束行动（隐匿状态除外）：暴君倒下，弑君者不会被传送
+    if (player.out == 0 && !turn.hidden && player.x == x && player.y == y) {
+        alive = false;
+        regicide = player.pid;
+        chase_target = target = player.pid;
+        slayer[player.pid] = true;
+        violators.clear();
+        player.achievement.regicide = true;     // 成就【弑君者】辅助
+        player.NewContentRecord("(弑君)", "catch");
+        Global.Boardcast() << "【弑君】" << lgtbot::At(player.pid) << " 在黑暗中点杀了" << GetBossName() << "！"
+                           << "\n" << GetBossSay("你……竟敢……", silence)
+                           << "\n" << GetBossName() << "倒下了，本回合剩余时间铁律失效。暴君将于下回合开始时复活，速度临时提升至 8，并优先追捕弑君者！";
+        return;
+    }
+    // 铁律判定：逃生违反[牢笼]回合结算时公布并无能狂怒（但[大乱斗]算作违反）；其余出局玩家无需判定
+    if (player.out == 2 && law.type == LawType::CAGE) {
+        violators.push_back(player.pid);
+    } else if (player.out == 0 && Violates(player, turn, stage.Main().board.unitMaps.pos)) {
+        violators.push_back(player.pid);
+        Global.Tell(player.pid) << "[" << GetBossName() << "] 违反了本回合铁律" << LawText(law) << "，回合结束时将接受审判！";
+    }
+}
+
+// 【👑暴君】回合结算：通缉到期，审判违反者（逃生只能无能狂怒，追捕最近者、通缉其余），向追捕目标移动，追上即制裁（移动轨迹不公开）
+template <class Stage>
+void TyrantBoss::RoundActionImpl(Stage& stage, string& boss_record, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
+{
+    auto& Main = stage.Main();
+    auto& Global = stage.Global();
+    const bool silence = GET_OPTION_VALUE(Global.Options(), 静音);
+
+    // [通缉] 上回合的通缉在本回合结算时到期
+    wanted.assign(wanted.size(), false);
+    boss_record += "四周墙壁（" + round_walls + "），" + LawText(law) + "，";
+    if (!alive) {
+        boss_record += "已被点杀，无法行动";
+        sender << "\n" << GetBossName() << "已被点杀，本回合无法行动……将于下回合开始时复活！";
+        return;
+    }
+    DropLeftTargets();
+    // 审判：按行动顺序公布违反者，仍在场的违反者接受审判
+    vector<lgtbot::PlayerID> announced, guilty;
+    for (const lgtbot::PlayerID pid : violators) {
+        if (players[pid].out == 1) continue;
+        announced.push_back(pid);
+        if (players[pid].out == 0) guilty.push_back(pid);
+    }
+    violators.clear();
+    const bool raged = announced.size() > guilty.size();
+    if (announced.empty()) {
+        boss_record += "无人违反，";
+        sender << "\n本回合无人违反铁律";
+    } else {
+        boss_record += "违反者";
+        sender << "\n本回合违反铁律的玩家：";
+        for (const lgtbot::PlayerID pid : announced) {
+            boss_record += " [" + to_string(pid) + "号]";
+            sender << lgtbot::At(pid) << " ";
+        }
+        boss_record += "，";
+    }
+    if (raged) {
+        boss_record += "无能狂怒，";
+        sender << "\n" << GetBossSay("可恶！竟敢从朕的牢笼中逃走！", silence) << "\n" << GetBossName() << "发动无能狂怒！";
+    }
+    if (!guilty.empty()) {
+        // 弑君者优先；否则选择距离最近的违反者（距离相同则随机）
+        lgtbot::PlayerID chosen = guilty.front();
+        if (regicide.has_value()) {
+            chosen = *regicide;
+        } else {
+            vector<lgtbot::PlayerID> nearest;
+            int best = INT_MAX;
+            for (const lgtbot::PlayerID pid : guilty) {
+                const int d = ManhattanDistance(x, y, players[pid].x, players[pid].y, size);
+                if (d < best) { best = d; nearest.clear(); }
+                if (d == best) nearest.push_back(pid);
+            }
+            chosen = nearest[rand() % nearest.size()];
+        }
+        if (chase_target != chosen) {
+            sender << "\n" << GetBossName() << (chase_target.has_value() ? " 转移追捕目标至 " : " 锁定追捕目标 ") << lgtbot::At(chosen);
+            chase_target = target = chosen;
+        }
+        // 其余违反者遭到通缉
+        bool any_wanted = false;
+        for (const lgtbot::PlayerID pid : guilty) {
+            if (pid == chosen) continue;
+            wanted[pid] = true;
+            wanted_count[pid]++;
+            boss_record += (any_wanted ? " [" : "通缉 [") + to_string(pid) + "号]";
+            sender << (any_wanted ? " " : "\n以下玩家遭到通缉，下回合可被所有玩家捕捉：") << lgtbot::At(pid);
+            any_wanted = true;
+        }
+        if (any_wanted) boss_record += "，";
+    }
+    // 速度：初始为 3，每回合 +1；复活回合临时提升至 8；违反者多于 1 人时临时增加违反人数
+    int speed = InitialSteps() + Main.round_ - 1;
+    if (revived) speed = std::max(speed, 8);
+    if (guilty.size() > 1) speed += static_cast<int>(guilty.size());
+    revived = false;
+    // 追捕：移动轨迹不公开
+    if (!chase_target.has_value()) {
+        boss_record += "无追捕目标";
+        if (announced.empty()) sender << "\n" << GetBossSay("嗯，都很守规矩……", silence);
+        return;
+    }
+    steps = speed;              // 基类 BossMove 按 target（与追捕目标同步）移动
+    if (BossMove()) {
+        Player& executed = players[target];
+        executed.NewContentRecord("(" + GetBossName() + "制裁出局)", "end");
+        executed.all_record.back() = executed.move_record;  // 回合已经结束，需强制更新完整赛况
+        executed.out = 1;
+        Main.EliminatePlayer(target);
+        executed.score.catch_score -= 100;      // 抓人分
+        boss_record += "制裁 [" + to_string(target) + "号]";
+        sender << "\n" << GetBossSay("立即执行！", silence) << "\n" << lgtbot::At(target) << " 被" << GetBossName() << "制裁出局！";
+        if (regicide == chase_target) regicide.reset();
+        chase_target.reset();
+        if (Main.Alive_() > 1) {
+            sender << "\n\n玩家捕捉目标顺位发生变更！\n";
+            stage.RefreshCatchOrder(sender);
+        }
+    } else {
+        boss_record += "追捕 [" + to_string(target) + "号]";
+        sender << "\n" << GetBossName() << " 以速度 " << speed << " 追捕 " << lgtbot::At(target) << "……";
+    }
 }

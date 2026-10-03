@@ -28,13 +28,15 @@ inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& op
                     map.Get(x, y).SetContent(GetColoredMark(content, grid.Type(), grid.Attach()));
                 }
             } else if (options.with_player) {
+                // BOSS 图标在前，玩家编号每 2 个换行
                 string player_marks;
                 for (const auto& boss : bosses) {
-                    if (boss->x == gridX && boss->y == gridY) player_marks += boss->GetBossIcon();
+                    if (boss->IsAlive() && boss->x == gridX && boss->y == gridY) player_marks += GetBossImageTag(*boss, 22);
                 }
+                int player_count = 0;
                 for (auto pid: player_map[gridX][gridY]) {
                     player_marks += num[pid];
-                    if (player_marks.length() % 2 == 0) {
+                    if (++player_count % 2 == 0) {
                         player_marks += "<br>";
                     }
                 }
@@ -302,8 +304,8 @@ inline string Board::GetPlayerTable(const int round) const
     html::Table playerTable(playerNum + bosses.size(), 6);
     playerTable.SetTableStyle("align=\"center\" cellpadding=\"2\"");
     for (int pid = 0; pid < playerNum; pid++) {
-        playerTable.Get(pid, 0).SetStyle("style=\"width:60px; text-align:right;\"").SetContent(to_string(pid) + "号：");
-        playerTable.Get(pid, 1).SetStyle("style=\"width:40px;\"").SetContent(players[pid].avatar);
+        playerTable.Get(pid, 0).SetStyle("style=\"width:60px; height:44px; text-align:right;\"").SetContent(to_string(pid) + "号：");
+        playerTable.Get(pid, 1).SetStyle("style=\"width:40px;\"").SetContent(GetPlayerAvatar(players[pid]));
         playerTable.Get(pid, 2).SetStyle("style=\"width:250px; text-align:left;\"").SetContent(players[pid].name);
         if (players[pid].out == 2) {
             playerTable.MergeRight(pid, 3, 3);
@@ -326,14 +328,67 @@ inline string Board::GetPlayerTable(const int round) const
     for (size_t i = 0; i < bosses.size(); i++) {
         const Boss& boss = *bosses[i];
         const int row = playerNum + i;
-        playerTable.Get(row, 0).SetStyle("style=\"width:60px;\"").SetContent("<font size=\"5\">" + boss.GetBossIcon() + "</font>");
+        playerTable.Get(row, 0).SetStyle("style=\"width:60px; height:44px;\"").SetContent(GetBossImageTag(boss, 28));
         playerTable.MergeRight(row, 1, 2);
         playerTable.Get(row, 1).SetStyle("style=\"width:290px;\"").SetColor("lavender").SetContent("[BOSS] " + boss.GetBossName());
-        playerTable.Get(row, 3).SetStyle("style=\"width:40px;\"").SetContent("追击<br>目标");
-        playerTable.Get(row, 4).SetStyle("style=\"width:40px;\"").SetContent("[" + to_string(boss.target) + "号]");
-        playerTable.Get(row, 5).SetStyle("style=\"width:40px;\"").SetContent(players[boss.target].avatar);
+        if (!boss.IsAlive()) {
+            playerTable.MergeRight(row, 3, 3);
+            playerTable.Get(row, 3).SetStyle("style=\"width:120px;\"").SetColor("#E5E5E5").SetContent("【已被击杀】");
+        } else if (!boss.HasTarget()) {
+            playerTable.MergeRight(row, 3, 3);
+            playerTable.Get(row, 3).SetStyle("style=\"width:120px;\"").SetContent("【暂无目标】");
+        } else {
+            playerTable.Get(row, 3).SetStyle("style=\"width:40px;\"").SetContent("追击<br>目标");
+            playerTable.Get(row, 4).SetStyle("style=\"width:40px;\"").SetContent("[" + to_string(boss.target) + "号]");
+            playerTable.Get(row, 5).SetStyle("style=\"width:40px;\"").SetContent(players[boss.target].avatar);
+        }
     }
     return (round > 0 ? "### 第 " + to_string(round) + " 回合" : "") + playerTable.ToString();
+}
+
+// 玩家状态角标：按 BOSS 配置顺序汇总，同类角标可重复
+inline vector<string> Board::GetPlayerBadges(const Player& player) const
+{
+    vector<string> badges;
+    for (const auto& boss : bosses) {
+        boss->AppendPlayerBadges(player, badges);
+    }
+    return badges;
+}
+
+// 玩家头像：角标沿头像四周环绕排列
+// 环绕路径为正方形：自右下角出发，依次经过下边、左边、上边、右边，超过 8 个时缩小并均匀铺满一圈
+inline string Board::GetPlayerAvatar(const Player& player) const
+{
+    const vector<string> badges = GetPlayerBadges(player);
+    if (badges.empty()) return player.avatar;
+    const int n = badges.size();
+    const int size = n <= 8 ? 18 : 13;
+    const double near = -5, far = 45 - size, side = far - near;    // 角标左上角坐标范围（头像 40px）
+    const double step = n <= 8 ? 16 : 4 * side / n;
+    string html = "<div style=\"position:relative; display:inline-block; width:40px; height:40px; vertical-align:middle;\">";
+    html += "<div style=\"position:absolute; top:0; left:0; width:40px; height:40px;\">" + player.avatar + "</div>";
+    for (int i = 0; i < n; i++) {
+        const double d = i * step;
+        const int edge = std::min(3, static_cast<int>(d / side));
+        const double t = d - edge * side;
+        double x = far, y = near + t;                       // 右边（向下）
+        if (edge == 0) { x = far - t; y = far; }            // 下边（向左）
+        if (edge == 1) { x = near; y = far - t; }           // 左边（向上）
+        if (edge == 2) { x = near + t; y = near; }          // 上边（向右）
+        html += "<img src=\"" + ToFileUrl(image_path_ + "badges/" + badges[i] + ".png") + "\" style=\"position:absolute; left:"
+              + to_string(std::lround(x)) + "px; top:" + to_string(std::lround(y)) + "px; width:" + to_string(size)
+              + "px; height:" + to_string(size) + "px;\">";
+    }
+    html += "</div>";
+    return html;
+}
+
+// BOSS 图片图标：与对应文字等大，略低于文字基线
+inline string Board::GetBossImageTag(const Boss& boss, const int size) const
+{
+    return "<img src=\"" + ToFileUrl(image_path_ + "badges/" + boss.GetBossImage() + ".png") + "\" style=\"width:" + to_string(size)
+         + "px; height:" + to_string(size) + "px; vertical-align:-0.2em;\">";
 }
 
 inline string Board::GetPlayerString() const
@@ -350,7 +405,9 @@ inline string Board::GetPlayerString() const
     }
     for (const auto& boss : bosses) {
         players_string += "\n[BOSS] " + boss->GetBossName() + "\n";
-        players_string += "目标→ [" + to_string(boss->target) + "号]" + players[boss->target].name;
+        if (!boss->IsAlive()) players_string += "【已被击杀】";
+        else if (!boss->HasTarget()) players_string += "【暂无目标】";
+        else players_string += "目标→ [" + to_string(boss->target) + "号]" + players[boss->target].name;
     }
     return players_string;
 }
@@ -392,6 +449,12 @@ inline string Board::GetAllRecordHtml(const int query_pid, const int is_public) 
         background: linear-gradient(135deg, #fff7b0, #ffe75e 45%, #f0d000);
         box-shadow: 0 1px 2px rgba(224, 180, 0, 0.5);
     }
+    .boss-badge {
+        width: 18px;
+        height: 18px;
+        margin-left: 4px;
+        vertical-align: -3px;
+    }
     .player-record {}
     .boss {
         margin-top: 12px;
@@ -418,9 +481,13 @@ inline string Board::GetAllRecordHtml(const int query_pid, const int is_public) 
 
         record_html += "<div class='player-title'>";
         record_html += "<b>[" + to_string(pid) + "号]" + esc_html(players[pid].name) + "</b>";
-        // [金币] 在玩家名称右侧显示金色徽章（仅显示已公示数量，本回合新获得需等回合结束公示）
+        // [金币] 在玩家名称右侧显示金色徽章（仅显示已公示数量，新获得需等回合结束公示）
         if (players[pid].coins_public > 0) {
             record_html += "<span class='coin-badge'>🪙 " + to_string(players[pid].coins_public) + "</span>";
+        }
+        // 状态角标（仅图标）
+        for (const auto& badge : GetPlayerBadges(players[pid])) {
+            record_html += "<img class='boss-badge' src='" + ToFileUrl(image_path_ + "badges/" + badge + ".png") + "'>";
         }
         record_html += "</div>";
 
@@ -433,7 +500,7 @@ inline string Board::GetAllRecordHtml(const int query_pid, const int is_public) 
     // BOSS 记录
     for (const auto& boss : bosses) {
         record_html += "<div class='boss'>";
-        record_html += "<div class='boss-title'><b>[BOSS] " + boss->GetBossName() + " " + boss->GetBossIcon() + "</b></div>";
+        record_html += "<div class='boss-title'><b>[BOSS] " + boss->GetBossName() + " " + GetBossImageTag(*boss, 18) + "</b></div>";
         record_html += "<div class='boss-record'>";
         record_html += boss->GetBossRecord(query_pid, is_public);
         record_html += "</div>";
@@ -526,12 +593,12 @@ inline pair<string, string> Board::GetSurroundingWalls(const lgtbot::PlayerID pi
     return make_pair(info, GetBoard(view, GetBoardOptions{.with_player = false, .with_ground = false}));
 }
 
-// [BOSS-邦邦] 周围墙壁信息
-inline pair<string, string> Board::GetBangBangSurroundingWalls(const int x, const int y) const
+// BOSS 周围墙壁信息（center：中心格显示的附着）
+inline pair<string, string> Board::GetBossSurroundingWalls(const int x, const int y, const AttachType center) const
 {
     GridMap view(1, false);
     view[0][0] = grid_map[x][y];
-    view[0][0].SetType(GridType::EMPTY).SetAttach(AttachType::BOMB);
+    view[0][0].SetType(GridType::EMPTY).SetAttach(center);
     string info;
     for (int d = 0; d < 4; ++d) {
         const Direct dir = static_cast<Direct>(d);

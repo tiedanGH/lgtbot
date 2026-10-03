@@ -25,6 +25,7 @@ bool RoundStage::MoveOneStep(Player& player, const Direct direction, lgtbot::Chi
         }
         return true;
     }
+    turn_record.moves++;    // [暴君]铁律：成功移动的步数
     sender << "[第 " << step << " 步] 向 " << dir_cn[static_cast<int>(direction)] << " 移动";
     return HandleGridInteraction(player, sender, multiple_mode);
 }
@@ -77,7 +78,7 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
         player.score.catch_score -= 100;
         Main().board.grid_map[player.x][player.y].SetAttach(AttachType::EMPTY);
         sender << prefix << GetRandomHint(bomb_hints) << "\n\n尝试移动时触发【炸弹】，被炸飞出局，失去行动能力！";
-        if (Global().PlayerNum() > 1) Global().Eliminate(player.pid);
+        Main().EliminatePlayer(player.pid);
         if (Main().Alive_() > 1) {
             sender << "\n\n剩余玩家捕捉目标顺位发生变更！\n";
             RefreshCatchOrder(sender);  // 捕捉顺位变更
@@ -124,6 +125,7 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
     /* ========== GridType ========== */
     // [逃生舱]
     if (grid.Type() == GridType::EXIT) {
+        turn_record.escaped = true;     // [暴君]铁律：乘坐逃生舱（含大乱斗）
         player.NewContentRecord("(逃生)", "escape");
         int exited = Main().board.exit_num - Main().board.TypeCount(GridType::EXIT);
         player.score.exit_score += Score::exit_order[exited];   // 逃生分
@@ -175,6 +177,7 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
         sound = Sound::NONE;
     }
     if (sound == Sound::SHASHA || sound == Sound::PAPA) {
+        if (!hide) turn_record.made_sound = true;   // [暴君]铁律：发出声响（含首次发声、被心跳掩盖）
         const bool is_shasha = (sound == Sound::SHASHA);
         const char* terrain_label = is_shasha ? "【树丛】" : "【" PAPA_STR "声】";
         const char* action_verb   = is_shasha ? "移动进入" : "移动发出";
@@ -250,15 +253,30 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
     return false;
 }
 
+// 捕捉对象：同格的捕捉目标优先，其次为同格被通缉的玩家（[暴君]通缉：可被所有玩家捕捉）
+std::optional<PlayerID> RoundStage::FindCatchVictim(const Player& player)
+{
+    const vector<PlayerID>& list = Main().board.player_map[player.x][player.y];
+    if (find(list.begin(), list.end(), player.target) != list.end()) return player.target;
+    for (const PlayerID pid : list) {
+        const Player& other = Main().board.players[pid];
+        if (pid == player.pid || other.out != 0) continue;
+        for (const auto& boss : Main().board.bosses) {
+            if (boss->IsWanted(other)) return pid;
+        }
+    }
+    return std::nullopt;
+}
+
 // 捕捉：坐标重合，玩家没有隐匿且未出局
 bool RoundStage::PlayerCatch(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
 {
-    vector<PlayerID> list = Main().board.player_map[player.x][player.y];
-    PlayerID t = player.target;
-
-    if (find(list.begin(), list.end(), t) == list.end() || hide || player.out != 0) {
+    const std::optional<PlayerID> victim = FindCatchVictim(player);
+    if (!victim.has_value() || hide || player.out != 0) {
         return false;
     }
+    const PlayerID t = *victim;
+    turn_record.caught_player = true;   // [暴君]铁律：捕捉过玩家
 
     active_stop = false;    // 捕捉成功不视为主动停止
     forced_stop = false;    // [谋定后动] 捕捉方照常获得墙壁信息
@@ -296,12 +314,16 @@ bool RoundStage::PlayerCatch(Player& player, lgtbot::ChildMsgSenderBase::MsgSend
 
     player.NewContentRecord("(捕捉)", "catch");
     Main().board.players[t].out = 1;
-    Global().Eliminate(t);
+    Main().EliminatePlayer(t);
     player.score.catch_score += 100;        // 抓人分
     Main().board.players[t].score.catch_score -= 100;
     player.achievement.recordCatch(Global().PlayerNum());   // 成就[嗜杀成性]辅助
 
     steal_coins();
+    // [BOSS] 捕捉后结算
+    for (const auto& boss : Main().board.bosses) {
+        boss->HandlePlayerCaught(player, Main().board.players[t], sender);
+    }
 
     if (Main().Alive_() > 1) {
         player.NewContentRecord("[传送]", "teleport");

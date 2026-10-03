@@ -53,6 +53,7 @@ const InitShortcut k_init_shortcuts[] = {
     // ===== BOSS：多个可同时生效 =====
     {"米诺陶斯",   [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, BOSS).push_back(BossType::MINOTAUR); }},
     {"邦邦",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, BOSS).push_back(BossType::BANGBANG); }},
+    {"暴君",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, BOSS).push_back(BossType::TYRANT); }},
 
     // ===== 其他配置 =====
     {"上家",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 捕捉目标) = Target::PREVIOUS; }},
