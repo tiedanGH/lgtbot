@@ -42,7 +42,9 @@ uint32_t Multiple(const CustomOptions& options) {
         return 0;
     return 2;
 }
-const MutableGenericOptions k_default_generic_options;
+const MutableGenericOptions k_default_generic_options{
+    .is_formal_{false},
+};
 
 // 规则文本：机制细节见 common/constants.h 的 rule_details，BOSS 规则见 actor/boss.h 各 BOSS 类的 k_rule
 const std::vector<RuleCommand> k_rule_commands = {
@@ -141,7 +143,7 @@ class MainStage : public MainGameStage<RoundStage>
     // 地图
     Board board;
 
-    // 多人全员停止/超时结束游戏判定
+    // 多人全员未移动且主动停止/超时结束游戏判定
     bool all_active_stop = true;
     // 无逃生舱最后生还胜利判定
     bool withoutE_win_ = false;
@@ -335,7 +337,7 @@ class MainStage : public MainGameStage<RoundStage>
                 if (all_eliminated) {
                     Global().Boardcast() << "所有玩家均被淘汰，游戏结束！";
                 } else if (all_active_stop) {
-                    Global().Boardcast() << "所有玩家均主动停止，游戏结束！";
+                    Global().Boardcast() << "所有玩家均主动停止且未进行移动，游戏结束！";
                 } else {
                     Global().Boardcast() << "玩家剩余 " + to_string(Alive_()) + " 人，游戏结束！";
                 }
@@ -802,8 +804,8 @@ class RoundStage : public SubGameStage<>
     CheckoutErrCode HandleStageOver()
     {
         Player& player = Main().board.players[currentPlayer];
-        // 回合结束始终检查捕捉（含[暴君]通缉的玩家）
-        if (FindCatchVictim(player).has_value() && !hide && player.out == 0) {
+        // 回合结束检查捕捉（含[暴君]通缉的玩家）；非点杀已捕捉过则跳过
+        if (!turn_record.caught_player && FindCatchVictim(player).has_value() && !hide && player.out == 0) {
             auto sender = Global().Boardcast();
             PlayerCatch(player, sender);
         }
@@ -817,8 +819,8 @@ class RoundStage : public SubGameStage<>
         Global().Boardcast() << "[" << currentPlayer.Get() << "号]玩家本回合的完整行动轨迹：\n" << player.move_record.GetMoveRecord(-1, true);
         // 记录历史行动轨迹
         player.all_record.push_back(player.move_record);
-        // 更新全员停止状态（全员停止/超时结束游戏）
-        if (!active_stop) Main().all_active_stop = false;
+        // 更新全员停止状态（全员未移动且主动停止/超时结束游戏）
+        if (!active_stop || turn_record.moves > 0) Main().all_active_stop = false;
         // 仅剩1玩家，游戏结束
         if ((Main().Alive_() == 1 && Global().PlayerNum() > 1) || (Main().Alive_() == 0 && Global().PlayerNum() == 1)) {
             AnnounceCoinGains();    // 提前结束也公示本回合金币

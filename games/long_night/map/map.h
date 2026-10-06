@@ -8,7 +8,22 @@ class UnitMaps {
     const int k_map_num = 12;
     const int k_exit_num = 4;
     const int k_special_num = 2;
-    static constexpr const char* k_event_mark = "？";
+    // 区块图鉴的格子图标标记
+    static constexpr const char* k_grow_mark = "？生长";      // [营养过剩] 可能长出树丛的空地
+    static constexpr const char* k_move_mark = "？移动";      // [怠惰的园丁] 将移到随机位置的树丛
+    static constexpr const char* k_rain_mark = "？雨天";      // [雨天小故事] 改为发出啪嗒声的陷阱、浆果丛
+    static constexpr const char* k_silence_mark = "✗静音";    // [静音] 不再发出声响的地形
+    // 特殊事件标记（静音模式下可被覆盖）
+    static bool IsEventMark(const string& content) { return content == k_grow_mark || content == k_move_mark || content == k_rain_mark; }
+    // 图标标记对应的图片名，不是图标标记时返回空
+    static string MarkImage(const string& content)
+    {
+        if (content == k_grow_mark) return "event_grow.png";
+        if (content == k_move_mark) return "event_move.png";
+        if (content == k_rain_mark) return "event_rain.png";
+        if (content == k_silence_mark) return "mode_silence.png";
+        return "";
+    }
 
     vector<pair<int, int>> pos = {
         {0, 0}, {0, 3}, {0, 6},
@@ -395,7 +410,7 @@ class UnitMaps {
                 for (int k = 0; k < 9; ++k) {
                     int i = k / 3, j = k % 3;
                     if (map.block[i][j].Type() == GridType::GRASS || map.block[i][j].Type() == GridType::BERRY)
-                        map.block[i][j].SetContent(k_event_mark);
+                        map.block[i][j].SetContent(k_move_mark);
                 }
             }
         };
@@ -461,13 +476,13 @@ class UnitMaps {
         return positions;
     }
 
-    // 特殊事件2——营养过剩：树丛和陷阱将额外向随机1个方向再次生成1个树丛
+    // 特殊事件2——营养过剩：树丛（浆果丛）和陷阱将额外向随机1个方向再次生成1个树丛
     void SpecialEvent2()
     {
         auto MarkMaps = [](auto& maps) {
             for (auto& map : maps) {
                 for (const auto& [i, j] : GrowablePositions(map.block)) {
-                    map.block[i][j].SetContent(k_event_mark);
+                    map.block[i][j].SetContent(k_grow_mark);
                 }
             }
         };
@@ -503,15 +518,18 @@ class UnitMaps {
         ProcessMaps(special_maps);
     }
 
-    // 特殊事件3——雨天小故事：地图中所有树丛变成水洼
+    // 特殊事件3——雨天小故事：地图中所有树丛变成水洼，陷阱和浆果丛会发出啪嗒声
     void SpecialEvent3()
     {
         auto ProcessMaps = [](auto& maps) {
             for (auto& map: maps) {
                 for (int k = 0; k < 9; ++k) {
                     int i = k / 3, j = k % 3;
-                    if (map.block[i][j].Type() == GridType::GRASS) {
-                        map.block[i][j].SetType(GridType::WATER);
+                    auto& grid = map.block[i][j];
+                    if (grid.Type() == GridType::GRASS) {
+                        grid.SetType(GridType::WATER);
+                    } else if ((grid.Type() == GridType::TRAP || grid.Type() == GridType::BERRY) && grid.GetContent().empty()) {
+                        grid.SetContent(k_rain_mark);
                     }
                 }
             }
@@ -523,7 +541,7 @@ class UnitMaps {
         ProcessMaps(all_special_maps);
     }
 
-    // 静音模式：为所有会发出声响的地形标记叉号
+    // 静音模式：为所有会发出声响的地形标记静音图标
     void MarkSilenceMode()
     {
         auto IsSoundGrid = [](const GridType type) {
@@ -536,10 +554,10 @@ class UnitMaps {
                 for (int k = 0; k < 9; ++k) {
                     int i = k / 3, j = k % 3;
                     if (!IsSoundGrid(map.block[i][j].Type())) continue;
-                    // 已有字母代号（传送门配对等）保持原样，特殊事件的问号标记则被叉号覆盖
+                    // 已有字母代号（传送门配对等）保持原样，特殊事件标记则被静音图标覆盖
                     const string content = map.block[i][j].GetContent();
-                    if (!content.empty() && content != k_event_mark) continue;
-                    map.block[i][j].SetContent("✗");
+                    if (!content.empty() && !IsEventMark(content)) continue;
+                    map.block[i][j].SetContent(k_silence_mark);
                 }
             }
         };

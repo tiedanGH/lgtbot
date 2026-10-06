@@ -25,7 +25,7 @@
 //            --outdir   ./build/blocks_md \
 //            --texture  classic \
 //            --silence  0
-//      可选参数：--texture classic（默认）/ retro / fresh；--silence 1 为声响地形标记叉号（静音模式预览）
+//      可选参数：--texture classic（默认）/ retro / fresh；--silence 1 为声响地形标记静音图标（静音模式预览）
 //   3. 批量渲染为 PNG（--width 需为 区块尺寸+14，见下方 BLOCK_PX 说明）
 //        for f in build/blocks_md/*.md; do
 //            ./build/markdown2image --input "$f" \
@@ -113,7 +113,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // [静音模式] 为所有声响地形标记叉号
+    // [静音模式] 为所有声响地形标记静音图标
     const bool silence = Arg(argc, argv, "--silence", "0") == "1";
 
     filesystem::create_directories(out_dir);

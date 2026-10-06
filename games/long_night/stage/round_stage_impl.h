@@ -25,7 +25,7 @@ bool RoundStage::MoveOneStep(Player& player, const Direct direction, lgtbot::Chi
         }
         return true;
     }
-    turn_record.moves++;    // [暴君]铁律：成功移动的步数
+    turn_record.moves++;    // 成功移动的步数（[暴君]铁律、全员未移动停止判定）
     sender << "[第 " << step << " 步] 向 " << dir_cn[static_cast<int>(direction)] << " 移动";
     return HandleGridInteraction(player, sender, multiple_mode);
 }
@@ -253,11 +253,11 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
     return false;
 }
 
-// 捕捉对象：同格的捕捉目标优先，其次为同格被通缉的玩家（[暴君]通缉：可被所有玩家捕捉）
+// 捕捉对象：同格的捕捉目标优先，其次为同格被通缉的玩家（[暴君]通缉：可被所有玩家捕捉）；已出局的玩家不会被捕捉
 std::optional<PlayerID> RoundStage::FindCatchVictim(const Player& player)
 {
     const vector<PlayerID>& list = Main().board.player_map[player.x][player.y];
-    if (find(list.begin(), list.end(), player.target) != list.end()) return player.target;
+    if (find(list.begin(), list.end(), player.target) != list.end() && Main().board.players[player.target].out == 0) return player.target;
     for (const PlayerID pid : list) {
         const Player& other = Main().board.players[pid];
         if (pid == player.pid || other.out != 0) continue;

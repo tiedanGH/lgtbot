@@ -24,7 +24,10 @@ inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& op
             }
             if (options.with_content) {
                 const string& content = grid.GetContent();
-                if (!content.empty()) {
+                if (const string image = UnitMaps::MarkImage(content); !image.empty()) {
+                    // 特殊事件/游戏模式 图标标记
+                    map.Get(x, y).SetContent("<img src=\"" + ToFileUrl(image_path_ + "badges/" + image) + "\" style=\"width:34px; height:34px; vertical-align:middle;\">");
+                } else if (!content.empty()) {
                     map.Get(x, y).SetContent(GetColoredMark(content, grid.Type(), grid.Attach()));
                 }
             } else if (options.with_player) {
@@ -40,9 +43,9 @@ inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& op
                         player_marks += "<br>";
                     }
                 }
-                // 根据地形改变玩家标记颜色
+                // 根据地形改变玩家标记颜色（player-mark：序号描边）
                 if (!player_marks.empty()) {
-                    map.Get(x, y).SetContent(GetColoredMark(player_marks, grid.Type(), grid.Attach()));
+                    map.Get(x, y).SetContent("<span class=\"player-mark\">" + GetColoredMark(player_marks, grid.Type(), grid.Attach()) + "</span>");
                 }
             }
             // 调试：测试地形文字颜色
@@ -671,7 +674,7 @@ inline string Board::GetColoredMark(const string& content, const GridType type, 
     switch (type) {
         case GridType::PORTAL:  color = "#FFFF00"; break;
         case GridType::ONEWAYPORTAL:  color = "#FFF8E7"; break;
-        // case GridType::HEAT:    color = "#00FFFF"; break;
+        case GridType::HEAT:    color = "#00FFFF"; break;
         default:;
     }
     switch (attach) {
@@ -718,6 +721,12 @@ inline string Board::GetBoardStyle()
     .corner {
         width: )" + to_string(WALL_SIZE) + R"(px;
         height: )" + to_string(WALL_SIZE) + R"(px;
+    }
+    .player-mark b {
+        text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 3px #fff;
+    }
+    .player-mark font b {
+        text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 3px #000;
     }
 </style>
 )";

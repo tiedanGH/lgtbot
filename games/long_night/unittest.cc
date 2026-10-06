@@ -36,6 +36,7 @@ GAME_TEST(3, all_active_stop1)
     ASSERT_PUB_MSG(CONTINUE, 1, "停止");
     ASSERT_PUB_MSG(CHECKOUT, 2, "停止");
 
+    ASSERT_FINISHED(true);
     ASSERT_SCORE(0, 0, 0);
 }
 
@@ -47,6 +48,7 @@ GAME_TEST(3, all_active_stop2)
     ASSERT_TIMEOUT(CONTINUE);
     ASSERT_PUB_MSG(CHECKOUT, 2, "停止");
 
+    ASSERT_FINISHED(true);
     ASSERT_SCORE(0, 0, 0);
 }
 
@@ -58,7 +60,21 @@ GAME_TEST(3, all_active_stop3)
     ASSERT_TIMEOUT(CONTINUE);
     ASSERT_TIMEOUT(CHECKOUT);
 
+    ASSERT_FINISHED(true);
     ASSERT_SCORE(0, 0, 0);
+}
+
+GAME_TEST(3, all_active_stop_after_move)
+{
+    START_GAME();
+
+    if (LGTBOT_STAGE_ERR_UINT_(this->PublicRequest(0, "上")) == LGTBOT_STAGE_ERR_UINT_(OK)) {
+        ASSERT_PUB_MSG(CONTINUE, 0, "停止");
+    }
+    ASSERT_PUB_MSG(CONTINUE, 1, "停止");
+    ASSERT_PUB_MSG(CHECKOUT, 2, "停止");
+
+    ASSERT_FINISHED(false);
 }
 
 
