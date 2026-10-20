@@ -115,12 +115,13 @@ static std::mt19937 MakeSubRng(std::mt19937& seed_generator)
 
 // ==================== Forward Declarations ====================
 
+class SkinStage;
 class RoundStage;
 class SelectStage;
 
 // ==================== MainStage ====================
 
-class MainStage : public MainGameStage<RoundStage, SelectStage>
+class MainStage : public MainGameStage<SkinStage, RoundStage, SelectStage>
 {
   public:
     MainStage(StageUtility&& utility)
@@ -146,6 +147,7 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
         pool2_rng_ = MakeSubRng(seed_generator);
         battle_rng_ = MakeSubRng(seed_generator);
         selection_order_rng_ = MakeSubRng(seed_generator);
+        skin_rng_ = MakeSubRng(seed_generator);
 
         // Special event
         int event_opt = GAME_OPTION(事件);
@@ -168,10 +170,15 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
             special_event_ = static_cast<SpecialEvent>(event_opt - 1);
         }
 
-        // Create players
+        // Create players。「自选」皮肤选择阶段再按各自的选择重建棋盘
         const int32_t init_hp = static_cast<int32_t>(GAME_OPTION(血量));
+        const int skin_opt = GAME_OPTION(皮肤);
         for (uint64_t i = 0; i < Global().PlayerNum(); ++i) {
-            players_.emplace_back(Global().ResourceDir(), init_hp);
+            const SkinInfo& skin =
+                skin_opt == k_skin_random      ? k_skins[RandInt(skin_rng_, 0, static_cast<uint32_t>(k_skins.size() - 1))] :
+                skin_opt == k_skin_self_select ? DefaultSkin() :
+                                                 k_skins[skin_opt];
+            players_.emplace_back(Global().ResourceDir(), skin, init_hp);
         }
 
         // Generate card pools
@@ -204,6 +211,7 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
     }
 
     virtual void FirstStageFsm(SubStageFsmSetter setter) override;
+    virtual void NextStageFsm(SkinStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
     virtual void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
     virtual void NextStageFsm(SelectStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override;
 
@@ -281,6 +289,7 @@ class MainStage : public MainGameStage<RoundStage, SelectStage>
     std::mt19937 pool2_rng_;
     std::mt19937 battle_rng_;
     std::mt19937 selection_order_rng_;
+    std::mt19937 skin_rng_;
     std::string seed_str_;
 
     // Battle state
@@ -317,14 +326,40 @@ inline std::string MainStage::GetName(const std::string& x)
     return ret;
 }
 
+// 写进 HTML 块的文字不经过 markdown 渲染，昵称中的 < > & 等需转义
+static std::string EscapeHtml(const std::string& str)
+{
+    std::string ret;
+    for (const char c : str) {
+        switch (c) {
+            case '&': ret += "&amp;"; break;
+            case '<': ret += HTML_ESCAPE_LT; break;
+            case '>': ret += HTML_ESCAPE_GT; break;
+            case '"': ret += "&quot;"; break;
+            default: ret += c;
+        }
+    }
+    return ret;
+}
+
 // 昵称下只保留一行「积分：XXX　　血量：XXX」（与开放蜂巢云顶模式一致）。
 // 「有1吗」的额外分已计入积分总值，不再单独展示明细；连线数量也不展示。
 inline void MainStage::SetPlayerBoard(html::Table& table, const int pos, const PlayerID pid, const bool isEliminated)
 {
-    std::string board = "### " + Global().PlayerAvatar(pid, 40) + "&nbsp;&nbsp; " + Global().PlayerName(pid) +
-                        "\n\n### " HTML_COLOR_FONT_HEADER(green) "积分：" + std::to_string(players_[pid].TotalScore()) +
-                        HTML_FONT_TAIL HTML_COLOR_FONT_HEADER(#8B0000) "　　血量：" + std::to_string(players_[pid].hp_) +
-                        HTML_FONT_TAIL "\n\n" + players_[pid].comb_->ToHtml();
+    const CloudComb& comb = *players_[pid].comb_;
+    const std::string score_line = HTML_COLOR_FONT_HEADER(green) "积分：" + std::to_string(players_[pid].TotalScore()) +
+                                   HTML_FONT_TAIL HTML_COLOR_FONT_HEADER(#8B0000) "　　血量：" +
+                                   std::to_string(players_[pid].hp_) + HTML_FONT_TAIL;
+    std::string board;
+    if (comb.Skin().header_on_board) {
+        board = "<h3 style=\"position:relative;z-index:1;\">" + Global().PlayerAvatar(pid, 40) + "&nbsp;&nbsp; " +
+                EscapeHtml(Global().PlayerName(pid)) + "</h3><h3 style=\"position:relative;z-index:1;"
+                "text-shadow:0 0 3px #fff,0 0 3px #fff;\">" + score_line + "</h3><div style=\"margin-top:-" +
+                std::to_string(comb.Skin().origin_y) + "px;\">" + comb.ToHtml() + "</div>";
+    } else {
+        board = "### " + Global().PlayerAvatar(pid, 40) + "&nbsp;&nbsp; " + Global().PlayerName(pid) + "\n\n### " +
+                score_line + "\n\n" + comb.ToHtml();
+    }
     if (isEliminated) {
         table.Get(pos / 2, pos % 2).SetColor("#C0C0C0").SetContent(board);
     } else {
@@ -591,6 +626,101 @@ inline AreaCard MainStage::DrawFromPool1_()
     return *(it_++);
 }
 
+// ==================== SkinStage ====================
+
+class SkinStage : public SubGameStage<>
+{
+  public:
+    SkinStage(MainStage& main_stage)
+            : StageFsm(main_stage, "皮肤选择阶段",
+                MakeStageCommand(*this, "按序号选择本局棋盘皮肤", &SkinStage::ChooseByIndex_,
+                    ArithChecker<uint32_t>(1, static_cast<uint32_t>(k_skins.size()), "序号")),
+                MakeStageCommand(*this, "按名称选择本局棋盘皮肤", &SkinStage::ChooseByName_,
+                    AlterChecker<int>(MakeSkinNameMap())),
+                MakeStageCommand(*this, "查看全部皮肤预览", &SkinStage::Info_, VoidChecker("赛况")))
+    {
+    }
+
+    virtual void OnStageBegin() override
+    {
+        Global().Boardcast() << "请输入序号或名称选择盘面皮肤，超时未选择将使用默认皮肤";
+        Global().Boardcast() << Markdown(PreviewHtml_(), k_preview_width);
+        Global().StartTimer(GAME_OPTION(局时));
+    }
+
+  private:
+    static constexpr uint32_t k_preview_columns = 5;
+    static constexpr uint32_t k_preview_width = 1300;
+
+    AtomReqErrCode Choose_(const PlayerID pid, ChildMsgSenderBase& reply, const SkinInfo& skin)
+    {
+        if (Global().IsReady(pid)) {
+            reply() << "[错误] 您已经选择过皮肤";
+            return StageErrCode::FAILED;
+        }
+        Main().players_[pid].comb_ = std::make_unique<CloudComb>(Global().ResourceDir(), skin);
+        reply() << "已选择皮肤「" << std::string(skin.name) << "」";
+        return StageErrCode::READY;
+    }
+
+    AtomReqErrCode ChooseByIndex_(const PlayerID pid, const bool is_public, ChildMsgSenderBase& reply, const uint32_t index)
+    {
+        return Choose_(pid, reply, k_skins[index - 1]);
+    }
+
+    AtomReqErrCode ChooseByName_(const PlayerID pid, const bool is_public, ChildMsgSenderBase& reply, const int skin_index)
+    {
+        return Choose_(pid, reply, k_skins[skin_index]);
+    }
+
+    AtomReqErrCode Info_(const PlayerID pid, const bool is_public, ChildMsgSenderBase& reply)
+    {
+        reply() << Markdown(PreviewHtml_(), k_preview_width);
+        return StageErrCode::OK;
+    }
+
+    // 每个皮肤用真实的棋盘渲染摆上同一组示例砖块（三种组合 + 癞子），缩小一半后排成多列；整格画布皮肤把标题嵌在顶部
+    std::string PreviewHtml_() const
+    {
+        static const std::array<std::pair<uint32_t, AreaCard>, 7> k_samples = {{
+            {1, AreaCard(3, 1, 2)}, {3, AreaCard(4, 5, 6)}, {8, AreaCard(8, 9, 7)}, {10, AreaCard()},
+            {12, AreaCard(8, 9, 7)}, {17, AreaCard(4, 5, 6)}, {19, AreaCard(3, 1, 2)},
+        }};
+        html::Table table((k_skins.size() + k_preview_columns - 1) / k_preview_columns, k_preview_columns);
+        table.SetTableStyle("align=\"center\" cellpadding=\"8\" cellspacing=\"0\"");
+        table.SetRowStyle("align=\"center\" valign=\"bottom\"");
+        for (size_t i = 0; i < k_skins.size(); ++i) {
+            CloudComb comb(Global().ResourceDir(), k_skins[i]);
+            for (const auto& [idx, card] : k_samples) {
+                comb.Fill(idx, card);
+            }
+            const std::string title = std::to_string(i + 1) + ". " + std::string(k_skins[i].name);
+            const std::string board = "<div style=\"zoom:0.5;\">" + comb.ToHtml() + "</div>";
+            table.Get(i / k_preview_columns, i % k_preview_columns).SetContent(k_skins[i].header_on_board ?
+                "<div style=\"position:relative;display:inline-block;vertical-align:top;\">" + board +
+                    "<div style=\"position:absolute;left:0;right:0;top:4px;text-align:center;font-size:18px;"
+                    "font-weight:bold;text-shadow:0 0 3px #fff,0 0 3px #fff;\">" + title + "</div></div>" :
+                "<div style=\"margin:14px 0 4px 0;font-size:18px;font-weight:bold;\">" + title + "</div>" + board);
+        }
+        return "<style>body{margin:0;}</style>" + GetStyle(Global().ResourceDir()) + table.ToString();
+    }
+
+    virtual CheckoutErrCode OnPlayerLeave(const PlayerID pid) override
+    {
+        Main().player_leave_[pid] = true;
+        return StageErrCode::CONTINUE;
+    }
+
+    virtual CheckoutErrCode OnStageTimeout() override { return StageErrCode::CHECKOUT; }
+
+    virtual CheckoutErrCode OnStageOver() override { return StageErrCode::CHECKOUT; }
+
+    virtual AtomReqErrCode OnComputerAct(const PlayerID pid, ChildMsgSenderBase& reply) override
+    {
+        return StageErrCode::READY;
+    }
+};
+
 // ==================== RoundStage ====================
 
 class RoundStage : public SubGameStage<>
@@ -779,7 +909,7 @@ class RoundStage : public SubGameStage<>
             sender() << Markdown(ForeseeCardHtml_(), 64);
         } else {
             const std::string style = "<style>body{margin:0;}</style>" + GetStyle(Global().ResourceDir());
-            sender() << Markdown(style + shared_card_.ToHtml(Global().ResourceDir()), 64);
+            sender() << Markdown(style + shared_card_.ToHtml(Global().ResourceDir(), DefaultSkin()), 64);
         }
     }
 
@@ -793,7 +923,7 @@ class RoundStage : public SubGameStage<>
             reply() << Markdown(ForeseeCardHtml_(), 64);
         } else {
             const std::string style = "<style>body{margin:0;}</style>" + GetStyle(Global().ResourceDir());
-            reply() << Markdown(style + shared_card_.ToHtml(Global().ResourceDir()), 64);
+            reply() << Markdown(style + shared_card_.ToHtml(Global().ResourceDir(), DefaultSkin()), 64);
         }
         return StageErrCode::OK;
     }
@@ -808,9 +938,9 @@ class RoundStage : public SubGameStage<>
             "</svg>";
         html::Table card_table(1, 3);
         card_table.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" ");
-        card_table.Get(0, 0).SetContent(shared_card_.ToHtml(img_path));
+        card_table.Get(0, 0).SetContent(shared_card_.ToHtml(img_path, DefaultSkin()));
         card_table.Get(0, 1).SetContent(arrow_svg);
-        card_table.Get(0, 2).SetContent(Main().next_card_->ToHtml(img_path));
+        card_table.Get(0, 2).SetContent(Main().next_card_->ToHtml(img_path, DefaultSkin()));
         return style + card_table.ToString();
     }
 
@@ -823,7 +953,7 @@ class RoundStage : public SubGameStage<>
         size_t col = 0;
         for (const auto& [pid, card] : initial_cards_) {
             card_table.Get(0, col).SetContent(Global().PlayerAvatar(pid, 30));
-            card_table.Get(1, col).SetContent(card.ToHtml(img_path));
+            card_table.Get(1, col).SetContent(card.ToHtml(img_path, DefaultSkin()));
             col++;
         }
         return style + card_table.ToString();
@@ -1009,7 +1139,7 @@ class SelectStage : public SubGameStage<>
         const std::string img_path = Global().ResourceDir();
         for (size_t i = 0; i < tmp_cards_.size(); ++i) {
             card_table.Get(0, i * 2).SetContent(std::to_string(i + 1) + ".");
-            card_table.Get(0, i * 2 + 1).SetContent(tmp_cards_[i].ToHtml(img_path));
+            card_table.Get(0, i * 2 + 1).SetContent(tmp_cards_[i].ToHtml(img_path, DefaultSkin()));
         }
         const std::string style = "<style>body{margin:0;}</style>" + GetStyle(Global().ResourceDir());
         return style + avatar_table.ToString() + card_table.ToString();
@@ -1058,6 +1188,11 @@ void MainStage::StartNewRound_(SubStageFsmSetter& setter)
 {
     round_++;
 
+    // 游戏正式开始时播报特殊事件，皮肤选择之后
+    if (round_ == 1) {
+        Global().Boardcast() << "本局特殊事件：" << SpecialEventName(special_event_);
+    }
+
     // Check if card pool 1 is exhausted — end game
     if (it_ == cards_.end() && !IsSelectionRound(round_) && round_ > 1) {
         Global().Boardcast() << "卡池耗尽，游戏结束！";
@@ -1087,9 +1222,15 @@ void MainStage::StartNewRound_(SubStageFsmSetter& setter)
 
 void MainStage::FirstStageFsm(SubStageFsmSetter setter)
 {
-    // Announce special event
-    Global().Boardcast() << "本局特殊事件：" << SpecialEventName(special_event_);
+    if (GAME_OPTION(皮肤) == k_skin_self_select) {
+        setter.Emplace<SkinStage>(*this);
+        return;
+    }
+    StartNewRound_(setter);
+}
 
+void MainStage::NextStageFsm(SkinStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter)
+{
     StartNewRound_(setter);
 }
 

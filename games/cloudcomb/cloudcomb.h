@@ -16,6 +16,7 @@
 #include <numeric>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "utility/html.h"
@@ -113,6 +114,121 @@ inline std::map<std::string, SelectOrder> MakeSelectOrderOptionMap()
     return {{"随机", SelectOrder::随机}, {"顺位", SelectOrder::顺位}};
 }
 
+// ==================== Skin ====================
+
+// 感谢星星提供的坐标定位数据和群友提供的皮肤素材：
+// - 拼装：沿用原版表格棋盘（数字格 + 墙体），连成线时墙体点亮
+// - 背景：整张 board.png 作为棋盘底图，砖块按坐标表绝对定位，无连线特效
+enum class SkinStyle { 拼装, 背景 };
+
+// 砖块素材。背景皮肤的文件夹与原始皮肤一致，拼装皮肤沿用 lgtbot 命名：
+// - 单线：card.png 依次叠上 d1、d2、d0 三张单线数字图；癞子背景皮肤为 card.png + 0.png，拼装皮肤为 card_any.png
+// - 完整：每种砖块一张整图；背景皮肤为 XYZ.png、癞子 000.png，拼装皮肤为 card_XYZ.png、癞子 card_any.png
+enum class TileStyle { 单线, 完整 };
+
+// 「背景」皮肤的砖块坐标表：下标为位置 1~19，值为砖块左上角在棋盘网格内的 {x, y}
+using SkinPositions = std::array<std::array<int32_t, 2>, 20>;
+
+// 五列网格：每格 64px，相邻两列纵向错开 32px
+inline constexpr SkinPositions k_grid_positions = {{
+    {0, 0},
+    {64, 128}, {64, 192}, {64, 256},
+    {128, 96}, {128, 160}, {128, 224}, {128, 288},
+    {192, 64}, {192, 128}, {192, 192}, {192, 256}, {192, 320},
+    {256, 96}, {256, 160}, {256, 224}, {256, 288},
+    {320, 128}, {320, 192}, {320, 256},
+}};
+
+// 六边形格：78px 的六边形砖块，按蜂巢排布
+inline constexpr SkinPositions k_hexagon_positions = {{
+    {0, 0},
+    {74, 121}, {74, 185}, {74, 249},
+    {129, 89}, {129, 153}, {129, 217}, {129, 281},
+    {185, 57}, {185, 121}, {185, 185}, {185, 249}, {185, 313},
+    {240, 89}, {240, 153}, {240, 217}, {240, 281},
+    {295, 121}, {295, 185}, {295, 249},
+}};
+
+struct SkinInfo
+{
+    std::string_view id;            // resource/skin/ 下的目录名；默认皮肤在 resource 根目录
+    std::string_view name;          // 显示名，也是自选阶段可输入的名称
+    SkinStyle style;
+    TileStyle tiles = TileStyle::完整;
+
+    // 仅「背景」皮肤使用
+    int32_t board_width = 448;      // board.png 尺寸
+    int32_t board_height = 448;
+    int32_t origin_x = 0;           // 坐标表原点在 board.png 中的位置
+    int32_t origin_y = 0;
+    int32_t tile_size = 64;
+    const SkinPositions* positions = &k_grid_positions;
+    bool header_on_board = false;   // board.png 即整格画布：玩家昵称和积分行也画在画布顶部
+};
+
+// 皮肤列表：下标即自选阶段的序号 - 1
+inline constexpr auto k_skins = std::to_array<SkinInfo>({
+    {.id = "", .name = "默认", .style = SkinStyle::拼装, .tiles = TileStyle::单线},
+    {.id = "pink", .name = "可爱粉", .style = SkinStyle::拼装},
+    {.id = "green", .name = "环保绿", .style = SkinStyle::拼装},
+    {.id = "gold", .name = "奢华金", .style = SkinStyle::背景},
+    {.id = "hexagon", .name = "六边形", .style = SkinStyle::背景, .tile_size = 78, .positions = &k_hexagon_positions},
+    {.id = "troll", .name = "愚人节涂鸦", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "universe", .name = "暗黑宇宙", .style = SkinStyle::背景},
+    {.id = "blackhole", .name = "黑洞", .style = SkinStyle::背景, .tile_size = 78, .positions = &k_hexagon_positions},
+    {.id = "hexa_universe", .name = "六重宇宙", .style = SkinStyle::背景, .tile_size = 78, .positions = &k_hexagon_positions},
+    {.id = "kuromi", .name = "酷洛米", .style = SkinStyle::背景},
+    {.id = "capoo", .name = "咖波", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "kochou_shinobu", .name = "蝴蝶忍", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "prince", .name = "小王子", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "komeji_koishi", .name = "古明地恋", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "flower_world", .name = "花花世界", .style = SkinStyle::背景},
+    {.id = "minimalism", .name = "极简主义", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "wish", .name = "愿你一世平安", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "hoshino_ai", .name = "星野爱", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+    {.id = "sponge", .name = "海绵宝宝", .style = SkinStyle::背景},
+    {.id = "gem", .name = "牛皮纸宝石", .style = SkinStyle::背景},
+    {.id = "pcb", .name = "工业革命", .style = SkinStyle::背景},
+    {.id = "cube", .name = "立方体", .style = SkinStyle::背景},
+    {.id = "treasure", .name = "藏宝图", .style = SkinStyle::背景},
+    {.id = "firefly", .name = "萤火虫", .style = SkinStyle::背景},
+    {.id = "mech", .name = "未来机甲", .style = SkinStyle::背景, .origin_y = 15},
+    {.id = "rainbow_cat", .name = "彩虹猫猫教", .style = SkinStyle::背景, .tiles = TileStyle::单线, .board_width = 580, .board_height = 510, .origin_x = 65, .origin_y = 61, .header_on_board = true},
+    {.id = "easter_egg", .name = "彩蛋", .style = SkinStyle::背景},
+    {.id = "year2023", .name = "2023新年", .style = SkinStyle::背景},
+    {.id = "year2024", .name = "2024新年", .style = SkinStyle::背景},
+    {.id = "bronze", .name = "青铜", .style = SkinStyle::背景, .tiles = TileStyle::单线},
+});
+
+inline const SkinInfo& DefaultSkin() { return k_skins.front(); }
+
+// 皮肤素材目录（以 / 结尾）
+inline std::string SkinImagePath(const std::string& resource_dir, const SkinInfo& skin)
+{
+    return skin.id.empty() ? resource_dir : resource_dir + "skin/" + std::string(skin.id) + "/";
+}
+
+// 「皮肤」选项的两个特殊取值；其余取值为 k_skins 的下标（全员使用该皮肤）
+inline constexpr int k_skin_self_select = -1;
+inline constexpr int k_skin_random = -2;
+
+inline std::map<std::string, int> MakeSkinNameMap()
+{
+    std::map<std::string, int> m;
+    for (size_t i = 0; i < k_skins.size(); ++i) {
+        m.emplace(k_skins[i].name, static_cast<int>(i));
+    }
+    return m;
+}
+
+inline std::map<std::string, int> MakeSkinOptionMap()
+{
+    auto m = MakeSkinNameMap();
+    m.emplace("自选", k_skin_self_select);
+    m.emplace("随机", k_skin_random);
+    return m;
+}
+
 class CloudComb;  // forward-declare (Wall/Area befriend it)
 
 // ==================== Direction System ====================
@@ -146,15 +262,29 @@ class AreaCard
 
     bool IsWild() const { return points_[0] == 10 && points_[1] == 10 && points_[2] == 10; }
 
-    // HTML rendering: card.png base + 3 directional number overlays
-    std::string ToHtml(const std::string& image_path) const
+    // 砖块自底向上的图层素材名，命名规则见 TileStyle
+    std::vector<std::string> Layers(const SkinInfo& skin) const
     {
-        std::string div = "<div class=\"brick\"><img src=\"file:///" + image_path + "card.png\">";
-        div += "<img src=\"file:///" + image_path + ImageNameForDirect_(Direct::垂直) + ".png\">";
-        div += "<img src=\"file:///" + image_path + ImageNameForDirect_(Direct::右上) + ".png\">";
-        div += "<img src=\"file:///" + image_path + ImageNameForDirect_(Direct::左上) + ".png\">";
-        div += "</div>";
-        return div;
+        const auto digit = [this](const uint32_t dir) { return std::to_string(points_[dir]); };
+        if (skin.style == SkinStyle::拼装 && IsWild()) {
+            return {"card_any"};
+        }
+        if (skin.tiles == TileStyle::单线) {
+            return IsWild() ? std::vector<std::string>{"card", "0"} :
+                              std::vector<std::string>{"card", digit(1), digit(2), digit(0)};
+        }
+        const std::string xyz = IsWild() ? "000" : digit(0) + digit(1) + digit(2);
+        return {skin.style == SkinStyle::拼装 ? "card_" + xyz : xyz};
+    }
+
+    // 64x64 的砖块 HTML，各图层叠放在同一位置
+    std::string ToHtml(const std::string& image_path, const SkinInfo& skin) const
+    {
+        std::string div = "<div class=\"brick\">";
+        for (const auto& layer : Layers(skin)) {
+            div += "<img src=\"file:///" + image_path + layer + ".png\">";
+        }
+        return div + "</div>";
     }
 
     // Display name for broadcast messages
@@ -174,20 +304,6 @@ class AreaCard
     bool operator==(const AreaCard& other) const { return points_ == other.points_; }
 
   private:
-    std::string ImageNameForDirect_(Direct direct) const
-    {
-        int32_t val = points_[static_cast<uint32_t>(direct)];
-        if (val == 10) {
-            switch (direct) {
-                case Direct::垂直: return "Xv";
-                case Direct::左上: return "Xl";
-                case Direct::右上: return "Xr";
-            }
-            return "";
-        }
-        return std::to_string(val);
-    }
-
     std::array<int32_t, k_direct_max> points_;
 };
 
@@ -281,7 +397,9 @@ struct ScoreResult
 class CloudComb
 {
   public:
-    CloudComb(std::string image_path) : image_path_(std::move(image_path)), table_(k_max_row, k_max_column)
+    // 表格棋盘对所有皮肤都会构建（Area / Wall 持有其中格子的引用）；「背景」皮肤只是不渲染它
+    CloudComb(const std::string& resource_dir, const SkinInfo& skin)
+        : image_path_(SkinImagePath(resource_dir, skin)), skin_(skin), table_(k_max_row, k_max_column)
     {
         table_.SetTableStyle(" align=\"center\" cellpadding=\"0\" cellspacing=\"0\" ");
 
@@ -377,7 +495,8 @@ class CloudComb
 
     int32_t BaseScore() const { return base_score_; }
     uint32_t LineCount() const { return line_count_; }
-    std::string ToHtml() const { return table_.ToString(); }
+    const SkinInfo& Skin() const { return skin_; }
+    std::string ToHtml() const { return skin_.style == SkinStyle::拼装 ? table_.ToString() : BackgroundHtml_(); }
 
     std::string Image_(std::string name) const { return "![](file:///" + image_path_ + std::move(name) + ".png)"; }
 
@@ -388,7 +507,28 @@ class CloudComb
 
     std::string CardHtml_(const AreaCard& card) const
     {
-        return card.ToHtml(image_path_);
+        return card.ToHtml(image_path_, skin_);
+    }
+
+    // 「背景」皮肤：board.png 做底图，砖块按皮肤坐标表绝对定位
+    std::string BackgroundHtml_() const
+    {
+        const auto px = [](const int32_t v) { return std::to_string(v) + "px"; };
+        std::string html = "<div style=\"position:relative;width:" + px(skin_.board_width) + ";height:" +
+                           px(skin_.board_height) + ";\"><img src=\"file:///" + image_path_ +
+                           "board.png\" style=\"position:absolute;left:0;top:0;\">";
+        for (uint32_t idx = 1; idx < areas_.size(); ++idx) {
+            const auto& card = areas_[idx].card_;
+            if (!card.has_value()) continue;
+            const auto& [x, y] = (*skin_.positions)[idx];
+            const std::string style = ".png\" style=\"position:absolute;left:" + px(skin_.origin_x + x) + ";top:" +
+                                      px(skin_.origin_y + y) + ";width:" + px(skin_.tile_size) + ";height:" +
+                                      px(skin_.tile_size) + ";\">";
+            for (const auto& layer : card->Layers(skin_)) {
+                html += "<img src=\"file:///" + image_path_ + layer + style;
+            }
+        }
+        return html + "</div>";
     }
 
     bool IsValid_(const Coordinate coordinate) const
@@ -492,6 +632,7 @@ class CloudComb
     }
 
     const std::string image_path_;
+    const SkinInfo& skin_;
     std::vector<Area> areas_;
     std::map<Coordinate, Wall> walls_;
     html::Table table_;
@@ -503,8 +644,8 @@ class CloudComb
 
 struct Player
 {
-    Player(std::string resource_path, int32_t init_hp = 150)
-        : comb_(new CloudComb(std::move(resource_path)))
+    Player(const std::string& resource_dir, const SkinInfo& skin, const int32_t init_hp)
+        : comb_(new CloudComb(resource_dir, skin))
         , hp_(init_hp)
         , base_score_(0)
         , valuable_one_bonus_(0)

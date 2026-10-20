@@ -4,6 +4,9 @@
 //
 // This file was generated with the assistance of Claude Code (claude.ai/code).
 
+#include <filesystem>
+#include <set>
+
 #include "game_framework/unittest_base.h"
 
 namespace lgtbot {
@@ -13,6 +16,7 @@ namespace GAME_MODULE_NAME {
 // 注：MainStage::PlayerScore 由「计分」选项决定返回值——排名模式返回淘汰名次分，
 // 分数模式返回玩家最终总分。本文件所有用例都在开局前设置「计分 分数」，
 // 因此 ASSERT_SCORE 断言的是玩家的盘面总分（含「有1吗」加成）。
+// 「皮肤」默认为自选，除专门测试皮肤的用例外都设置「皮肤 默认」跳过该阶段。
 
 // ============================================================================
 // 1. 开局校验
@@ -21,11 +25,13 @@ namespace GAME_MODULE_NAME {
 // 少于 2 人时 AdaptOptions 应拒绝开局
 GAME_TEST(1, one_player_rejected) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_FALSE(StartGame());
 }
 
 GAME_TEST(2, two_player_start_ok) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
     ASSERT_TRUE(StartGame());
@@ -39,6 +45,7 @@ GAME_TEST(2, two_player_start_ok) {
 // 重复设置应失败
 GAME_TEST(2, set_twice_failed) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
     ASSERT_TRUE(StartGame());
@@ -49,6 +56,7 @@ GAME_TEST(2, set_twice_failed) {
 // 位置超出 0-19 的范围时参数校验不通过，匹配不到任何指令 → NOT_FOUND
 GAME_TEST(2, set_out_of_range_failed) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
     ASSERT_TRUE(StartGame());
@@ -58,6 +66,7 @@ GAME_TEST(2, set_out_of_range_failed) {
 // 弃牌（位置 0）与放置都能让回合正常结束；第一回合放 1 张牌不可能成线，双方均为 0 分
 GAME_TEST(2, discard_and_place_first_round) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
     ASSERT_TRUE(StartGame());
@@ -69,6 +78,7 @@ GAME_TEST(2, discard_and_place_first_round) {
 // 覆盖放置：同一位置连续放两回合，盘面仍只有 1 张牌 → 不可能成线
 GAME_TEST(2, overwrite_same_position) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
     ASSERT_TRUE(StartGame());
@@ -85,6 +95,7 @@ GAME_TEST(2, overwrite_same_position) {
 #define AUTO_PLAY_FINISH_TEST(player_num, test_name, hp_option, event_option, max_steps) \
 GAME_TEST(player_num, test_name) { \
     ASSERT_PUB_MSG(OK, 0, "计分 分数"); \
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认"); \
     ASSERT_PUB_MSG(OK, 0, "种子 test"); \
     ASSERT_PUB_MSG(OK, 0, "事件 " event_option); \
     ASSERT_PUB_MSG(OK, 0, "血量 " hp_option); \
@@ -119,6 +130,7 @@ AUTO_PLAY_FINISH_TEST(2, event_april_fool,   "500", "？？？",       600)
 // 4 人 + 随机事件：不指定事件时走随机分支
 GAME_TEST(4, four_player_random_event) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_TRUE(StartGame());
     for (int i = 0; i < 400 && !this->main_stage_->IsOver(); ++i) this->TimeoutRequest_();
@@ -134,6 +146,7 @@ GAME_TEST(4, four_player_random_event) {
 // 顺位模式下平局按开局玩家编号升序，应当由 0 号玩家先选、1 号玩家此时无法选牌。
 GAME_TEST(2, select_order_sequential_tie_breaks_by_player_id) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "选牌顺序 顺位");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
@@ -154,6 +167,7 @@ GAME_TEST(2, select_order_sequential_tie_breaks_by_player_id) {
 // 顺位模式的多人局：验证选项在人数更多、血量更低（会发生淘汰）时也能跑完整局
 GAME_TEST(4, four_player_select_order_sequential) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "选牌顺序 顺位");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
@@ -173,6 +187,7 @@ GAME_TEST(4, four_player_select_order_sequential) {
 
 GAME_TEST(2, baseline_auto_play_sequential_deal) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "选牌顺序 顺位");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
@@ -185,6 +200,7 @@ GAME_TEST(2, baseline_auto_play_sequential_deal) {
 
 GAME_TEST(2, baseline_auto_play_random_deal) {
     ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 默认");
     ASSERT_PUB_MSG(OK, 0, "选牌顺序 随机");
     ASSERT_PUB_MSG(OK, 0, "种子 test");
     ASSERT_PUB_MSG(OK, 0, "事件 无");
@@ -194,6 +210,114 @@ GAME_TEST(2, baseline_auto_play_random_deal) {
     ASSERT_FINISHED(true);
     ASSERT_SCORE(6, 15);
 }
+
+// ============================================================================
+// 6. 皮肤
+// ============================================================================
+
+// 素材完整性：每个皮肤都要带齐渲染用到的全部图片（导入新皮肤时的第一道检查）
+GAME_TEST(1, skin_assets_complete) {
+    std::vector<AreaCard> cards = {AreaCard()};
+    for (const int a : {3, 4, 8}) for (const int b : {1, 5, 9}) for (const int c : {2, 6, 7}) {
+        cards.emplace_back(a, b, c);
+    }
+    for (const auto& skin : k_skins) {
+        std::set<std::string> files;
+        for (const auto& card : cards) {
+            const auto layers = card.Layers(skin);
+            files.insert(layers.begin(), layers.end());
+        }
+        if (skin.style == SkinStyle::拼装) {
+            for (int i = 1; i <= 19; ++i) files.insert("num_" + std::to_string(i));
+            for (const char* wall : {"000", "001", "010", "011", "100", "101", "110", "half"}) {
+                files.insert(std::string("wall_") + wall);
+            }
+        } else {
+            files.insert("board");
+        }
+        const std::string dir = SkinImagePath(this->resource_dir_str_, skin);
+        for (const auto& file : files) {
+            EXPECT_TRUE(std::filesystem::exists(dir + file + ".png")) << "皮肤「" << skin.name << "」缺少 " << dir << file << ".png";
+        }
+    }
+}
+
+// 每个皮肤名都能作为「皮肤」选项的取值（全员使用该皮肤）
+GAME_TEST(2, skin_option_accepts_every_name) {
+    for (const auto& skin : k_skins) {
+        ASSERT_PUB_MSG(OK, 0, "皮肤 " + std::string(skin.name));
+    }
+}
+
+// 自选（默认）：开局先进入皮肤选择阶段；序号与名称都能选，重复选择被拒绝，全员选完进入第 1 回合
+GAME_TEST(2, skin_self_select_by_index_and_name) {
+    ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "种子 test");
+    ASSERT_PUB_MSG(OK, 0, "事件 无");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PUB_MSG(OK, 0, "2");
+    ASSERT_PUB_MSG(FAILED, 0, "3");          // 已选过
+    ASSERT_PUB_MSG(CHECKOUT, 1, "萤火虫");
+    ASSERT_PUB_MSG(OK, 0, "1");              // 已进入第 1 回合：放置砖块
+    ASSERT_PUB_MSG(CHECKOUT, 1, "0");
+    ASSERT_SCORE(0, 0);
+}
+
+// 自选超时：未选择的玩家沿用默认皮肤
+GAME_TEST(2, skin_self_select_timeout) {
+    ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "种子 test");
+    ASSERT_PUB_MSG(OK, 0, "事件 无");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PUB_MSG(OK, 0, "咖波");
+    ASSERT_TIMEOUT(CHECKOUT);
+    ASSERT_PUB_MSG(OK, 0, "1");
+    ASSERT_PUB_MSG(CHECKOUT, 1, "0");
+}
+
+// 序号越界、名称不存在：匹配不到任何指令
+GAME_TEST(2, skin_self_select_invalid) {
+    ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "种子 test");
+    ASSERT_PUB_MSG(OK, 0, "事件 无");
+    ASSERT_TRUE(StartGame());
+    ASSERT_PUB_MSG(NOT_FOUND, 0, "99");
+    ASSERT_PUB_MSG(NOT_FOUND, 0, "不存在的皮肤");
+}
+
+// 随机：每位玩家随机分配皮肤，8 人局整局正常
+GAME_TEST(8, skin_random_eight_players) {
+    ASSERT_PUB_MSG(OK, 0, "计分 分数");
+    ASSERT_PUB_MSG(OK, 0, "皮肤 随机");
+    ASSERT_PUB_MSG(OK, 0, "种子 test");
+    ASSERT_PUB_MSG(OK, 0, "事件 无");
+    ASSERT_PUB_MSG(OK, 0, "血量 50");
+    ASSERT_TRUE(StartGame());
+    for (int i = 0; i < 600 && !this->main_stage_->IsOver(); ++i) this->TimeoutRequest_();
+    ASSERT_FINISHED(true);
+}
+
+// 指定皮肤：每种渲染方案各挑一个皮肤跑完整对局
+#define SKIN_FULL_GAME_TEST(test_name, skin_name) \
+GAME_TEST(2, test_name) { \
+    ASSERT_PUB_MSG(OK, 0, "计分 分数"); \
+    ASSERT_PUB_MSG(OK, 0, "皮肤 " skin_name); \
+    ASSERT_PUB_MSG(OK, 0, "种子 test"); \
+    ASSERT_PUB_MSG(OK, 0, "事件 无"); \
+    ASSERT_PUB_MSG(OK, 0, "血量 500"); \
+    ASSERT_TRUE(StartGame()); \
+    for (int i = 0; i < 600 && !this->main_stage_->IsOver(); ++i) this->TimeoutRequest_(); \
+    ASSERT_FINISHED(true); \
+}
+
+SKIN_FULL_GAME_TEST(skin_default_full_game,     "默认")
+SKIN_FULL_GAME_TEST(skin_green_full_game,       "环保绿")
+SKIN_FULL_GAME_TEST(skin_gold_full_game,        "奢华金")
+SKIN_FULL_GAME_TEST(skin_firefly_full_game,     "萤火虫")
+SKIN_FULL_GAME_TEST(skin_capoo_full_game,       "咖波")
+SKIN_FULL_GAME_TEST(skin_hexagon_full_game,     "六边形")
+SKIN_FULL_GAME_TEST(skin_mech_full_game,        "未来机甲")
+SKIN_FULL_GAME_TEST(skin_rainbow_cat_full_game, "彩虹猫猫教")
 
 } // namespace GAME_MODULE_NAME
 } // namespace game
