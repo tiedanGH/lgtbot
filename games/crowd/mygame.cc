@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <algorithm>
+#include <span>
 
 #include "game_framework/stage.h"
 #include "game_framework/util.h"
@@ -18,6 +19,7 @@
 
 #include "problems.h"
 #include "problems_t.h"
+#include "problems_d.h"
 #include "rules.h"
 
 using namespace std;
@@ -44,14 +46,14 @@ const MutableGenericOptions k_default_generic_options;
 
 
 // formal questions
-constexpr static uint32_t k_question_num = 83;
-// with test1 questions
-constexpr static uint32_t all_question_num = 135;
-// test2 questions
-constexpr static uint32_t t_question_num = 24;
+constexpr static uint32_t k_question_num = 91;
+// test questions (test mode 1)
+constexpr static uint32_t t_question_num = 49;
+// deprecated questions (test mode 2)
+constexpr static uint32_t d_question_num = 38;
 
 
-static const std::array<Question*(*)(), all_question_num> create_question{
+static const std::array<Question*(*)(), k_question_num> create_question{
     []() -> Question* { return new Q1(); },
     []() -> Question* { return new Q2(); },
     []() -> Question* { return new Q3(); },
@@ -130,7 +132,6 @@ static const std::array<Question*(*)(), all_question_num> create_question{
     []() -> Question* { return new Q76(); },
     []() -> Question* { return new Q77(); },
     []() -> Question* { return new Q78(); },
-    // test questions
     []() -> Question* { return new Q79(); },
     []() -> Question* { return new Q80(); },
     []() -> Question* { return new Q81(); },
@@ -144,54 +145,9 @@ static const std::array<Question*(*)(), all_question_num> create_question{
     []() -> Question* { return new Q89(); },
     []() -> Question* { return new Q90(); },
     []() -> Question* { return new Q91(); },
-    []() -> Question* { return new Q92(); },
-    []() -> Question* { return new Q93(); },
-    []() -> Question* { return new Q94(); },
-    []() -> Question* { return new Q95(); },
-    []() -> Question* { return new Q96(); },
-    []() -> Question* { return new Q97(); },
-    []() -> Question* { return new Q98(); },
-    []() -> Question* { return new Q99(); },
-    []() -> Question* { return new Q100(); },
-    []() -> Question* { return new Q101(); },
-    []() -> Question* { return new Q102(); },
-    []() -> Question* { return new Q103(); },
-    []() -> Question* { return new Q104(); },
-    []() -> Question* { return new Q105(); },
-    []() -> Question* { return new Q106(); },
-    []() -> Question* { return new Q107(); },
-    []() -> Question* { return new Q108(); },
-    []() -> Question* { return new Q109(); },
-    []() -> Question* { return new Q110(); },
-    []() -> Question* { return new Q111(); },
-    []() -> Question* { return new Q112(); },
-    []() -> Question* { return new Q113(); },
-    []() -> Question* { return new Q114(); },
-    []() -> Question* { return new Q115(); },
-    []() -> Question* { return new Q116(); },
-    []() -> Question* { return new Q117(); },
-    []() -> Question* { return new Q118(); },
-    []() -> Question* { return new Q119(); },
-    []() -> Question* { return new Q120(); },
-    []() -> Question* { return new Q121(); },
-    []() -> Question* { return new Q122(); },
-    []() -> Question* { return new Q123(); },
-    []() -> Question* { return new Q124(); },
-    []() -> Question* { return new Q125(); },
-    []() -> Question* { return new Q126(); },
-    []() -> Question* { return new Q127(); },
-    []() -> Question* { return new Q128(); },
-    []() -> Question* { return new Q129(); },
-    []() -> Question* { return new Q130(); },
-    []() -> Question* { return new Q131(); },
-    []() -> Question* { return new Q132(); },
-    []() -> Question* { return new Q133(); },
-    []() -> Question* { return new Q134(); },
-    []() -> Question* { return new Q135(); },
 };
 
-// test mode 2
-static const std::array<Question*(*)(), t_question_num> test_question{
+static const std::array<Question*(*)(), t_question_num> create_t_question{
     []() -> Question* { return new Qt1(); },
     []() -> Question* { return new Qt2(); },
     []() -> Question* { return new Qt3(); },
@@ -216,32 +172,108 @@ static const std::array<Question*(*)(), t_question_num> test_question{
     []() -> Question* { return new Qt22(); },
     []() -> Question* { return new Qt23(); },
     []() -> Question* { return new Qt24(); },
+    []() -> Question* { return new Qt25(); },
+    []() -> Question* { return new Qt26(); },
+    []() -> Question* { return new Qt27(); },
+    []() -> Question* { return new Qt28(); },
+    []() -> Question* { return new Qt29(); },
+    []() -> Question* { return new Qt30(); },
+    []() -> Question* { return new Qt31(); },
+    []() -> Question* { return new Qt32(); },
+    []() -> Question* { return new Qt33(); },
+    []() -> Question* { return new Qt34(); },
+    []() -> Question* { return new Qt35(); },
+    []() -> Question* { return new Qt36(); },
+    []() -> Question* { return new Qt37(); },
+    []() -> Question* { return new Qt38(); },
+    []() -> Question* { return new Qt39(); },
+    []() -> Question* { return new Qt40(); },
+    []() -> Question* { return new Qt41(); },
+    []() -> Question* { return new Qt42(); },
+    []() -> Question* { return new Qt43(); },
+    []() -> Question* { return new Qt44(); },
+    []() -> Question* { return new Qt45(); },
+    []() -> Question* { return new Qt46(); },
+    []() -> Question* { return new Qt47(); },
+    []() -> Question* { return new Qt48(); },
+    []() -> Question* { return new Qt49(); },
 };
 
-string init_question(const int id, const int mode)
+static const std::array<Question*(*)(), d_question_num> create_d_question{
+    []() -> Question* { return new Qd1(); },
+    []() -> Question* { return new Qd2(); },
+    []() -> Question* { return new Qd3(); },
+    []() -> Question* { return new Qd4(); },
+    []() -> Question* { return new Qd5(); },
+    []() -> Question* { return new Qd6(); },
+    []() -> Question* { return new Qd7(); },
+    []() -> Question* { return new Qd8(); },
+    []() -> Question* { return new Qd9(); },
+    []() -> Question* { return new Qd10(); },
+    []() -> Question* { return new Qd11(); },
+    []() -> Question* { return new Qd12(); },
+    []() -> Question* { return new Qd13(); },
+    []() -> Question* { return new Qd14(); },
+    []() -> Question* { return new Qd15(); },
+    []() -> Question* { return new Qd16(); },
+    []() -> Question* { return new Qd17(); },
+    []() -> Question* { return new Qd18(); },
+    []() -> Question* { return new Qd19(); },
+    []() -> Question* { return new Qd20(); },
+    []() -> Question* { return new Qd21(); },
+    []() -> Question* { return new Qd22(); },
+    []() -> Question* { return new Qd23(); },
+    []() -> Question* { return new Qd24(); },
+    []() -> Question* { return new Qd25(); },
+    []() -> Question* { return new Qd26(); },
+    []() -> Question* { return new Qd27(); },
+    []() -> Question* { return new Qd28(); },
+    []() -> Question* { return new Qd29(); },
+    []() -> Question* { return new Qd30(); },
+    []() -> Question* { return new Qd31(); },
+    []() -> Question* { return new Qd32(); },
+    []() -> Question* { return new Qd33(); },
+    []() -> Question* { return new Qd34(); },
+    []() -> Question* { return new Qd35(); },
+    []() -> Question* { return new Qd36(); },
+    []() -> Question* { return new Qd37(); },
+    []() -> Question* { return new Qd38(); },
+};
+
+// 测试模式 0 / 1 / 2 分别对应正式 / 测试 / 废弃题库
+std::span<Question*(* const)()> question_bank(const uint32_t mode)
+{
+    if (mode == 1) return create_t_question;
+    if (mode == 2) return create_d_question;
+    return create_question;
+}
+
+string get_question_id(const int id, const uint32_t mode)
+{
+    if (mode == 1) return "t" + to_string(id);
+    if (mode == 2) return "d" + to_string(id);
+    return to_string(id);
+}
+
+string init_question(const int id, const uint32_t mode)
 {
     vector<Player> players;
     Player tempP;
     for (int i = 0; i < 10; i++) {
         players.push_back(tempP);
     }
-    Question* question;
-    if (mode != 2) {
-        question = create_question[id - 1]();
-    } else {
-        question = test_question[id - 1]();
-    }
+    Question* question = question_bank(mode)[id - 1]();
     question -> init(players);
     question -> initTexts(players);
     question -> initOptions();
     thread_local static string str;
     str = "";
-    str += string("题号：#") + (mode == 2 ? "t" : "") + to_string(question -> id) + "\n";
+    str += string("题号：#") + get_question_id(question -> id, mode) + "\n";
     str += "出题者：" + (question -> author) + "\n";
     if (mode == 1) {
         str += "[测试] ";
     } else if (mode == 2) {
-        str += "[其他/废弃] ";
+        str += "[废弃] ";
     }
     str += "题目：" + (question -> title) + "\n\n";
     str += question -> String();
@@ -254,31 +286,15 @@ char* find_question(const string& keyword)
     thread_local static string find_str;
     thread_local static string notfind_str;
     notfind_str = "[错误] 未找到相关题目，请检查关键字或题号";
-    bool flag = false;
-    for (int i = 1; i <= all_question_num; i++) {
-        find_str = init_question(i, i > k_question_num);
-        string::size_type position = find_str.find(keyword);
-        if (position != std::string::npos) {
-            flag = true;
-            break;
+    for (uint32_t mode = 0; mode <= 2; mode++) {
+        for (int i = 1; i <= question_bank(mode).size(); i++) {
+            find_str = init_question(i, mode);
+            if (find_str.find(keyword) != std::string::npos) {
+                return (char*)find_str.c_str();
+            }
         }
     }
-    if (flag) {
-        return (char*)find_str.c_str();
-    }
-    for (int i = 1; i <= t_question_num; i++) {
-        find_str = init_question(i, 2);
-        string::size_type position = find_str.find(keyword);
-        if (position != std::string::npos) {
-            flag = true;
-            break;
-        }
-    }
-    if (flag) {
-        return (char*)find_str.c_str();
-    } else {
-        return (char*)notfind_str.c_str();
-    }
+    return (char*)notfind_str.c_str();
 }
 
 const std::vector<RuleCommand> k_rule_commands = {
@@ -346,7 +362,7 @@ class MainStage : public MainGameStage<RoundStage>
          s += specialRule(players, GAME_OPTION(特殊规则), "gameStart");
          if(GAME_OPTION(特殊规则) == 0) s += "无";
          s += "\n\n当前题目\n";
-         s += "题号：" + str(question -> id) + "\n";
+         s += "题号：" + get_question_id(question -> id, GAME_OPTION(测试模式)) + "\n";
          s += "出题者：" + (question -> author) + "\n";
          s += "题目：" + (question -> title) + "\n";
          Global().Boardcast() << s;
@@ -375,17 +391,13 @@ class RoundStage : public SubGameStage<>
     virtual void OnStageBegin() override
     {
         Question *& q = Main().question;
+        const auto bank = question_bank(GAME_OPTION(测试模式));
 
         int r = -1;
         int count = 0;
         while(r == -1 || Main().used.find(r) != Main().used.end())
         {
-            r = rand() % k_question_num;
-            if (GAME_OPTION(测试模式) == 1) {
-                r = rand() % (all_question_num - k_question_num) + k_question_num;
-            } else if (GAME_OPTION(测试模式) == 2) {
-                r = rand() % t_question_num;
-            }
+            r = rand() % bank.size();
             if(count++ > 1000) {
                 Main().used.clear();
                 break;
@@ -395,16 +407,12 @@ class RoundStage : public SubGameStage<>
 
         if(GAME_OPTION(测试) != 0)
             r = GAME_OPTION(测试) - 1;
-        if(r >= all_question_num){
+        if(r >= bank.size()){
             Global().Boardcast() << "question not found! RoundStage -> OnStageBegin where r == " + to_string(r);
             r = 0;
         }
 
-        if (GAME_OPTION(测试模式) != 2) {
-            q = create_question[r]();
-        } else {
-            q = test_question[r]();
-        }
+        q = bank[r]();
 
         if(q == NULL)
         {

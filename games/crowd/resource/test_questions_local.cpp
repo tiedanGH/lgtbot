@@ -6,13 +6,13 @@
 #include <numeric>
 
 #include "problems.h"   // 此文件应放在一个文件夹内
+#include "problems_t.h"
 
-REGISTER_QUESTION(125, Q125)
-REGISTER_QUESTION(126, Q126)
-REGISTER_QUESTION(127, Q127)
-REGISTER_QUESTION(128, Q128)
-REGISTER_QUESTION(129, Q129)
-REGISTER_QUESTION(130, Q130)
+REGISTER_QUESTION(26, Qt26)
+REGISTER_QUESTION(27, Qt27)
+REGISTER_QUESTION(28, Qt28)
+REGISTER_QUESTION(29, Qt29)
+REGISTER_QUESTION(30, Qt30)
 
 int getRandomChoiceBasedOnExpect(const std::string& expect) {
 	//std::cout << expect << std::endl;
@@ -34,7 +34,7 @@ int main() {
 	
 	std::cout << "请输入题目号：";
 	int questionNum;
-	if (!(std::cin >> questionNum) || questionNum < 125 || questionNum > 130) {
+	if (!(std::cin >> questionNum) || questionNum < 26 || questionNum > 30) {
 		std::cerr << "找不到对应题目。" << std::endl;
 		return 1;
 	}
