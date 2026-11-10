@@ -8,20 +8,25 @@ class UnitMaps {
     const int k_map_num = 12;
     const int k_exit_num = 4;
     const int k_special_num = 2;
+    // [拓展] 随机池扩大后的普通区块与逃生舱数量
+    const int k_expand_map_num = 16;
+    const int k_expand_exit_num = 6;
     // 区块图鉴的格子图标标记
     static constexpr const char* k_grow_mark = "？生长";      // [营养过剩] 可能长出树丛的空地
     static constexpr const char* k_move_mark = "？移动";      // [怠惰的园丁] 将移到随机位置的树丛
     static constexpr const char* k_rain_mark = "？雨天";      // [雨天小故事] 改为发出啪嗒声的陷阱、浆果丛
+    static constexpr const char* k_ambush_mark = "！埋伏";    // [十面埋伏] 视为陷阱的浆果丛
     static constexpr const char* k_silence_mark = "✗静音";    // [静音] 不再发出声响的地形
-    // 特殊事件标记（静音模式下可被覆盖）
-    static bool IsEventMark(const string& content) { return content == k_grow_mark || content == k_move_mark || content == k_rain_mark; }
+    static constexpr const char* k_chaos_mark = "？紊乱";     // [传送紊乱] 打乱传送目标的传送门
     // 图标标记对应的图片名，不是图标标记时返回空
-    static string MarkImage(const string& content)
+    static string MarkImage(const string& mark)
     {
-        if (content == k_grow_mark) return "event_grow.png";
-        if (content == k_move_mark) return "event_move.png";
-        if (content == k_rain_mark) return "event_rain.png";
-        if (content == k_silence_mark) return "mode_silence.png";
+        if (mark == k_grow_mark) return "event_grow.png";
+        if (mark == k_move_mark) return "event_move.png";
+        if (mark == k_rain_mark) return "event_rain.png";
+        if (mark == k_ambush_mark) return "event_ambush.png";
+        if (mark == k_silence_mark) return "mode_silence.png";
+        if (mark == k_chaos_mark) return "mode_chaos.png";
         return "";
     }
 
@@ -98,39 +103,45 @@ class UnitMaps {
     vector<Map> exits;
     vector<Map> special_maps;
 
+    // [传送紊乱] 传送门图例增加漩涡
+    bool portal_chaos = false;
+
     UnitMaps() = default;
 
-    UnitMaps(const BlockMode mode, std::mt19937& gen, const vector<string>& custom_blocks): g(std::make_unique<std::mt19937>(gen))
+    UnitMaps(const BlockMode mode, std::mt19937& gen, const vector<string>& custom_blocks, const bool expand): g(std::make_unique<std::mt19937>(gen))
     {
+        // 随机池大小：[拓展] 扩大为 16+6
+        const int map_num = expand ? k_expand_map_num : k_map_num;
+        const int exit_pair = (expand ? k_expand_exit_num : k_exit_num) / 2;
         if (mode == BlockMode::CLASSIC) {
             // 经典-CLASSIC
             maps.insert(maps.end(), all_maps.begin(), all_maps.begin() + k_map_num);
             exits.insert(exits.end(), all_exits.begin(), all_exits.begin() + k_exit_num);
         } else if (mode == BlockMode::TWIST) {
             // 幻变-TWIST
-            SampleBlockPoolsFromIds(twist_mode_ids);
+            SampleBlockPoolsFromIds(twist_mode_ids, map_num, exit_pair);
         } else if (mode == BlockMode::WILD) {
             // 狂野-WILD
-            std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), k_map_num, *g);
-            SampleExits(all_exits, k_exit_num / 2);
+            std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), map_num, *g);
+            SampleExits(all_exits, exit_pair);
         } else if (mode == BlockMode::CRAZY) {
             // 疯狂-CRAZY
             std::sample(all_special_maps.begin(), all_special_maps.end(), std::back_inserter(special_maps), k_special_num, *g);
             maps.insert(maps.end(), special_maps.begin(), special_maps.end());
-            std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), k_map_num - k_special_num, *g);
-            SampleExits(all_exits, k_exit_num / 2);
+            std::sample(all_maps.begin(), all_maps.end(), std::back_inserter(maps), map_num - k_special_num, *g);
+            SampleExits(all_exits, exit_pair);
         } else if (mode == BlockMode::BUTTON) {
             // 按钮-BUTTON
-            SampleBlockPoolsFromIds(button_mode_ids);
+            SampleBlockPoolsFromIds(button_mode_ids, map_num, exit_pair);
         } else if (mode == BlockMode::TRAP) {
             // 陷阱-TRAP
-            SampleBlockPoolsFromIds(trap_mode_ids);
+            SampleBlockPoolsFromIds(trap_mode_ids, map_num, exit_pair);
         } else if (mode == BlockMode::OPEN) {
             // 空旷-OPEN
-            SampleBlockPoolsFromIds(open_mode_ids);
+            SampleBlockPoolsFromIds(open_mode_ids, map_num, exit_pair);
         } else if (mode == BlockMode::SILENT) {
             // 无声-SILENT
-            SampleBlockPoolsFromIds(silent_mode_ids);
+            SampleBlockPoolsFromIds(silent_mode_ids, map_num, exit_pair);
         } else {
             // 自定义-CUSTOM
             for (const auto& block : custom_blocks) {
@@ -149,7 +160,7 @@ class UnitMaps {
         }
     }
 
-    void SampleBlockPoolsFromIds(const vector<string>& mode_ids)
+    void SampleBlockPoolsFromIds(const vector<string>& mode_ids, const int map_num, const int exit_pair)
     {
         maps.clear(); exits.clear();
         pool_maps.clear(); pool_exits.clear();
@@ -168,8 +179,8 @@ class UnitMaps {
             }
         }
 
-        std::sample(pool_maps.begin(), pool_maps.end(), std::back_inserter(maps), k_map_num, *g);
-        SampleExits(pool_exits, k_exit_num / 2);
+        std::sample(pool_maps.begin(), pool_maps.end(), std::back_inserter(maps), map_num, *g);
+        SampleExits(pool_exits, exit_pair);
 
         std::sort(maps.begin(), maps.end(), [](const Map& a, const Map& b) { return CompareMapId(a.id, b.id); });
         std::sort(exits.begin(), exits.end(), [](const Map& a, const Map& b) { return CompareMapId(a.id, b.id); });
@@ -183,7 +194,7 @@ class UnitMaps {
         vector<int> pairs(pair_num);
         std::iota(pairs.begin(), pairs.end(), 0);
         std::shuffle(pairs.begin(), pairs.end(), *g);
-        pairs.resize(k_exit_pair);
+        pairs.resize(std::min(k_exit_pair, pair_num));     // 逃生舱不足时使用全部
         std::sort(pairs.begin(), pairs.end());
         for (int p : pairs) {
             exits.push_back(exits_pool[p * 2]);
@@ -381,12 +392,44 @@ class UnitMaps {
         return false;
     }
 
+    // [区块变化] 每个按钮都同时切换区块内全部的门且门至少 2 扇时，返回按下按钮后的区块
+    static optional<GridMap> SwitchedBlock(const GridMap& block)
+    {
+        const int n = static_cast<int>(block.size());
+        std::unordered_set<const Wall*> doors;
+        vector<pair<int, int>> buttons;
+        for (int x = 0; x < n; ++x) {
+            for (int y = 0; y < n; ++y) {
+                for (int d = 0; d < 4; ++d) {
+                    const Wall& wall = block.WallAt(x, y, static_cast<Direct>(d));
+                    if (wall.Type() == WallType::DOOR || wall.Type() == WallType::DOOROPEN) doors.insert(&wall);
+                }
+                if (block[x][y].Attach() == AttachType::BUTTON) buttons.emplace_back(x, y);
+            }
+        }
+        if (buttons.empty() || doors.size() < 2) return std::nullopt;
+        for (const auto& [x, y] : buttons) {
+            std::unordered_set<const Wall*> targets;
+            for (const auto& target : block[x][y].ButtonTargetPos()) {
+                if (target.dir.has_value()) targets.insert(&block.WallAt(x + target.dx, y + target.dy, *target.dir));
+            }
+            if (targets != doors) return std::nullopt;
+        }
+        GridMap switched = block;
+        const auto [bx, by] = buttons.front();
+        for (const auto& target : block[bx][by].ButtonTargetPos()) {
+            if (target.dir.has_value()) switched.WallAt(bx + target.dx, by + target.dy, *target.dir).SwitchDoor();
+        }
+        return switched;
+    }
+
     static SpecialEvent GetRandomSpecialEvent()
     {
         static constexpr std::array events = {
             SpecialEvent::LAZYGARDENER,
             SpecialEvent::OVERGROWTH,
             SpecialEvent::RAINSTORY,
+            SpecialEvent::AMBUSH,
         };
         return events[rand() % events.size()];
     }
@@ -398,6 +441,7 @@ class UnitMaps {
             case SpecialEvent::LAZYGARDENER: return "[特殊事件]【怠惰的园丁】树丛（浆果丛）将在其区块内随机位置生成（有可能生成在中间）";
             case SpecialEvent::OVERGROWTH:   return "[特殊事件]【营养过剩】树丛（浆果丛）和陷阱将额外向随机1个方向再次生成1个树丛（不可隔墙生长）";
             case SpecialEvent::RAINSTORY:    return "[特殊事件]【雨天小故事】地图中所有树丛变成水洼，陷阱和浆果丛会发出" PAPA_STR "声";
+            case SpecialEvent::AMBUSH:       return "[特殊事件]【十面埋伏】地图中所有树丛变成陷阱，浆果丛也视为陷阱";
             default:                         return "[特殊事件]【无】";
         }
     }
@@ -410,7 +454,7 @@ class UnitMaps {
                 for (int k = 0; k < 9; ++k) {
                     int i = k / 3, j = k % 3;
                     if (map.block[i][j].Type() == GridType::GRASS || map.block[i][j].Type() == GridType::BERRY)
-                        map.block[i][j].SetContent(k_move_mark);
+                        map.block[i][j].SetMark(k_move_mark);
                 }
             }
         };
@@ -482,7 +526,7 @@ class UnitMaps {
         auto MarkMaps = [](auto& maps) {
             for (auto& map : maps) {
                 for (const auto& [i, j] : GrowablePositions(map.block)) {
-                    map.block[i][j].SetContent(k_grow_mark);
+                    map.block[i][j].SetMark(k_grow_mark);
                 }
             }
         };
@@ -528,8 +572,30 @@ class UnitMaps {
                     auto& grid = map.block[i][j];
                     if (grid.Type() == GridType::GRASS) {
                         grid.SetType(GridType::WATER);
-                    } else if ((grid.Type() == GridType::TRAP || grid.Type() == GridType::BERRY) && grid.GetContent().empty()) {
-                        grid.SetContent(k_rain_mark);
+                    } else if (grid.Type() == GridType::TRAP || grid.Type() == GridType::BERRY) {
+                        grid.SetMark(k_rain_mark);
+                    }
+                }
+            }
+        };
+
+        ProcessMaps(maps);
+        ProcessMaps(exits);
+        ProcessMaps(special_maps);
+        ProcessMaps(all_special_maps);
+    }
+
+    // 特殊事件4——十面埋伏：地图中所有树丛变成陷阱，浆果丛也视为陷阱
+    void SpecialEvent4()
+    {
+        auto ProcessMaps = [](auto& maps) {
+            for (auto& map: maps) {
+                for (int k = 0; k < 9; ++k) {
+                    auto& grid = map.block[k / 3][k % 3];
+                    if (grid.Type() == GridType::GRASS) {
+                        grid.SetType(GridType::TRAP);
+                    } else if (grid.Type() == GridType::BERRY) {
+                        grid.SetMark(k_ambush_mark);
                     }
                 }
             }
@@ -553,11 +619,8 @@ class UnitMaps {
             for (auto& map : maps) {
                 for (int k = 0; k < 9; ++k) {
                     int i = k / 3, j = k % 3;
-                    if (!IsSoundGrid(map.block[i][j].Type())) continue;
-                    // 已有字母代号（传送门配对等）保持原样，特殊事件标记则被静音图标覆盖
-                    const string content = map.block[i][j].GetContent();
-                    if (!content.empty() && !IsEventMark(content)) continue;
-                    map.block[i][j].SetContent(k_silence_mark);
+                    // 静音图标覆盖特殊事件图标
+                    if (IsSoundGrid(map.block[i][j].Type())) map.block[i][j].SetMark(k_silence_mark);
                 }
             }
         };
@@ -569,27 +632,53 @@ class UnitMaps {
         MarkMaps(special_maps);
     }
 
-    // 大地图区块位置随机
-    bool RandomizeBlockPosition(const int size)
+    // 传送紊乱模式：为所有传送门标记漩涡图标，去掉不再对应的字母
+    void MarkPortalChaos()
     {
-        vector<pair<int,int>> candidates;
-        for (int i = 0; i < size - 2; i++) {
-            for (int j = 0; j < size - 2; j++) {
-                candidates.push_back({i, j});
+        auto MarkMaps = [](auto& maps) {
+            for (auto& map : maps) {
+                for (int k = 0; k < 9; ++k) {
+                    Grid& grid = map.block[k / 3][k % 3];
+                    if (grid.Type() != GridType::PORTAL) continue;
+                    grid.SetMark(k_chaos_mark);
+                    grid.SetContent("");
+                }
             }
-        }
-        std::shuffle(candidates.begin(), candidates.end(), *g);
-        vector<pair<int,int>> chosen;
-        bool found = backtrack(0, chosen, candidates);
-        if (found) {
-            for (int i = 0; i < 9; i++) {
-                pos[i] = chosen[i];
-            }
-        }
-        return found;
+        };
+        MarkMaps(all_maps);
+        MarkMaps(all_exits);
+        MarkMaps(all_special_maps);
+        MarkMaps(maps);
+        MarkMaps(exits);
+        MarkMaps(special_maps);
+        portal_chaos = true;
     }
 
-    // 边长12：16个区块
+    // 大地图区块位置随机：枚举区块互不重叠的全部布局，等概率抽取
+    void RandomizeBlockPosition(const int size)
+    {
+        vector<vector<pair<int, int>>> layouts;
+        vector<pair<int, int>> chosen;
+        vector<vector<bool>> covered(size, vector<bool>(size, false));
+        EnumerateLayouts(0, size * size - 81, covered, chosen, layouts);
+        const auto& layout = layouts[std::uniform_int_distribution<int>(0, static_cast<int>(layouts.size()) - 1)(*g)];
+        for (int i = 0; i < 9; i++) {
+            pos[i] = layout[i];
+        }
+    }
+
+    // 边长11：9 个区块之间隔着横竖各 2 条大走廊
+    void SetMapPosition11()
+    {
+        pos = {
+            {0, 0}, {0, 4}, {0, 8},
+            {4, 0}, {4, 4}, {4, 8},
+            {8, 0}, {8, 4}, {8, 8},
+        };
+        origin_pos = pos;
+    }
+
+    // 边长12：16 个区块
     void SetMapPosition12()
     {
         pos.insert(pos.begin() + 3, {0, 9});
@@ -632,35 +721,45 @@ class UnitMaps {
 
     bool IsHeatBoxMap(const Map& map) const { return map.attach == AttachType::HEATBOX; }
 
-    static bool overlaps(const pair<int, int>& a, const pair<int, int>& b)
-    {
-        if (a.first + 2 < b.first || b.first + 2 < a.first || a.second + 2 < b.second || b.second + 2 < a.second)
-            return false;
-        return true;
-    }
-
-    // 回溯搜索
-    static bool backtrack(int index, vector<pair<int, int>>& chosen, const vector<pair<int, int>>& candidates)
+    // 枚举布局：按行优先取第一个未确定的格子，留作空隙（共 gaps 个）或作为区块左上角
+    static void EnumerateLayouts(const int cell, const int gaps, vector<vector<bool>>& covered,
+                                 vector<pair<int, int>>& chosen, vector<vector<pair<int, int>>>& layouts)
     {
         if (chosen.size() == 9) {
-            return true;
+            layouts.push_back(chosen);
+            return;
         }
-        for (int i = index; i < candidates.size(); i++) {
-            bool valid = true;
-            for (const auto& p : chosen) {
-                if (overlaps(p, candidates[i])) {
-                    valid = false;
-                    break;
-                }
+        const int size = covered.size();
+        int c = cell;
+        while (c < size * size && covered[c / size][c % size])
+            c++;
+        if (c == size * size)
+            return;
+        const int x = c / size, y = c % size;
+        if (gaps > 0) {
+            covered[x][y] = true;
+            EnumerateLayouts(c + 1, gaps - 1, covered, chosen, layouts);
+            covered[x][y] = false;
+        }
+        if (x + 3 > size || y + 3 > size)
+            return;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                if (covered[x + i][y + j])
+                    return;
             }
-            if (!valid)
-                continue;
-            chosen.push_back(candidates[i]);
-            if (backtrack(i + 1, chosen, candidates))
-                return true;
-            chosen.pop_back();
         }
-        return false;
+        auto fill = [&](const bool value) {
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++)
+                    covered[x + i][y + j] = value;
+            }
+        };
+        fill(true);
+        chosen.push_back({x, y});
+        EnumerateLayouts(c + 1, gaps, covered, chosen, layouts);
+        chosen.pop_back();
+        fill(false);
     }
 
     static GridMap InitializeMapTemplate() { return GridMap(3, false); }

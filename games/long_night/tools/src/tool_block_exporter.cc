@@ -119,7 +119,7 @@ int main(int argc, char** argv)
     filesystem::create_directories(out_dir);
 
     // 使用自定义模式构造 Board，避免抽取区块池
-    Board board(resource_dir, texture_it->second, BlockMode::CUSTOM, {});
+    Board board(resource_dir, texture_it->second, BlockMode::CUSTOM, {}, false);
 
     if (silence) board.unitMaps.MarkSilenceMode();
 

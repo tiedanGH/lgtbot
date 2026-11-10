@@ -38,16 +38,21 @@ const GameProperties k_properties {
 uint64_t MaxPlayerNum(const CustomOptions& options) { return 8; }
 uint32_t Multiple(const CustomOptions& options) {
     const auto& blocks = GET_OPTION_VALUE(options, 区块);
-    if (blocks.empty() || blocks[0] != "默认")
+    if (blocks.empty() || blocks[0] != "默认" || GET_OPTION_VALUE(options, 教程))
         return 0;
     return 2;
 }
-const MutableGenericOptions k_default_generic_options{
-    .is_formal_{false},
-};
+const MutableGenericOptions k_default_generic_options{};
 
-// 规则文本：机制细节见 common/constants.h 的 rule_details，BOSS 规则见 actor/boss.h 各 BOSS 类的 k_rule
+// 规则文本：机制、模式、事件与更新见 common/constants.h 的 rule_details，计分取自 actor/player.h 的 Score，BOSS 规则见 actor/boss.h 各 BOSS 类的 k_rule
 const std::vector<RuleCommand> k_rule_commands = {
+    RuleCommand("游戏规则细节和机制：「" META_COMMAND_SIGN "规则 漫漫长夜 机制」查看可用列表",
+            [](const int type) -> const char* const
+            {
+                static const string score_rule = Score::ScoreRuleText();
+                return type == 8 ? score_rule.c_str() : rule_details[type];
+            },
+            AlterChecker<int>({{"机制", 0}, {"地形", 1}, {"传送", 2}, {"成就", 3}, {"区块", 4}, {"模式", 5}, {"事件", 6}, {"更新", 7}, {"计分", 8}})),
     RuleCommand("查看 BOSS 列表与简介，附带名称时查看规则和技能详情",
             [](const string& name) -> const char* const
             {
@@ -56,13 +61,15 @@ const std::vector<RuleCommand> k_rule_commands = {
                 return rule_text.c_str();
             },
             VoidChecker("BOSS", "boss"), OptionalDefaultChecker<AnyArg>("", "BOSS名称", "暴君")),
-    RuleCommand("游戏部分隐藏机制：「" META_COMMAND_SIGN "规则 漫漫长夜 机制」查看可用列表帮助",
-            [](const int type) { return rule_details[type]; },
-            AlterChecker<int>({{"机制", 0}, {"地形", 1}, {"传送", 2}, {"成就", 3}, {"区块", 4}})),
 };
+
+// [新手教程] 开局校验人数并改为教程固定配置（定义见 stage/tutorial_stage.h）
+bool AdaptTutorialOptions(lgtbot::ChildMsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly);
 
 bool AdaptOptions(lgtbot::ChildMsgSenderBase& reply, CustomOptions& game_options, const GenericOptions& generic_options_readonly, MutableGenericOptions& generic_options)
 {
+    if (GET_OPTION_VALUE(game_options, 教程)) return AdaptTutorialOptions(reply, game_options, generic_options_readonly);
+
     auto& custom_blocks = GET_OPTION_VALUE(game_options, 区块);
     if (custom_blocks.empty()) {
         reply() << "[错误] 区块参数为空：必须包含至少 9 个有效区块代号。形如：1 1 6 16 34 38 E1 e7 S4 s1";
@@ -93,6 +100,10 @@ bool AdaptOptions(lgtbot::ChildMsgSenderBase& reply, CustomOptions& game_options
         GET_OPTION_VALUE(game_options, 模式) = BlockMode::CUSTOM;
         std::sort(vaild_blocks.begin(), vaild_blocks.end(), CompareMapId);
         custom_blocks = vaild_blocks;
+        if (GET_OPTION_VALUE(game_options, 拓展)) {
+            GET_OPTION_VALUE(game_options, 拓展) = false;
+            reply() << "[警告] 自定义区块时使用全部区块作为随机池，拓展模式已自动关闭";
+        }
     }
 
     if (GET_OPTION_VALUE(game_options, 特殊事件) == SpecialEvent::RANDOM) {
@@ -112,14 +123,19 @@ bool AdaptOptions(lgtbot::ChildMsgSenderBase& reply, CustomOptions& game_options
         GET_OPTION_VALUE(game_options, 边长) = 12;
         reply() << "[警告] 玩家数 " << generic_options_readonly.PlayerNum() << " 超出普通地图限制，自动将地图边长调整为 12x12";
     }
+    if (GET_OPTION_VALUE(game_options, 摸黑) && GET_OPTION_VALUE(game_options, 停止信息) != StopInfo::NONE) {
+        GET_OPTION_VALUE(game_options, 停止信息) = StopInfo::NONE;
+        reply() << "[警告] 摸黑模式下无法获得墙壁信息，停止信息已调整为「无」";
+    }
     return true;
 }
 
 // ========== GAME STAGES ==========
 
 class RoundStage;
+class TutorialStage;
 
-class MainStage : public MainGameStage<RoundStage>
+class MainStage : public MainGameStage<RoundStage, TutorialStage>
 {
   public:
     MainStage(StageUtility&& utility)
@@ -129,7 +145,7 @@ class MainStage : public MainGameStage<RoundStage>
                 VoidChecker("预览"), RepeatableChecker<BasicChecker<string>>("序号", "2 3 0 11 E1 0 E2 7 9")))
         , round_(0)
         , player_scores_(Global().PlayerNum(), 0)
-        , board(Global().ResourceDir(), GAME_OPTION(纹理), GAME_OPTION(模式), GAME_OPTION(区块))
+        , board(Global().ResourceDir(), GAME_OPTION(纹理), GAME_OPTION(模式), GAME_OPTION(区块), GAME_OPTION(拓展))
         , framework_eliminated_(Global().PlayerNum(), false)
         , is_computer_(Global().PlayerNum(), false)
     {}
@@ -157,6 +173,9 @@ class MainStage : public MainGameStage<RoundStage>
     // 剩余玩家数
     int Alive_() const { return std::count_if(board.players.begin(), board.players.end(), [](const auto& player){ return player.out == 0; }); }
 
+    // 多人游戏须在公屏行动；[新手教程] 只有 1 名真人，私信也可行动
+    bool PublicOnly() const { return Global().PlayerNum() > 1 && !GAME_OPTION(教程); }
+
     // 淘汰玩家：始终保留至少一名未被框架淘汰的真人玩家，否则主框架进入自动推演吞终局
     void EliminatePlayer(const PlayerID pid)
     {
@@ -170,7 +189,7 @@ class MainStage : public MainGameStage<RoundStage>
         }
     }
 
-    // 通用模式提示：特殊事件、静音、大地图
+    // 通用模式提示：特殊事件、静音、摸黑、大地图
     void AppendModeHints(lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
     {
         if (GAME_OPTION(特殊事件) != SpecialEvent::NONE) {
@@ -178,6 +197,12 @@ class MainStage : public MainGameStage<RoundStage>
         }
         if (GAME_OPTION(静音)) {
             sender << "【静音】一切归于死寂...\n";
+        }
+        if (GAME_OPTION(摸黑)) {
+            sender << "【摸黑】伸手不见五指...\n";
+        }
+        if (GAME_OPTION(传送紊乱)) {
+            sender << "【传送紊乱】斗转星移...\n";
         }
         if (GAME_OPTION(边长) > 9) {
             sender << "本局游戏地图为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << "\n";
@@ -220,6 +245,10 @@ class MainStage : public MainGameStage<RoundStage>
     void FirstStageFsm(SubStageFsmSetter setter) override
     {
         srand((unsigned int)time(NULL));
+        if (GAME_OPTION(教程)) {
+            setter.Emplace<TutorialStage>(*this);
+            return;
+        }
 
         auto sender = Global().Boardcast();
         if (GAME_OPTION(捕捉目标) == Target::NEXT) {
@@ -230,6 +259,7 @@ class MainStage : public MainGameStage<RoundStage>
                 case SpecialEvent::LAZYGARDENER:    board.unitMaps.SpecialEvent1(); break;
                 case SpecialEvent::OVERGROWTH:      board.unitMaps.SpecialEvent2(); break;
                 case SpecialEvent::RAINSTORY:       board.unitMaps.SpecialEvent3(); break;
+                case SpecialEvent::AMBUSH:          board.unitMaps.SpecialEvent4(); break;
                 case SpecialEvent::NONE: case SpecialEvent::RANDOM: break;
             }
             sender << UnitMaps::ShowSpecialEvent(GAME_OPTION(特殊事件)) << "\n\n";
@@ -238,18 +268,28 @@ class MainStage : public MainGameStage<RoundStage>
             board.unitMaps.MarkSilenceMode();
             sender << "【静音】一切归于死寂...游戏中**不存在任何声响**。路过声响地形不会通知任何人（包括自己），巨大的心脏与BOSS同样被静音。\n\n";
         }
+        if (GAME_OPTION(摸黑)) {      // 摸黑模式
+            sender << "【摸黑】伸手不见五指...游戏中**无法获得任何墙壁信息**。开局、撞墙与停止均不会告知四周墙壁，BOSS公开的墙壁信息不受影响。\n\n";
+        }
+        if (GAME_OPTION(传送紊乱)) {      // 传送紊乱模式
+            board.unitMaps.MarkPortalChaos();
+            sender <<"【传送紊乱】斗转星移...地图中**所有传送门打乱传送目标**，一一对应组成一个大环，从任意传送门进入都会传送至环中的下一个传送门。\n\n";
+        }
         if (GAME_OPTION(边长) == 10) {      // 边长10
-            if (board.unitMaps.RandomizeBlockPosition(GAME_OPTION(边长))) {
-                sender << "【10x10】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。9个区块在大地图随机排列，区块不会重叠。没有区块覆盖的地图空隙将变成普通道路。\n";
-            } else {
-                sender << "[未知错误] 生成10x10地图时发生错误：未能成功随机布局，游戏无法正常开始！";
-                return;
-            }
+            board.unitMaps.RandomizeBlockPosition(GAME_OPTION(边长));
+            sender << "【10x10】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。9个区块在大地图随机排列，区块不会重叠。没有区块覆盖的地图空隙将变成普通道路。\n";
+        }
+        if (GAME_OPTION(边长) == 11) {      // 边长11
+            board.unitMaps.SetMapPosition11();
+            sender << "【11x11】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。9 个区块之间隔着横竖各 2 条大走廊，地图边缘两侧的区块仍直接相邻，地图中心为逃生舱\n";
         }
         if (GAME_OPTION(边长) == 12) {      // 边长12
             board.unitMaps.SetMapPosition12();
             board.exit_num = 4;
             sender << "【12x12】本局游戏地图将更改为 " << GAME_OPTION(边长) << "x" << GAME_OPTION(边长) << " 大地图。使用 16 个区块铺满地图，逃生舱固定为 4 个。\n";
+        }
+        if (GAME_OPTION(拓展)) {    // 区块拓展
+            sender << "【区块拓展】本局随机池为 " << board.unitMaps.maps.size() << "+" << board.unitMaps.exits.size() << "\n";
         }
         if (!GAME_OPTION(点杀)) {   // 关闭点杀
             sender << "【关闭点杀】仅需路过即可触发捕捉，回合结束也会触发捕捉\n";
@@ -271,7 +311,7 @@ class MainStage : public MainGameStage<RoundStage>
         board.playerNum = Global().PlayerNum();
         board.players.reserve(board.playerNum);
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            board.players.emplace_back(pid, Global().PlayerName(pid), Global().PlayerAvatar(pid, 40), board.size, board.unitMaps.pos);
+            board.players.emplace_back(pid, StripNameBrackets(Global().PlayerName(pid)), Global().PlayerAvatar(pid, 40), board.size, board.unitMaps.pos);
             if (GAME_OPTION(隐匿) == HideMode::TURN) {   // 隐匿
                 board.players[pid].hide_remaining = 1;
             } else if (GAME_OPTION(隐匿) == HideMode::STEP) {
@@ -292,6 +332,8 @@ class MainStage : public MainGameStage<RoundStage>
         if (Global().PlayerNum() == 1) board.players[0].target = 100;
         // 初始化地图
         board.Initialize();
+        // [传送紊乱] 打乱传送门
+        if (GAME_OPTION(传送紊乱)) board.ShufflePortals();
         board.exit_num = board.TypeCount(GridType::EXIT);
 
         // 创建全部BOSS（允许同类型多只，同类型自动编号）
@@ -308,13 +350,17 @@ class MainStage : public MainGameStage<RoundStage>
 
         board.SaveGameStartMap();   // 保存初始盘面
 
-        sender << "[提示] 本局游戏人数为 " << board.playerNum << " 人，逃生舱数量为 " << board.exit_num << " 个。请留意私信发送的开局墙壁信息\n\n";
+        sender << "[提示] 本局游戏人数为 " << board.playerNum << " 人，逃生舱数量为 " << board.exit_num << " 个。"
+               << (GAME_OPTION(摸黑) ? "" : "请留意私信发送的开局墙壁信息") << "\n\n";
         sender << "【区块模式】" << mode_str[static_cast<int>(GAME_OPTION(模式))] << "\n";
         sender << "本局可能出现的区块详见下图所示：\n";
         sender << Markdown(board.GetAllBlocksInfo(GAME_OPTION(特殊事件), GAME_OPTION(炸弹) > 0), (GRID_SIZE + WALL_SIZE) * 16 + 40);
 
         setter.Emplace<RoundStage>(*this, ++round_);
     }
+
+    // [新手教程] 教程结束即游戏结束：不计分、不结算成就
+    void NextStageFsm(TutorialStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override {}
 
     void NextStageFsm(RoundStage& sub_stage, const CheckoutReason reason, SubStageFsmSetter setter) override
     {
@@ -348,7 +394,7 @@ class MainStage : public MainGameStage<RoundStage>
             Global().Boardcast() << "回合数到达上限，游戏结束";
         }
         Global().Boardcast() << "完整行动轨迹：\n" << Markdown(board.GetAllRecordHtml(-1, false), 500);
-        Global().Boardcast() << "玩家分数细则：\n" << Markdown(board.GetAllScore(), 800);
+        Global().Boardcast() << "玩家分数细则：\n" << Markdown(board.GetAllScore(), 900);
         Global().Boardcast() << Markdown(board.GetFinalBoard(), (GRID_SIZE + WALL_SIZE) * 2 * (GAME_OPTION(边长) + 1));
 
         // 成就结算
@@ -403,8 +449,7 @@ class RoundStage : public SubGameStage<>
     // 玩家行动临时变量
     int step;           // 行动步数
     bool hide;          // 隐匿状态
-    bool active_stop;   // 主动停止或超时
-    bool forced_stop;   // [谋定后动] 移动后强制停止（不计入全员主动停止，墙壁信息按停止处理）
+    bool active_stop;   // 停止行动：主动停止、超时或[谋定后动]结束行动
     bool is_acting;     // 玩家是否开始行动（时限/挂机判定）
     int last_direct;    // 本回合上一次成功移动方向（-1 无，用于树篱冲刺）
     TurnRecord turn_record;     // 本次行动统计（玩家结束行动时交给 BOSS 判定）
@@ -419,7 +464,7 @@ class RoundStage : public SubGameStage<>
         Global().SaveMarkdown(Main().board.GetBoard(Main().board.grid_map), (GRID_SIZE + WALL_SIZE) * (GAME_OPTION(边长) + 1));
 
         for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-            Main().board.players[pid].ClearMoveRecord();
+            Main().board.players[pid].ClearMoveRecord(Main().round_);
             if (pid != currentPlayer) {
                 Global().SetReady(pid);
             }
@@ -434,11 +479,13 @@ class RoundStage : public SubGameStage<>
 
         // 首轮信息播报
         if (Main().round_ == 1) {
-            // 开局私信墙壁信息
-            for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
-                auto [info, md] = Main().board.GetSurroundingWalls(pid);
-                Main().board.players[pid].private_record = "【开局】\n您所在位置的四周墙壁信息，按照 上下左右 顺序分别是：\n" + info;
-                Global().Tell(pid) << Main().board.players[pid].private_record << "\n" << Markdown(md, (GRID_SIZE + WALL_SIZE * 2) + 40);
+            // 开局私信墙壁信息，[摸黑]不发送
+            if (!GAME_OPTION(摸黑)) {
+                for (PlayerID pid = 0; pid < Global().PlayerNum(); ++pid) {
+                    auto [info, md] = Main().board.GetSurroundingWalls(pid);
+                    Main().board.players[pid].private_record = "【开局】\n您所在位置的四周墙壁信息，按照 上下左右 顺序分别是：\n" + info;
+                    Global().Tell(pid) << Main().board.players[pid].private_record << "\n" << Markdown(md, (GRID_SIZE + WALL_SIZE * 2) + 40);
+                }
             }
             // [BOSS-米诺陶斯] 开局声音
             if (!GAME_OPTION(静音)) {
@@ -455,6 +502,7 @@ class RoundStage : public SubGameStage<>
                 case StopInfo::PRIVATE: stop_info_msg = "【私信停止信息】主动停止或超时可以获得私信四周墙壁信息"; break;
                 case StopInfo::PUBLIC:  stop_info_msg = "【公开停止信息】主动停止或超时时将在公屏公开四周墙壁信息"; break;
             }
+            if (GAME_OPTION(摸黑)) stop_info_msg = "【摸黑】开局、撞墙与停止均无法得知四周墙壁信息";
             Global().Boardcast() << "网页草稿本：" << DRAFT_URL << "\n\n"
                                  << "指令「预览」可生成自定义地图来记录草稿，格式例如：预览 2 3 0 11 E1 0 E2（E前缀表示逃生舱）\n\n"
                                  << "私信「完整赛况」可查询完整的私信信息汇总，包括其他玩家的声响方向历史记录\n\n"
@@ -463,17 +511,56 @@ class RoundStage : public SubGameStage<>
         }
     }
 
-  private:
+  protected:
+    // [新手教程] 跳过本回合无需行动的电脑
+    virtual bool SkipTurn(const PlayerID pid) const { return false; }
+    // [新手教程] 每步移动后（行动未结束）追加讲解
+    virtual void AfterStep(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender) {}
+
     // 重置行动回合的临时状态
     void ResetTurnState()
     {
         step = 0;
         hide = false;
         active_stop = false;
-        forced_stop = false;
         is_acting = false;
         last_direct = -1;
         turn_record = TurnRecord{};
+    }
+
+    // 行动结束四周墙壁信息发送方式：[摸黑]不发送，撞墙、捕捉等非停止结束私信发送，停止行动按「停止信息」
+    StopInfo TurnEndWalls() const
+    {
+        if (GAME_OPTION(摸黑)) return StopInfo::NONE;
+        if (!active_stop) return StopInfo::PRIVATE;
+        return GAME_OPTION(停止信息);
+    }
+
+    // 停止行动时提示墙壁信息的获得方式，公开时直接附上四周墙壁
+    void AppendStopWalls(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
+    {
+        switch (TurnEndWalls()) {
+            case StopInfo::NONE:
+                if (!GAME_OPTION(摸黑)) sender << "停止行动无法获得四周墙壁信息";
+                break;
+            case StopInfo::PRIVATE:
+                sender << "请留意机器人私信发送的四周墙壁信息";
+                break;
+            case StopInfo::PUBLIC:
+                sender << "停止行动将公开四周墙壁信息\n\n";
+                AppendSurroundingWalls(player, sender);
+                break;
+        }
+    }
+
+    // [谋定后动] 移动后强制停止行动，记入完整赛况
+    void DeliberateStop(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender)
+    {
+        step++;
+        active_stop = true;
+        if (!hide) player.NewContentRecord("(谋定后动)");
+        sender << "\n\n【谋定后动】移动后结束行动，本回合结束！";
+        AppendStopWalls(player, sender);
     }
 
     // 当前玩家开始行动并启动计时
@@ -523,7 +610,7 @@ class RoundStage : public SubGameStage<>
         if (!CheckCommon(pid, reply)) return StageErrCode::FAILED;
 
         Player& player = Main().board.players[pid];
-        if (!is_public && Global().PlayerNum() > 1) {
+        if (!is_public && Main().PublicOnly()) {
             if (GAME_OPTION(隐匿) == HideMode::NONE) {
                 reply() << "[错误] 多人游戏下，请全程在公屏进行行动";
                 return StageErrCode::FAILED;
@@ -539,8 +626,7 @@ class RoundStage : public SubGameStage<>
         // Global().SaveMarkdown(Main().board.GetBoard(Main().board.grid_map), (GRID_SIZE + WALL_SIZE) * (GAME_OPTION(边长) + 1));   // 调试：单步调试用
 
         if (GAME_OPTION(谋定后动)) {
-            step++;
-            forced_stop = true;
+            DeliberateStop(player, sender);
             return StageErrCode::READY;
         }
 
@@ -560,7 +646,7 @@ class RoundStage : public SubGameStage<>
             reply() << "[错误] 您正处于单步隐匿状态，无法使用多步移动指令，请私信裁判使用常规移动";
             return StageErrCode::FAILED;
         }
-        if (!is_public && Global().PlayerNum() > 1) {
+        if (!is_public && Main().PublicOnly()) {
             reply() << "[错误] 多人游戏下，多步行动指令只能在公屏使用";
             return StageErrCode::FAILED;
         }
@@ -584,8 +670,7 @@ class RoundStage : public SubGameStage<>
 
             if (std::next(it) == directions.end()) {
                 if (GAME_OPTION(谋定后动)) {
-                    step++;
-                    forced_stop = true;
+                    DeliberateStop(player, sender);
                     return StageErrCode::READY;
                 }
 
@@ -605,7 +690,7 @@ class RoundStage : public SubGameStage<>
         if (!CheckCommon(pid, reply)) return StageErrCode::FAILED;
 
         Player& player = Main().board.players[pid];
-        if (!is_public && Global().PlayerNum() > 1) {
+        if (!is_public && Main().PublicOnly()) {
             if (GAME_OPTION(隐匿) == HideMode::NONE) {
                 reply() << "[错误] 请全程在公屏进行行动";
             } else {
@@ -619,18 +704,7 @@ class RoundStage : public SubGameStage<>
         if (!hide) player.NewContentRecord("(停止)");
         auto sender = reply();
         sender << "[第 " << step << " 步] 您选择主动停止行动，本回合结束！";
-        switch (GAME_OPTION(停止信息)) {
-            case StopInfo::NONE:
-                sender << "主动停止无法获得四周墙壁信息";
-                break;
-            case StopInfo::PRIVATE:
-                sender << "请留意机器人私信发送的四周墙壁信息";
-                break;
-            case StopInfo::PUBLIC:
-                sender << "主动停止将公开四周墙壁信息\n\n";
-                AppendSurroundingWalls(player, sender);
-                break;
-        }
+        AppendStopWalls(player, sender);
         return StageErrCode::READY;
     }
 
@@ -652,7 +726,7 @@ class RoundStage : public SubGameStage<>
             reply() << "[错误] 隐匿技能次数已耗尽";
             return StageErrCode::FAILED;
         }
-        if (!is_public && Global().PlayerNum() > 1) {
+        if (!is_public && Main().PublicOnly()) {
             reply() << "[错误] 请在公屏使用隐匿技能";
             return StageErrCode::FAILED;
         }
@@ -683,7 +757,7 @@ class RoundStage : public SubGameStage<>
             reply() << "[错误] 炸弹已用尽。但脚下地雷遍布，请谨慎前行";
             return StageErrCode::FAILED;
         }
-        if (!is_public && Global().PlayerNum() > 1) {
+        if (!is_public && Main().PublicOnly()) {
             reply() << "[错误] 请在公屏使用下包技能";
             return StageErrCode::FAILED;
         }
@@ -711,7 +785,7 @@ class RoundStage : public SubGameStage<>
         if (is_public) {
             int query_pid_current = currentPlayer == pid ? -1 : pid.Get();
             for (PlayerID pid = 0; pid < currentPlayer.Get(); ++pid) {
-                if (Main().board.players[pid].out == 0) {
+                if (Main().board.players[pid].out == 0 && !SkipTurn(pid)) {
                     sender << "\n[" << pid.Get() << "号]本回合行动轨迹：\n" << Main().board.players[pid].move_record.GetMoveRecord(query_pid_current, is_public);
                 }
             }
@@ -754,6 +828,8 @@ class RoundStage : public SubGameStage<>
             Global().StartTimer(EXTRATIMECRAD_TIME);
             return StageErrCode::CONTINUE;
         }
+        player.NewContentRecord("(超时)");
+        active_stop = true;
         // 用块作用域控制 sender 析构时机，保证超时提示先于回合结算播报
         {
             auto sender = Global().Boardcast();
@@ -767,13 +843,11 @@ class RoundStage : public SubGameStage<>
                 sender << "玩家 " << At(PlayerID(currentPlayer)) << " 行动超时，切换下一个玩家";
             }
             // PUBLIC 模式：与主动停止对齐，把墙壁信息附加到公屏超时提示
-            if (GAME_OPTION(停止信息) == StopInfo::PUBLIC) {
+            if (TurnEndWalls() == StopInfo::PUBLIC) {
                 sender << "\n\n";
                 AppendSurroundingWalls(player, sender);
             }
         }
-        player.NewContentRecord("(超时)");
-        active_stop = true;
         Global().SetReady(currentPlayer);
         return HandleStageOver();
     }
@@ -832,8 +906,8 @@ class RoundStage : public SubGameStage<>
             }
             return StageErrCode::CHECKOUT;
         }
-        // 私信发送四周墙壁信息（谋定后动强制停止按停止处理）
-        if (player.out == 0 && (!(active_stop || forced_stop) || GAME_OPTION(停止信息) == StopInfo::PRIVATE)) {
+        // 私信发送四周墙壁信息
+        if (player.out == 0 && TurnEndWalls() == StopInfo::PRIVATE) {
             auto tell = Global().Tell(currentPlayer);
             AppendSurroundingWalls(player, tell);
         }
@@ -851,7 +925,7 @@ class RoundStage : public SubGameStage<>
         do {
             currentPlayer = (currentPlayer + 1) % Global().PlayerNum();
             if (currentPlayer == 0) break;
-        } while (Main().board.players[currentPlayer].out > 0);
+        } while (Main().board.players[currentPlayer].out > 0 || SkipTurn(currentPlayer));
         if (currentPlayer != 0) {
             StartNextPlayerTurn(Main().board.players[currentPlayer]);
             Global().ClearReady(currentPlayer);
@@ -908,6 +982,7 @@ class RoundStage : public SubGameStage<>
     std::optional<PlayerID> FindCatchVictim(const Player& player);
     bool PlayerCatch(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
     bool HandleHeartBeat(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
+    void TellBerry(Player& player, const string_view hint, const bool separate);
     void AnnounceCoinGains();
     void AppendSurroundingWalls(Player& player, lgtbot::ChildMsgSenderBase::MsgSenderGuard& sender);
 
@@ -927,6 +1002,7 @@ auto* MakeMainStage(MainStageFactory factory) { return factory.Create<MainStage>
 } // namespace lgtbot
 
 
+#include "stage/tutorial_stage.h"       // 新手教程
 #include "stage/init_options.h"         // 开局快捷配置指令
 #include "stage/round_stage_impl.h"     // RoundStage 类外成员实现
 

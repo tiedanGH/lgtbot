@@ -29,9 +29,11 @@ const InitShortcut k_init_shortcuts[] = {
     {"陷阱",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 模式) = BlockMode::TRAP; }},
     {"空旷",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 模式) = BlockMode::OPEN; }},
     {"无声",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 模式) = BlockMode::SILENT; }},
+    {"拓展",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 拓展) = true; }},
 
     // ===== 边长 =====
     {"10x10",      [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 边长) = 10; }},
+    {"11x11",      [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 边长) = 11; }},
     {"12x12",      [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 边长) = 12; }},
 
     // ===== 特殊事件 =====
@@ -39,6 +41,7 @@ const InitShortcut k_init_shortcuts[] = {
     {"怠惰的园丁", [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 特殊事件) = SpecialEvent::LAZYGARDENER; }},
     {"营养过剩",   [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 特殊事件) = SpecialEvent::OVERGROWTH; }},
     {"雨天小故事", [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 特殊事件) = SpecialEvent::RAINSTORY; }},
+    {"十面埋伏",   [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 特殊事件) = SpecialEvent::AMBUSH; }},
 
     // ===== 游戏模式 =====
     {"大乱斗",     [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 大乱斗) = true; }},
@@ -49,6 +52,8 @@ const InitShortcut k_init_shortcuts[] = {
     {"谋定后动",   [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 谋定后动) = true; }},
     {"炸弹人",     [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 炸弹) = 1; }},
     {"静音",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 静音) = true; }},
+    {"摸黑",       [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 摸黑) = true; }},
+    {"传送紊乱",   [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, 传送紊乱) = true; }},
 
     // ===== BOSS：多个可同时生效 =====
     {"米诺陶斯",   [](CustomOptions& o, bool&) { GET_OPTION_VALUE(o, BOSS).push_back(BossType::MINOTAUR); }},
@@ -65,6 +70,7 @@ const InitShortcut k_init_shortcuts[] = {
 
     // ===== 启动模式 =====
     {"单机",       [](CustomOptions&, bool& single_user) { single_user = true; }},
+    {"教程",       [](CustomOptions& o, bool& single_user) { GET_OPTION_VALUE(o, 教程) = true; single_user = true; }},
 };
 
 const std::vector<InitOptionsCommand> k_init_options_commands = {
@@ -75,6 +81,7 @@ const std::vector<InitOptionsCommand> k_init_options_commands = {
                 for (const int id : shortcut_ids) {
                     k_init_shortcuts[id].apply(game_options, single_user);
                 }
+                if (GET_OPTION_VALUE(game_options, 教程)) generic_options.bench_computers_to_player_num_ = k_tutorial_player_num;
                 return single_user ? NewGameMode::SINGLE_USER : NewGameMode::MULTIPLE_USERS;
             },
             RepeatableChecker<AlterChecker<int>>([] {

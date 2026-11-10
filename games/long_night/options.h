@@ -16,12 +16,13 @@ EXTEND_OPTION("[区块] 先根据模式从区块池抽取 12+4 组成随机池�
 })), BlockMode::TWIST)
 EXTEND_OPTION("[区块] 自定义游戏区块随机池：自定义区块时「模式」配置不生效", 区块,
     (RepeatableChecker<BasicChecker<std::string>>("区块", "1 5 6 16 34 38 E1 e7 S4 s1")), (std::vector<std::string>{"默认"}))
+EXTEND_OPTION("[区块] 拓展：区块随机池扩大为 16+6，自定义区块时不生效", 拓展, (BoolChecker("开启", "关闭")), false)
 
-EXTEND_OPTION("[常规] 设置游戏地图边长", 边长, (AlterChecker<int32_t>({{"9", 9}, {"10", 10}, {"12", 12}})), 9)
+EXTEND_OPTION("[常规] 设置游戏地图边长", 边长, (ArithChecker<int32_t>(9, 12, "边长")), 9)
 EXTEND_OPTION("[常规] 游戏最大回合数限制", 回合数, (ArithChecker<uint32_t>(3, 40, "回合数")), 20)
 EXTEND_OPTION("[常规] 捕捉目标：设置游戏中玩家的捕捉顺序", 捕捉目标, 
     (AlterChecker(std::map<std::string, enum Target>{{"上家", Target::PREVIOUS}, {"下家", Target::NEXT}})), Target::PREVIOUS)
-EXTEND_OPTION("[常规] 停止信息：玩家主动停止或超时，得知墙壁信息的方式", 停止信息,
+EXTEND_OPTION("[常规] 停止信息：主动停止、超时、[谋定后动]停止，得知墙壁信息的方式", 停止信息,
     (AlterChecker(std::map<std::string, enum StopInfo>{
         {"无", StopInfo::NONE},
         {"私信", StopInfo::PRIVATE},
@@ -34,6 +35,7 @@ EXTEND_OPTION("[事件] 设置游戏特殊事件", 特殊事件, (AlterChecker(s
     {"怠惰的园丁", SpecialEvent::LAZYGARDENER},
     {"营养过剩", SpecialEvent::OVERGROWTH},
     {"雨天小故事", SpecialEvent::RAINSTORY},
+    {"十面埋伏", SpecialEvent::AMBUSH},
 })), SpecialEvent::NONE)
 
 EXTEND_OPTION("[模式] BOSS：可空格分隔配置多个，详见「#规则 漫漫长夜 BOSS」", BOSS,
@@ -50,6 +52,10 @@ EXTEND_OPTION("[模式] 大乱斗：逃生舱改为随机传送", 大乱斗, (Bo
 EXTEND_OPTION("[模式] 谋定后动：每回合仅能执行一次移动，可使用多步行动指令", 谋定后动, (BoolChecker("开启", "关闭")), false)
 EXTEND_OPTION("[模式] 炸弹人：公开安置炸弹，任何人经过炸弹并离开会引爆炸弹并出局", 炸弹, (ArithChecker<uint32_t>(0, 3, "数量")), 0)
 EXTEND_OPTION("[模式] 静音：游戏中不存在任何声响，路过声响地形不会通知任何人", 静音, (BoolChecker("开启", "关闭")), false)
+EXTEND_OPTION("[模式] 摸黑：无法获得任何墙壁信息，开局、撞墙和停止均不告知四周墙壁", 摸黑, (BoolChecker("开启", "关闭")), false)
+EXTEND_OPTION("[模式] 传送紊乱：所有传送门打乱传送目标，一一对应组成一个大环", 传送紊乱, (BoolChecker("开启", "关闭")), false)
+
+EXTEND_OPTION("[教程] 新手教程：固定地图分章节讲解规则与推理（仅限 1 名玩家）", 教程, (BoolChecker("开启", "关闭")), false)
 
 EXTEND_OPTION("[时限] 行动前思考的时间限制", 思考时限, (ArithChecker<uint32_t>(30, 3600, "超时时间（秒）")), 120)
 EXTEND_OPTION("[时限] 开始行动后的总时间限制", 行动时限, (ArithChecker<uint32_t>(60, 3600, "超时时间（秒）")), 300)

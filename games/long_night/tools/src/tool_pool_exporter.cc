@@ -124,7 +124,7 @@ int main(int argc, char** argv)
     int ok = 0;
     for (const auto& pool : pools) {
         // 按对应模式构造 Board：构造时即按游戏内逻辑载入该模式的区块池
-        const Board board(resource_dir, texture, pool.mode, {});
+        const Board board(resource_dir, texture, pool.mode, {}, false);
         const string html = board.GetAllBlocksInfo(SpecialEvent::NONE, true, pool.mode);
         const int width = pool.mode == BlockMode::CRAZY ? pool_width * 2 : pool_width;
 

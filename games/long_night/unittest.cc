@@ -77,6 +77,18 @@ GAME_TEST(3, all_active_stop_after_move)
     ASSERT_FINISHED(false);
 }
 
+// 谋定后动：移动后结束回合，不计入全员主动停止
+GAME_TEST(3, deliberate_move_ends_turn)
+{
+    ASSERT_PRI_MSG(OK, 0, "谋定后动 开启");
+    START_GAME();
+
+    ASSERT_PUB_MSG(CONTINUE, 0, "上");
+    ASSERT_PUB_MSG(CONTINUE, 1, "停止");
+    ASSERT_PUB_MSG(CHECKOUT, 2, "停止");
+
+    ASSERT_FINISHED(false);
+}
 
 // 多BOSS：配置项可一次配置多个，同时生效
 GAME_TEST(2, multi_boss_option)
@@ -189,6 +201,70 @@ GAME_TEST(5, tyrant_with_other_bosses_silence)
     ASSERT_PRI_MSG(OK, 0, "谋定后动 开启");
     START_GAME();
     PLAY_RANDOMLY_UNTIL_OVER(5, 8000);
+}
+
+// [新手教程] 每次请求后让电脑行动，直到电脑都无事可做（模拟框架驱动电脑）
+#define TUTORIAL_COMPUTERS_ACT()                                                                                \
+    for (int i = 0; i < 20 && !this->main_stage_->IsOver(); i++) {                                              \
+        bool idle = true;                                                                                       \
+        for (const uint64_t pid : {1, 2}) {                                                                     \
+            if (!this->main_stage_->IsOver() &&                                                                 \
+                LGTBOT_STAGE_ERR_UINT_(this->ComputerActRequest_(pid)) != LGTBOT_STAGE_ERR_UINT_(OK)) idle = false; \
+        }                                                                                                       \
+        if (idle) break;                                                                                        \
+    }
+
+// [新手教程] 0号按提示走完全部 6 章（多步路线拆成单步，省去逐步演示的等待）：陪练按路线发声、捕捉后传送、最后逃生
+GAME_TEST(3, tutorial_full_run)
+{
+    ASSERT_PRI_MSG(OK, 0, "教程 开启");
+    START_GAME();
+    TUTORIAL_COMPUTERS_ACT();
+    ASSERT_PUB_MSG(CHECKOUT, 0, "开始");
+    const char* const k_steps[] = {
+        "继续", "继续", "继续", "继续",
+        "左", "下", "继续", "继续", "继续", "上", "上", "继续", "右", "上", "继续",
+        "下", "左", "左", "右", "继续", "继续", "下", "右", "下", "左", "上", "继续",
+        "继续", "停止", "停止", "继续", "继续", "继续", "继续",
+        "左", "上", "右", "继续", "继续",
+        "右", "下", "上", "左", "左", "上",
+    };
+    for (const char* const step : k_steps) {
+        const auto rc = this->PublicRequest(0, step);
+        ASSERT_NE(LGTBOT_STAGE_ERR_UINT_(FAILED), LGTBOT_STAGE_ERR_UINT_(rc)) << step;
+        ASSERT_NE(LGTBOT_STAGE_ERR_UINT_(NOT_FOUND), LGTBOT_STAGE_ERR_UINT_(rc)) << step;
+        TUTORIAL_COMPUTERS_ACT();
+    }
+    ASSERT_FINISHED(true);
+}
+
+// [新手教程] 讲解页拦截行动；操作页只放行提示的行动，位置不变
+GAME_TEST(3, tutorial_guard)
+{
+    ASSERT_PRI_MSG(OK, 0, "教程 开启");
+    START_GAME();
+    TUTORIAL_COMPUTERS_ACT();
+    ASSERT_PUB_MSG(CHECKOUT, 0, "开始");
+    ASSERT_PUB_MSG(FAILED, 0, "左");
+    ASSERT_PUB_MSG(OK, 0, "目录");
+    for (int i = 0; i < 4; i++) ASSERT_PUB_MSG(OK, 0, "继续");
+    ASSERT_PUB_MSG(FAILED, 0, "继续");
+    ASSERT_PUB_MSG(FAILED, 0, "右");
+    ASSERT_PUB_MSG(FAILED, 0, "停止");
+    ASSERT_PUB_MSG(OK, 0, "左");
+}
+
+// [新手教程] 仅限 1 名玩家加 2 名电脑，人数不对时拒绝开局
+GAME_TEST(2, tutorial_rejects_two_players)
+{
+    ASSERT_PRI_MSG(OK, 0, "教程 开启");
+    ASSERT_FALSE(this->StartGame());
+}
+
+GAME_TEST(4, tutorial_rejects_four_players)
+{
+    ASSERT_PRI_MSG(OK, 0, "教程 开启");
+    ASSERT_FALSE(this->StartGame());
 }
 
 } // namespace GAME_MODULE_NAME

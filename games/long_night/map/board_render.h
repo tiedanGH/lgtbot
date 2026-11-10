@@ -8,14 +8,15 @@
 // 获取地图html
 inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& options) const
 {
-    size_t size = grid_map.size();
-    html::Table map(size * 2 + 1, size * 2 + 1);
+    const int size = grid_map.size();
+    const auto [x0, y0, rows, cols] = options.area.value_or(BoardArea{0, 0, size, size});
+    html::Table map(rows * 2 + 1, cols * 2 + 1);
     map.SetTableStyle(string("align=\"center\" cellpadding=\"0\" cellspacing=\"0\"")
             + (options.with_frame ? " style=\"border: 2px dashed black;\"" : ""));
     // 方格信息（包括玩家）
-    for (int x = 1; x < size * 2; x = x + 2) {
-        for (int y = 1; y < size * 2; y = y + 2) {
-            int gridX = (x+1)/2-1, gridY = (y+1)/2-1;
+    for (int x = 1; x < rows * 2; x = x + 2) {
+        for (int y = 1; y < cols * 2; y = y + 2) {
+            int gridX = x0 + (x+1)/2-1, gridY = y0 + (y+1)/2-1;
             const Grid& grid = grid_map[gridX][gridY];
             if (options.with_ground) {
                 map.Get(x, y).SetStyle("class=\"grid\" " + GetGridStyle(grid.Type(), grid.Attach(), true));
@@ -24,11 +25,13 @@ inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& op
             }
             if (options.with_content) {
                 const string& content = grid.GetContent();
-                if (const string image = UnitMaps::MarkImage(content); !image.empty()) {
-                    // 特殊事件/游戏模式 图标标记
-                    map.Get(x, y).SetContent("<img src=\"" + ToFileUrl(image_path_ + "badges/" + image) + "\" style=\"width:34px; height:34px; vertical-align:middle;\">");
-                } else if (!content.empty()) {
-                    map.Get(x, y).SetContent(GetColoredMark(content, grid.Type(), grid.Attach()));
+                const string text = content.empty() ? "" : GetColoredMark(content, grid.Type(), grid.Attach());
+                if (const string image = UnitMaps::MarkImage(grid.GetMark()); !image.empty()) {
+                    // 特殊事件/游戏模式 图标标记，提示文本叠在图标上
+                    const string icon = "<img src=\"" + ToFileUrl(image_path_ + "badges/" + image) + "\" style=\"width:34px; height:34px; vertical-align:middle;\">";
+                    map.Get(x, y).SetContent(text.empty() ? icon : "<span class=\"mark-icon\">" + icon + "<span class=\"mark-label\">" + text + "</span></span>");
+                } else if (!text.empty()) {
+                    map.Get(x, y).SetContent(text);
                 }
             } else if (options.with_player) {
                 // BOSS 图标在前，玩家编号每 2 个换行
@@ -43,9 +46,8 @@ inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& op
                         player_marks += "<br>";
                     }
                 }
-                // 根据地形改变玩家标记颜色（player-mark：序号描边）
                 if (!player_marks.empty()) {
-                    map.Get(x, y).SetContent("<span class=\"player-mark\">" + GetColoredMark(player_marks, grid.Type(), grid.Attach()) + "</span>");
+                    map.Get(x, y).SetContent(GetPlayerMark(player_marks, grid.Type(), grid.Attach()));
                 }
             }
             // 调试：测试地形文字颜色
@@ -58,24 +60,24 @@ inline string Board::GetBoard(const GridMap& grid_map, const GetBoardOptions& op
         if (options.with_content && !wall.Label().empty()) map.Get(x, y).SetContent(wall.Label());
     };
     // 纵向围墙
-    for (int x = 1; x < size * 2; x = x + 2) {
-        for (int y = 0; y < size * 2 - 1; y = y + 2) {
-            int gridX = (x+1)/2-1, gridY = y/2;
+    for (int x = 1; x < rows * 2; x = x + 2) {
+        for (int y = 0; y < cols * 2 - 1; y = y + 2) {
+            int gridX = x0 + (x+1)/2-1, gridY = y0 + y/2;
             DrawWall(x, y, grid_map.WallAt(gridX, gridY, Direct::LEFT), "col");
         }
-        DrawWall(x, size*2, grid_map.WallAt((x+1)/2-1, size-1, Direct::RIGHT), "col");
+        DrawWall(x, cols*2, grid_map.WallAt(x0 + (x+1)/2-1, y0 + cols-1, Direct::RIGHT), "col");
     }
     // 横向围墙
-    for (int y = 1; y < size * 2; y = y + 2) {
-        for (int x = 0; x < size * 2 - 1; x = x + 2) {
-            int gridX = x/2, gridY = (y+1)/2-1;
+    for (int y = 1; y < cols * 2; y = y + 2) {
+        for (int x = 0; x < rows * 2 - 1; x = x + 2) {
+            int gridX = x0 + x/2, gridY = y0 + (y+1)/2-1;
             DrawWall(x, y, grid_map.WallAt(gridX, gridY, Direct::UP), "row");
         }
-        DrawWall(size*2, y, grid_map.WallAt(size-1, (y+1)/2-1, Direct::DOWN), "row");
+        DrawWall(rows*2, y, grid_map.WallAt(x0 + rows-1, y0 + (y+1)/2-1, Direct::DOWN), "row");
     }
     // 角落方块
-    for (int x = 0; x < size * 2 + 1; x = x + 2) {
-        for (int y = 0; y < size * 2 + 1; y = y + 2) {
+    for (int x = 0; x < rows * 2 + 1; x = x + 2) {
+        for (int y = 0; y < cols * 2 + 1; y = y + 2) {
             map.Get(x, y).SetStyle("class=\"corner\" style=\"background-image: url('" + ToFileUrl(image_path_ + GetImageTypeFolder() + "walls/corner.png") + "');\"");
         }
     }
@@ -133,14 +135,29 @@ inline string Board::GetAllBlocksInfo(const SpecialEvent event, const bool bomb_
             has_special = true;
         }
     }
-    SpecialEvent rain_event = event == SpecialEvent::RAINSTORY ? SpecialEvent::RAINSTORY : SpecialEvent::NONE;
+    // [雨天小故事] [十面埋伏] 直接展示事件变化后的区块
+    const SpecialEvent shown_event = event == SpecialEvent::RAINSTORY || event == SpecialEvent::AMBUSH ? event : SpecialEvent::NONE;
+    // 区块变化图例：按下按钮后全部门同时切换的区块，导出区块池时不展示
+    vector<tuple<const UnitMaps::Map*, bool, GridMap>> switched_blocks;
+    if (!test_block_mode.has_value()) {
+        for (const auto* list : {&maps, &exits}) {
+            for (const auto& map : *list) {
+                if (map.is_special && block_mode == BlockMode::CRAZY) continue;     // 疯狂模式不公开随机池中的特殊区块
+                const bool is_exit = list == &exits;
+                if (auto block = UnitMaps::SwitchedBlock(unitMaps.FindBlockById(map.id, is_exit, shown_event))) {
+                    switched_blocks.emplace_back(&map, is_exit, std::move(*block));
+                }
+            }
+        }
+    }
 
-    int line_num = (ceil(maps.size() / (double) col_num) + ceil(exits.size() / (double) col_num)) * 2 +  + has_special * (ceil(all_special_maps.size() / (double) col_num) * 2 + 1);
+    int line_num = (ceil(maps.size() / (double) col_num) + ceil(exits.size() / (double) col_num)) * 2 +  + has_special * (ceil(all_special_maps.size() / (double) col_num) * 2 + 1)
+        + (switched_blocks.empty() ? 0 : ceil(switched_blocks.size() / (double) col_num) * 2 + 1);
     html::Table blocks(line_num, col_num);
     blocks.SetTableStyle("align=\"center\" cellpadding=\"0\" cellspacing=\"0\" style=\"font-size: 25px; line-height: 1.1;\"");
     int row = 0;
     for (int i = 0; i < maps.size(); i++) {
-        blocks.Get(row, i % col_num).SetStyle("style=\"padding: 25px 25px 5px 25px\"").SetContent(GetSingleBlock(maps[i].id, false, rain_event));
+        blocks.Get(row, i % col_num).SetStyle("style=\"padding: 25px 25px 5px 25px\"").SetContent(GetSingleBlock(maps[i].id, false, shown_event));
         // [疯狂模式] 特殊地图不显示id
         if (maps[i].is_special && block_mode == BlockMode::CRAZY) {
             blocks.Get(row + 1, i % col_num).SetContent(HTML_COLOR_FONT_HEADER(red) HTML_SIZE_FONT_HEADER(6) "<b>？？？</b>" HTML_FONT_TAIL HTML_FONT_TAIL);
@@ -150,19 +167,33 @@ inline string Board::GetAllBlocksInfo(const SpecialEvent event, const bool bomb_
         if ((i + 1) % col_num == 0 || i == maps.size() - 1) row += 2;
     }
     for (int i = 0; i < exits.size(); i++) {
-        blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 5px 25px\"").SetContent(GetSingleBlock(exits[i].id, true, rain_event));
+        blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 5px 25px\"").SetContent(GetSingleBlock(exits[i].id, true, shown_event));
         blocks.Get(row + 1, i % col_num).SetContent(GetMapTitleContent(exits[i].title, exits[i].id, true));
         if ((i + 1) % col_num == 0 || i == exits.size() - 1) row += 2;
     }
     if (has_special && block_mode == BlockMode::CRAZY) {
         blocks.MergeRight(row, 0, col_num);
+        const string note = unitMaps.portal_chaos ? "（[传送紊乱] 所有传送门打乱传送目标）" : "（多传送门按照图中字母代号传送）";    // [传送紊乱] 变更提示
         blocks.Get(row++, 0).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
-            .SetContent(HTML_SIZE_FONT_HEADER(6) "<b>特殊区块列表<br>" HTML_FONT_TAIL HTML_SIZE_FONT_HEADER(5) "（多传送门按照图中字母代号传送）" HTML_FONT_TAIL "</b>");
+            .SetContent(HTML_SIZE_FONT_HEADER(6) "<b>特殊区块列表<br>" HTML_FONT_TAIL HTML_SIZE_FONT_HEADER(5) + note + HTML_FONT_TAIL "</b>");
         for (int i = 0; i < all_special_maps.size(); i++) {
             blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
                 .SetContent(GetBoard(unitMaps.FindBlockById(all_special_maps[i].id, false, SpecialEvent::NONE), GetBoardOptions{.with_content = true}));
             blocks.Get(row + 1, i % col_num).SetContent(GetMapTitleContent(all_special_maps[i].title, all_special_maps[i].id, false));
             if ((i + 1) % col_num == 0 || i == all_special_maps.size() - 1) row += 2;
+        }
+    }
+    if (!switched_blocks.empty()) {
+        blocks.MergeRight(row, 0, col_num);
+        blocks.Get(row++, 0).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
+            .SetContent("<hr style=\"border: none; border-top: 3px solid #999999; margin: 0 0 20px 0;\">"
+                        HTML_SIZE_FONT_HEADER(6) "<b>区块变化图例<br>" HTML_FONT_TAIL HTML_SIZE_FONT_HEADER(5) "（区块整体发生变化，如按钮切换所有门，此处展示变化后的样式）" HTML_FONT_TAIL "</b>");
+        for (int i = 0; i < switched_blocks.size(); i++) {
+            const auto& [map, is_exit, block] = switched_blocks[i];
+            blocks.Get(row, i % col_num).SetStyle("style=\"padding: 20px 25px 5px 25px\"")
+                .SetContent(GetBoard(block, GetBoardOptions{.with_content = true}));
+            blocks.Get(row + 1, i % col_num).SetContent(GetMapTitleContent(map->title, map->id, is_exit));
+            if ((i + 1) % col_num == 0 || i == switched_blocks.size() - 1) row += 2;
         }
     }
 
@@ -232,7 +263,7 @@ inline string Board::GetAllBlocksInfo(const SpecialEvent event, const bool bomb_
     }
     for (const auto& grid_info: all_grids_info) {
         if (UnitMaps::MapContainGridType(all_maps_in_game, grid_info.first)) {
-            if (grid_info.first == GridType::GRASS && event == SpecialEvent::RAINSTORY) continue;
+            if (grid_info.first == GridType::GRASS && (event == SpecialEvent::RAINSTORY || event == SpecialEvent::AMBUSH)) continue;
             legend.Get(row, 0).SetContent(GetGridStyle(grid_info.first, AttachType::EMPTY, false));
             legend.Get(row, 1).SetContent(grid_info.second);
             row++;
@@ -477,6 +508,7 @@ inline string Board::GetAllRecordHtml(const int query_pid, const int is_public) 
     record_html += "<div class='record'>";
     // 玩家记录
     for (int pid = 0; pid < playerNum; pid++) {
+        if (players[pid].hidden_in_record) continue;
         record_html += "<div class='player";
         if (players[pid].out == 1) record_html += " out";
         if (players[pid].out == 2) record_html += " exit";
@@ -527,6 +559,7 @@ inline string Board::GetAllRecordString(const int query_pid, const int is_public
     string record_string;
     // 玩家记录
     for (int pid = 0; pid < playerNum; pid++) {
+        if (players[pid].hidden_in_record) continue;
         record_string += "[" + to_string(pid) + "号]" + players[pid].name;
         if (players[pid].coins_public > 0) record_string += "[🪙" + to_string(players[pid].coins_public) + "]";
         if (players[pid].out == 1) record_string += "【已出局】";
@@ -549,19 +582,19 @@ inline string Board::GetAllRecordString(const int query_pid, const int is_public
 inline string Board::GetAllScore() const
 {
     html::Table scoreTable(playerNum + 1, 8);
-    scoreTable.SetTableStyle("cellpadding=\"2\" cellspacing=\"0\" border=\"1\"");
+    scoreTable.SetTableStyle("class=\"score-table\" cellpadding=\"2\" cellspacing=\"0\" border=\"1\"");
     scoreTable.Get(0, 0).SetStyle("style=\"width:50px;\"").SetContent("序号");
-    scoreTable.Get(0, 1).SetStyle("style=\"width:250px;\"").SetContent("玩家");
+    scoreTable.Get(0, 1).SetStyle("style=\"width:320px;\"").SetContent("玩家");
     scoreTable.Get(0, 2).SetStyle("style=\"width:70px;\"").SetContent("抓人分");
     scoreTable.Get(0, 3).SetStyle("style=\"width:70px;\"").SetContent("逃生分");
     scoreTable.Get(0, 4).SetStyle("style=\"width:70px;\"").SetContent("金币分");
-    scoreTable.Get(0, 5).SetStyle("style=\"width:70px;\"").SetContent("探索分");
-    scoreTable.Get(0, 6).SetStyle("style=\"width:70px;\"").SetContent("额外<br>探索分");
+    scoreTable.Get(0, 5).SetStyle("style=\"width:90px;\"").SetContent("区块分");
+    scoreTable.Get(0, 6).SetStyle("style=\"width:70px;\"").SetContent("探索分");
     scoreTable.Get(0, 7).SetStyle("style=\"width:100px;\"").SetContent("【最终总分】");
     for (int pid = 0; pid < playerNum; pid++) {
-        Score s = players[pid].score;
+        const Score& s = players[pid].score;
         scoreTable.Get(pid + 1, 0).SetContent(to_string(pid) + "号");
-        scoreTable.Get(pid + 1, 1).SetContent(players[pid].name);
+        scoreTable.Get(pid + 1, 1).SetContent("<div class=\"score-name\">" + players[pid].name + "</div>");
         if (s.catch_score > 0) scoreTable.Get(pid + 1, 2).SetColor("#BAFFA8");
         if (s.catch_score < 0) scoreTable.Get(pid + 1, 2).SetColor("#FFA07A");
         scoreTable.Get(pid + 1, 2).SetContent(to_string(s.catch_score));
@@ -569,12 +602,14 @@ inline string Board::GetAllScore() const
         scoreTable.Get(pid + 1, 3).SetContent(to_string(s.exit_score));
         if (s.coin_score > 0) scoreTable.Get(pid + 1, 4).SetColor("#FFF3B0");
         scoreTable.Get(pid + 1, 4).SetContent(to_string(s.coin_score));
-        auto [c1, c2] = s.ExploreCount();
-        scoreTable.Get(pid + 1, 5).SetContent(to_string(c1 + c2));
-        scoreTable.Get(pid + 1, 6).SetContent(to_string(c2));
+        const auto [explored, first] = s.BlockCount();
+        scoreTable.Get(pid + 1, 5).SetContent(to_string(s.BlockScore()) + " (" HTML_COLOR_FONT_HEADER(#1565C0) + to_string(explored * Score::BLOCK_SCORE)
+            + HTML_FONT_TAIL "+" HTML_COLOR_FONT_HEADER(#E65100) + to_string(first * Score::FIRST_BLOCK_SCORE) + HTML_FONT_TAIL ")");
+        scoreTable.Get(pid + 1, 6).SetContent(to_string(s.ExploreScore()));
         scoreTable.Get(pid + 1, 7).SetContent((s.quit_score < 0 ? HTML_COLOR_FONT_HEADER("red") : HTML_COLOR_FONT_HEADER("black")) + to_string(s.FinalScore()) + HTML_FONT_TAIL);
     }
-    return Score::ScoreInfo() + scoreTable.ToString();
+    return Score::ScoreInfo() + "<style>.score-table td { white-space: nowrap; } "
+        ".score-name { width: 320px; overflow: hidden; text-overflow: ellipsis; }</style>" + scoreTable.ToString();
 }
 
 
@@ -690,6 +725,12 @@ inline string Board::GetColoredMark(const string& content, const GridType type, 
     return "<font color=\"" + color + "\"><b>" + content + "</b></font>";
 }
 
+// player-mark 描边：普通序号白色，彩色序号深色
+inline string Board::GetPlayerMark(const string& marks, const GridType type, const AttachType attach)
+{
+    return "<span class=\"player-mark\">" + GetColoredMark(marks, type, attach) + "</span>";
+}
+
 inline string Board::GetBoardStyle()
 {
     return R"(
@@ -721,6 +762,30 @@ inline string Board::GetBoardStyle()
     .corner {
         width: )" + to_string(WALL_SIZE) + R"(px;
         height: )" + to_string(WALL_SIZE) + R"(px;
+    }
+    .mark-icon {
+        position: relative;
+        display: inline-block;
+        width: 34px;
+        height: 34px;
+        line-height: 0;
+        vertical-align: middle;
+    }
+    .mark-label {
+        position: absolute;
+        left: -17px;
+        top: 0;
+        width: 68px;
+        height: 34px;
+        line-height: 34px;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .mark-label b {
+        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 3px #fff;
+    }
+    .mark-label font b {
+        text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 3px #000;
     }
     .player-mark b {
         text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 3px #fff;

@@ -2,15 +2,7 @@
 class Score
 {
   public:
-    Score(const int size)
-    {
-        explore_map.resize(size);
-        for (int i = 0; i < size; i++) {
-            for (int j = 0; j < size; j++) {
-                explore_map[i].push_back(0);
-            }
-        }
-    }
+    Score(const int size, const int block_num) : explore_blocks(block_num), explore_map(size, vector<bool>(size)) {}
     // 抓人分
     int catch_score = 0;
     // 逃生分
@@ -19,32 +11,59 @@ class Score
     // 金币分
     static constexpr int COIN_SCORE = 30;
     int coin_score = 0;
-    // 探索分
-    vector<vector<int>> explore_map;
+    // 区块分：每探索一个区块+2，第一个探索该区块的玩家额外+3
+    static constexpr int BLOCK_SCORE = 2;
+    static constexpr int FIRST_BLOCK_SCORE = 3;
+    vector<int> explore_blocks;     // 按区块序号：0 未探索，1 已探索，2 第一个探索
+    // 探索分：走过的格子，逐格衰减
+    static constexpr int MAX_EXPLORE_SCORE = 38;
+    vector<vector<bool>> explore_map;
     // 退出惩罚
     int quit_score = 0;
 
-    pair<int, int> ExploreCount() const
+    // 探索过的区块数，以及其中第一个探索的区块数
+    pair<int, int> BlockCount() const
     {
-        int count1 = 0, count2 = 0;
-        for (const auto &row : explore_map) {
-            count1 += count(row.begin(), row.end(), 1);
-            count2 += count(row.begin(), row.end(), 2);
-        }
-        return make_pair(count1, count2);
+        const int explored = std::count_if(explore_blocks.begin(), explore_blocks.end(), [](const int b) { return b > 0; });
+        return {explored, static_cast<int>(std::count(explore_blocks.begin(), explore_blocks.end(), 2))};
+    }
+
+    int BlockScore() const
+    {
+        const auto [explored, first] = BlockCount();
+        return explored * BLOCK_SCORE + first * FIRST_BLOCK_SCORE;
+    }
+
+    // 前 3 格各+4，之后每 3 格少 1 分，最低每格+1，总分不超过 MAX_EXPLORE_SCORE
+    int ExploreScore() const
+    {
+        int cells = 0;
+        for (const auto& row : explore_map) cells += std::count(row.begin(), row.end(), true);
+        int score = 0;
+        for (int i = 0; i < cells && score < MAX_EXPLORE_SCORE; i++) score += std::max(4 - i / 3, 1);
+        return score;
     }
 
     static string ScoreInfo() { return score_rule; }
 
-    int FinalScore() const { return catch_score + exit_score + coin_score + ExploreScore() + quit_score; }
-
-  private:
-    int ExploreScore() const
+    // 计分规则纯文本：去掉 HTML 标签与全角缩进
+    static string ScoreRuleText()
     {
-        auto [c1, c2] = ExploreCount();
-        return c2 * 2 + c1 * 1;
+        string text;
+        bool in_tag = false;
+        for (const char c : std::string_view(score_rule)) {
+            if (c == '<') in_tag = true;
+            else if (c == '>') in_tag = false;
+            else if (!in_tag) text += c;
+        }
+        const string indent = "　";
+        for (size_t pos = text.find(indent); pos != string::npos; pos = text.find(indent, pos)) text.erase(pos, indent.size());
+        return text.substr(text.find_first_not_of('\n'));
     }
 
+    int FinalScore() const { return catch_score + exit_score + coin_score + BlockScore() + ExploreScore() + quit_score; }
+
+  private:
     static constexpr const char* score_rule = R"(
 　【抓人分】<br>
 抓人+100，被抓-100<br>
@@ -52,9 +71,10 @@ class Score
 第1/2/3/4+个逃生+150/200/250/250<br>
 　【金币分】<br>
 每持有一枚金币+30，被捕捉时金币被对方全部抢走<br>
+　【区块分】<br>
+每<font color=#1565C0>探索一个区块</font>+2，<font color=#E65100>首个探索该区块</font>的玩家额外+3<br>
 　【探索分】<br>
-每探索一个自己未探索的格子+1<br>
-每探索一个所有玩家未探索的格子额外+1<br>
+每探索一个自己未走过的格子得分，逐格衰减：4/4/4/3/3/3/2/2/2，之后每格+1，最多 20 步（合计 38 分）<br>
 【退出惩罚】强制退出-300分<br>)";
 };
 
@@ -206,6 +226,7 @@ class RoundMove
 {
   public:
     vector<Move> round_move;
+    int round = 0;      // 所属回合
 
     void push_back(const Move& mv) { round_move.push_back(mv); }
     bool empty() const { return round_move.empty(); }
@@ -335,11 +356,18 @@ class RoundMove
 };
 
 
+// 去掉昵称两侧的 <>，避免英文昵称在 HTML 中被当成标签
+inline string StripNameBrackets(const string& name)
+{
+    if (name.size() >= 2 && name.front() == '<' && name.back() == '>') return name.substr(1, name.size() - 2);
+    return name;
+}
+
 class Player
 {
   public:
     Player(const lgtbot::PlayerID pid, const string &name, const string &avatar, const int size, const vector<pair<int, int>>& pos)
-        : pid(pid), name(name), avatar(avatar), score(size), achievement(pos) {}
+        : pid(pid), name(name), avatar(avatar), score(size, pos.size()), achievement(pos) {}
 
     // 玩家信息
     const lgtbot::PlayerID pid;     // 玩家ID
@@ -363,6 +391,8 @@ class Player
     bool hook_status = false;
     // 加时卡
     int extra_time_card = EXTRATIMECRAD_COUNT;
+    // [新手教程] 人偶：不出现在完整赛况中
+    bool hidden_in_record = false;
     // 炸弹
     int bomb = 0;               // 剩余数量
     bool bomb_trigger = false;  // 炸弹触发状态
@@ -378,7 +408,7 @@ class Player
 
     void NewStepRecord(const Direct direct, const string& end = "") { move_record.push_back({static_cast<int>(direct), Sound::NONE, {end, true}}); }
     void NewContentRecord(const string& content, const string& style = "end") { move_record.push_back({Sound::NONE, {content, false}, style}); }
-    void ClearMoveRecord() { move_record.clear(); }
+    void ClearMoveRecord(const int round) { move_record.clear(); move_record.round = round; }
 
     void UpdateSoundRecord(const Sound sound) { if (!move_record.empty()) move_record.back().sound = sound; }
     void AddSoundPropagation(const string& direct_str) { if (!move_record.empty()) move_record.back().propagation.push_back(direct_str); }
@@ -405,14 +435,14 @@ class Player
     string GetAllMoveRecord(const int query_pid, const int is_public, const bool is_html = true) const
     {
         string record;
-        for (size_t round = 0; round < all_record.size(); round++) {
-            if (round > 0) record += is_html ? "<br>" : "\n";
+        for (size_t i = 0; i < all_record.size(); i++) {
+            if (i > 0) record += is_html ? "<br>" : "\n";
             if (is_html) {
-                record += "【第 " + to_string(round + 1) + " 回合】<br>";
+                record += "【第 " + to_string(all_record[i].round) + " 回合】<br>";
             } else {
-                record += "【第 " + to_string(round + 1) + " 回合】\n";
+                record += "【第 " + to_string(all_record[i].round) + " 回合】\n";
             }
-            record += all_record[round].GetMoveRecord(query_pid == pid ? -1 : query_pid, is_public, is_html);  // -1代表是自己查询
+            record += all_record[i].GetMoveRecord(query_pid == pid ? -1 : query_pid, is_public, is_html);  // -1代表是自己查询
         }
         return record;
     }

@@ -1,16 +1,21 @@
 
+struct BoardArea {
+    int x, y, rows, cols;
+};
+
 struct GetBoardOptions {
     bool with_player = true;
     bool with_content = false;
     bool with_ground = true;
     bool with_frame = true;     // 是否绘制盘面外侧虚线边框
+    optional<BoardArea> area;   // 只绘制部分区域
 };
 
 class Board
 {
   public:
-    Board(string image_path, const Texture image_texture, const BlockMode mode, const vector<string>& custom_blocks)
-        : image_path_(std::move(image_path)), image_texture_(image_texture), block_mode(mode), g(std::random_device{}()), unitMaps(mode, g, custom_blocks) {}
+    Board(string image_path, const Texture image_texture, const BlockMode mode, const vector<string>& custom_blocks, const bool expand)
+        : image_path_(std::move(image_path)), image_texture_(image_texture), block_mode(mode), g(std::random_device{}()), unitMaps(mode, g, custom_blocks, expand) {}
 
     // 随机引擎
     std::mt19937 g;
@@ -93,6 +98,8 @@ class Board
     string GetPlayerAvatar(const Player& player) const;
     // BOSS 图片图标
     string GetBossImageTag(const Boss& boss, const int size) const;
+    // 地图玩家序号：按地形上色并描边
+    static string GetPlayerMark(const string& marks, const GridType type, const AttachType attach);
     // 完整赛况
     string GetAllRecordHtml(const int query_pid, const int is_public) const;
     string GetAllRecordString(const int query_pid, const int is_public) const;
@@ -152,20 +159,29 @@ class Board
 
         // 成就记录
         players[pid].achievement.MakeStep(nx, ny);
-
-        // 探索分
-        auto& explore = players[pid].score.explore_map[nx][ny];
-        if (explore == 0) {
-            bool first = true;
-            for (auto& player: players) {
-                if (player.score.explore_map[nx][ny] > 0) {
-                    first = false;
-                }
-            }
-            explore = first ? 2 : 1;
-        }
-    
+        RecordExplore(pid, nx, ny);
         return true;
+    }
+
+    // 格子所在区块在 unitMaps.pos 中的序号，10x10 地图的空隙格子返回 -1
+    int BlockIndex(const int x, const int y) const
+    {
+        const auto& pos = unitMaps.pos;
+        for (int i = 0; i < static_cast<int>(pos.size()); i++) {
+            if (x >= pos[i].first && x < pos[i].first + 3 && y >= pos[i].second && y < pos[i].second + 3) return i;
+        }
+        return -1;
+    }
+
+    // 探索分与区块分：记录走过的格子与区块，区块此前无人探索时记为第一个探索
+    void RecordExplore(const lgtbot::PlayerID pid, const int x, const int y)
+    {
+        Score& score = players[pid].score;
+        score.explore_map[x][y] = true;
+        const int block = BlockIndex(x, y);
+        if (block < 0 || score.explore_blocks[block] > 0) return;
+        const bool first = std::none_of(players.begin(), players.end(), [&](const Player& p) { return p.score.explore_blocks[block] > 0; });
+        score.explore_blocks[block] = first ? 2 : 1;
     }
 
     // 箱子移动
@@ -239,6 +255,23 @@ class Board
         if (target_grid.Type() == GridType::ONEWAYPORTAL) {
             grid_map[x][y].SetType(GridType::ONEWAYPORTAL);
             target_grid.SetType(GridType::PORTAL);
+        }
+    }
+
+    // [传送紊乱] 全部传送门随机组成一个大环，每个传送门传送至环中的下一个，单向传送门不参与
+    void ShufflePortals()
+    {
+        vector<pair<int, int>> portals;
+        for (int x = 0; x < size; x++) {
+            for (int y = 0; y < size; y++) {
+                if (grid_map[x][y].Type() == GridType::PORTAL) portals.push_back({x, y});
+            }
+        }
+        std::shuffle(portals.begin(), portals.end(), g);
+        for (size_t i = 0; i < portals.size(); i++) {
+            const auto [x, y] = portals[i];
+            const auto [nx, ny] = portals[(i + 1) % portals.size()];
+            grid_map[x][y].SetPortal(nx - x, ny - y);
         }
     }
 
@@ -433,14 +466,14 @@ class Board
                 }
             }
         }
-        // 过滤候选区域（同时去除所有BOSS可能到达的区域）
+        // 过滤候选区域（同时去除 1 步内可达[金币]的格子与所有BOSS可能到达的区域）
         vector<pair<int, int>> finalCandidates;
         std::copy_if(
             candidates.begin(), candidates.end(),
             std::back_inserter(finalCandidates),
             [&](auto const& pos) {
                 auto [x, y] = pos;
-                if (forbidden[x][y]) return false;
+                if (forbidden[x][y] || CoinWithinOneStep(x, y)) return false;
                 for (const auto& boss : bosses) {
                     if (ManhattanDistance(x, y, boss->x, boss->y, size) <= boss->TeleportAvoidRange()) return false;
                 }
@@ -495,6 +528,16 @@ class Board
     void InitializeBlocks()
     {
         vector<UnitMaps::Map> selected = unitMaps.RandomSelectBlocks(block_mode, exit_num);
+        // [11x11] 地图中心为逃生舱
+        if (size == 11) {
+            vector<int> exit_indices;
+            for (int i = 0; i < static_cast<int>(selected.size()); i++) {
+                if (selected[i].is_exit) exit_indices.push_back(i);
+            }
+            if (!exit_indices.empty() && selected.size() > 4) {
+                std::swap(selected[4], selected[exit_indices[std::uniform_int_distribution<int>(0, static_cast<int>(exit_indices.size()) - 1)(g)]]);
+            }
+        }
 
         for (int i = 0; i < static_cast<int>(selected.size()) && i < static_cast<int>(unitMaps.pos.size()); i++) {
             if (selected[i].is_exit) {
@@ -576,33 +619,46 @@ class Board
         return false;
     }
 
-    int BFSRouteDistance(int sx, int sy, int ex, int ey) const
+    // [金币] (x, y) 在金币上或 1 步内可达金币，连通判断同 BFS
+    bool CoinWithinOneStep(const int x, const int y) const
     {
-        vector<vector<bool>> visited(size, vector<bool>(size, false));
-        queue<tuple<int, int, int>> q; // (x, y, distance)
-        q.push({sx, sy, 0});
-        visited[sx][sy] = true;
+        if (grid_map[x][y].Attach() == AttachType::COIN) return true;
+        for (int d = 0; d < 4; ++d) {
+            const int nx = (x + k_DX_Direct[d] + size) % size;
+            const int ny = (y + k_DY_Direct[d] + size) % size;
+            if (IsConnected(x, y, k_DX_Direct[d], k_DY_Direct[d]) && grid_map[nx][ny].Attach() == AttachType::COIN) return true;
+        }
+        return false;
+    }
+
+    // 每一格到最近起点的 BFS 路径距离，不可达为 INT_MAX
+    vector<vector<int>> BFSRouteDistance(const vector<pair<int, int>>& sources) const
+    {
+        vector<vector<int>> dist(size, vector<int>(size, INT_MAX));
+        queue<pair<int, int>> q;
+        for (auto [x, y] : sources) {
+            dist[x][y] = 0;
+            q.push({x, y});
+        }
         while (!q.empty()) {
-            auto [x, y, d] = q.front();
+            auto [x, y] = q.front();
             q.pop();
-            if (x == ex && y == ey)
-                return d;
             int dx[4] = {-1, 1, 0, 0};
             int dy[4] = {0, 0, -1, 1};
             for (int i = 0; i < 4; i++) {
                 int nx = (x + dx[i] + size) % size;
                 int ny = (y + dy[i] + size) % size;
-                if (!visited[nx][ny] && IsConnected(x, y, dx[i], dy[i])) {
-                    visited[nx][ny] = true;
-                    q.push({nx, ny, d + 1});
+                if (dist[nx][ny] == INT_MAX && IsConnected(x, y, dx[i], dy[i])) {
+                    dist[nx][ny] = dist[x][y] + 1;
+                    q.push({nx, ny});
                 }
             }
         }
-        return INT_MAX;
+        return dist;
     }
-    
-    // * 随机生成所有玩家的位置，所有位置均在最大联通区域内 *
-    // 按照顺序依次尝试：
+
+    // * 随机生成所有玩家的位置，所有位置均在最大联通区域内，每名玩家位于不同区块 *
+    // 每名玩家在全部候选落点中等概率随机，按照顺序依次尝试：
     //   方案1：使用非逃生舱区块，相邻玩家之间的 BFS 路径距离≥5；每个玩家落点到所有逃生舱的 BFS 路径距离≥5
     //   方案2：使用非逃生舱区块，仅要求相邻玩家之间的 BFS 路径距离≥5（不检查逃生舱距离）
     //   方案3：直接使用非逃生舱区块随机分配（不检查距离）
@@ -638,150 +694,105 @@ class Board
         };
 
         // 2. 构造候选区块：遍历 UnitMaps::pos 中所有区块
-        //      - blockPos：区块左上角坐标
-        //      - validCells：区块内所有满足在最大联通区域且连通度 ≥ 2 的候选落点
+        //      - validCells：区块内所有满足在最大联通区域、连通度 ≥ 2、1 步内可达[金币]的非逃生舱格，即候选落点
         //      - isExit：若区块内含有逃生舱，则为 true
         struct BlockCandidate {
-            pair<int, int> blockPos;
             vector<pair<int, int>> validCells;
             bool isExit;
         };
         vector<BlockCandidate> candidateBlocks;
         for (auto pos : unitMaps.pos) {
             int bx = pos.first, by = pos.second;
-            bool containsExit = false;
-            vector<pair<int, int>> validCells;
+            BlockCandidate block{{}, false};
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) {
-                    if (grid_map[bx + i][by + j].Type() == GridType::EXIT) {
-                        containsExit = true;
-                        break;
-                    }
-                    if (!inLargest[bx + i][by + j])
+                    if (grid_map[bx + i][by + j].Type() == GridType::EXIT)
+                        block.isExit = true;
+                    else if (inLargest[bx + i][by + j] && connectivityDegree(bx + i, by + j) >= 2 && !CoinWithinOneStep(bx + i, by + j))
+                        block.validCells.push_back({bx + i, by + j});
+                }
+            }
+            if (!block.validCells.empty())
+                candidateBlocks.push_back(block);
+        }
+
+        // 3. 按玩家顺序回溯分配：每名玩家列出未占用区块中与相邻玩家距离≥minDist 的全部候选落点，打乱后依次尝试
+        vector<pair<int, int>> assigned(playerNum);
+        auto assignPlayers = [&](const vector<BlockCandidate>& blocks, const int minDist) -> bool {
+            if (blocks.size() < playerNum)
+                return false;
+            vector<bool> used(blocks.size(), false);
+            function<bool(int)> bt = [&](const int idx) -> bool {
+                if (idx == playerNum)
+                    return true;
+                // 已确定位置的相邻玩家：上家，最后一名玩家还有下家 0 号
+                vector<pair<int, int>> neighbors;
+                if (idx > 0)
+                    neighbors.push_back(assigned[idx - 1]);
+                if (idx > 0 && idx == playerNum - 1)
+                    neighbors.push_back(assigned[0]);
+                const auto dist = BFSRouteDistance(neighbors);
+                vector<pair<int, pair<int, int>>> options;  // (区块序号, 落点)
+                for (int b = 0; b < blocks.size(); b++) {
+                    if (used[b])
                         continue;
-                    if (connectivityDegree(bx + i, by + j) >= 2)
-                        validCells.push_back({bx + i, by + j});
+                    for (auto cell : blocks[b].validCells) {
+                        if (dist[cell.first][cell.second] >= minDist)
+                            options.push_back({b, cell});
+                    }
                 }
-                if (containsExit)
-                    break;
-            }
-            candidateBlocks.push_back({{bx, by}, validCells, containsExit});
-        }
-
-        // 3. 筛选非逃生舱区块（用于方案1、2、3）
-        vector<BlockCandidate> candidateNonExit;
-        for (auto &b : candidateBlocks) {
-            if (!b.isExit && !b.validCells.empty())
-                candidateNonExit.push_back(b);
-        }
-        // 为使得候选区块分布随机，先随机打乱候选非逃生舱区块顺序
-        std::shuffle(candidateNonExit.begin(), candidateNonExit.end(), g);
-
-        // 4. 方案1：使用非逃生舱区块，相邻玩家之间的 BFS 路径距离≥5；每个玩家落点到所有逃生舱的 BFS 路径距离≥5
-        vector<pair<int, int>> assigned(playerNum, {-1, -1});
-        vector<bool> used(candidateNonExit.size(), false);
-        // 回溯函数，checkExit 表示是否需要额外检查落点到逃生舱的距离
-        function<bool(int, bool)> bt = [&](int idx, bool checkExit) -> bool {
-            if (idx == playerNum) {
-                int d = BFSRouteDistance(assigned[playerNum - 1].first, assigned[playerNum - 1].second,
-                                        assigned[0].first, assigned[0].second);
-                return d >= 5 || playerNum == 1;
-            }
-            for (int i = 0; i < candidateNonExit.size(); i++) {
-                if (used[i])
-                    continue;
-                // 对当前区块随机遍历其候选落点
-                vector<pair<int, int>> cellCandidates = candidateNonExit[i].validCells;
-                std::shuffle(cellCandidates.begin(), cellCandidates.end(), g);
-                for (auto candidate : cellCandidates) {
-                    if (idx > 0) {
-                        int d = BFSRouteDistance(assigned[idx - 1].first, assigned[idx - 1].second,
-                                                candidate.first, candidate.second);
-                        if (d < 5)
-                            continue;
-                    }
-                    if (checkExit) {
-                        bool ok = true;
-                        for (auto &ex : exitPositions) {
-                            int d = BFSRouteDistance(candidate.first, candidate.second, ex.first, ex.second);
-                            if (d < 5) { ok = false; break; }
-                        }
-                        if (!ok)
-                            continue;
-                    }
-                    assigned[idx] = candidate;
-                    used[i] = true;
-                    if (bt(idx + 1, checkExit))
+                std::shuffle(options.begin(), options.end(), g);
+                for (auto [b, cell] : options) {
+                    assigned[idx] = cell;
+                    used[b] = true;
+                    if (bt(idx + 1))
                         return true;
-                    used[i] = false;
+                    used[b] = false;
                 }
+                return false;
+            };
+            if (!bt(0))
+                return false;
+            for (int i = 0; i < playerNum; i++) {
+                int x = assigned[i].first, y = assigned[i].second;
+                players[i].x = x;
+                players[i].y = y;
+                player_map[x][y].push_back(i);
             }
-            return false;
+            return true;
         };
 
-        if (candidateNonExit.size() >= (unsigned)playerNum && bt(0, true)) {
-            // 方案1成功
-            for (int i = 0; i < playerNum; i++) {
-                int x = assigned[i].first, y = assigned[i].second;
-                players[i].x = x;
-                players[i].y = y;
-                player_map[x][y].push_back(i);
-            }
-            return;
+        // 4. 方案1：使用非逃生舱区块，相邻玩家之间的 BFS 路径距离≥5；每个玩家落点到所有逃生舱的 BFS 路径距离≥5
+        vector<BlockCandidate> candidateNonExit;
+        for (auto &b : candidateBlocks) {
+            if (!b.isExit)
+                candidateNonExit.push_back(b);
         }
+        const auto exitDist = BFSRouteDistance(exitPositions);
+        vector<BlockCandidate> candidateFarFromExit;
+        for (auto &b : candidateNonExit) {
+            BlockCandidate far{{}, false};
+            for (auto cell : b.validCells) {
+                if (exitDist[cell.first][cell.second] >= 5)
+                    far.validCells.push_back(cell);
+            }
+            if (!far.validCells.empty())
+                candidateFarFromExit.push_back(far);
+        }
+        if (assignPlayers(candidateFarFromExit, 5))
+            return;
 
         // 5. 方案2：使用非逃生舱区块，仅要求相邻玩家之间的 BFS 路径距离≥5（不检查逃生舱距离）
-        std::fill(used.begin(), used.end(), false);
-        if (candidateNonExit.size() >= (unsigned)playerNum && bt(0, false)) {
-            for (int i = 0; i < playerNum; i++) {
-                int x = assigned[i].first, y = assigned[i].second;
-                players[i].x = x;
-                players[i].y = y;
-                player_map[x][y].push_back(i);
-            }
+        if (assignPlayers(candidateNonExit, 5))
             return;
-        }
 
         // 6. 方案3：直接使用非逃生舱区块随机分配（不检查距离）
-        if (candidateNonExit.size() >= (unsigned)playerNum) {
-            vector<int> indices(candidateNonExit.size());
-            for (int i = 0; i < candidateNonExit.size(); i++)
-                indices[i] = i;
-            std::shuffle(indices.begin(), indices.end(), g);
-            for (int i = 0; i < playerNum; i++) {
-                auto &block = candidateNonExit[indices[i]];
-                vector<pair<int, int>> cells = block.validCells;
-                std::shuffle(cells.begin(), cells.end(), g);
-                pair<int, int> chosen = cells.front();
-                players[i].x = chosen.first;
-                players[i].y = chosen.second;
-                player_map[chosen.first][chosen.second].push_back(i);
-            }
+        if (assignPlayers(candidateNonExit, 0))
             return;
-        }
 
         // 7. 方案4：允许使用逃生舱区块
-        vector<BlockCandidate> candidateAll;
-        for (auto &b : candidateBlocks) {
-            if (!b.validCells.empty())
-                candidateAll.push_back(b);
-        }
-        if (candidateAll.size() >= (unsigned)playerNum) {
-            vector<int> indices(candidateAll.size());
-            for (int i = 0; i < candidateAll.size(); i++)
-                indices[i] = i;
-            std::shuffle(indices.begin(), indices.end(), g);
-            for (int i = 0; i < playerNum; i++) {
-                auto &block = candidateAll[indices[i]];
-                vector<pair<int, int>> cells = block.validCells;
-                std::shuffle(cells.begin(), cells.end(), g);
-                pair<int, int> chosen = cells.front();
-                players[i].x = chosen.first;
-                players[i].y = chosen.second;
-                player_map[chosen.first][chosen.second].push_back(i);
-            }
+        if (assignPlayers(candidateBlocks, 0))
             return;
-        }
 
         // 8. 保险方案：直接从最大连通区域随机选取位置
         std::shuffle(largest.begin(), largest.end(), g);

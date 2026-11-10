@@ -51,12 +51,14 @@ class Grid
         return *this;
     }
     void SetContent(const string& content) { this->content = content; }
+    void SetMark(const string& mark) { this->mark = mark; }
 
     GridType Type() const { return grid; }
     AttachType Attach() const { return attach; }
     pair<int, int> PortalPos() const { return portalRelPos; }
     bool TrapStatus() const { return trap; }
     const string& GetContent() const { return content; }
+    const string& GetMark() const { return mark; }
     vector<ButtonTarget> ButtonTargetPos() const { return buttonTargetPos; }
 
   private:
@@ -67,6 +69,8 @@ class Grid
 
     // 预览用提示文本
     string content;
+    // 预览用图标标记（提示文本叠在图标上）
+    string mark;
 
     // 传送门相对位置（PORTAL）
     pair<int, int> portalRelPos = {0, 0};

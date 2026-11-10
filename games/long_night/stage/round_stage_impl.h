@@ -18,16 +18,19 @@ bool RoundStage::MoveOneStep(Player& player, const Direct direction, lgtbot::Chi
     // 撞墙直接结束本回合
     if (!success) {
         sender << "[第 " << step << " 步] 尝试向 " << dir_cn[static_cast<int>(direction)] << " 移动\n";
+        const bool private_walls = TurnEndWalls() == StopInfo::PRIVATE;
         if (step == 1) {
-            sender << GetRandomHint(firststep_wall_hints) << "\n移动时碰撞【墙壁】，本回合结束！**请留意机器人私信发送的四周墙壁信息**";
+            sender << GetRandomHint(firststep_wall_hints) << "\n移动时碰撞【墙壁】，本回合结束！" << (private_walls ? "**请留意机器人私信发送的四周墙壁信息**" : "");
         } else {
-            sender << GetRandomHint(wall_hints) << "\n移动时碰撞【墙壁】，本回合结束！请留意机器人私信发送的四周墙壁信息";
+            sender << GetRandomHint(wall_hints) << "\n移动时碰撞【墙壁】，本回合结束！" << (private_walls ? "请留意机器人私信发送的四周墙壁信息" : "");
         }
         return true;
     }
     turn_record.moves++;    // 成功移动的步数（[暴君]铁律、全员未移动停止判定）
     sender << "[第 " << step << " 步] 向 " << dir_cn[static_cast<int>(direction)] << " 移动";
-    return HandleGridInteraction(player, sender, multiple_mode);
+    const bool turn_over = HandleGridInteraction(player, sender, multiple_mode);
+    if (!turn_over) AfterStep(player, sender);
+    return turn_over;
 }
 
 // 捕捉顺位变更：按配置刷新全员捕捉目标，并附上最新玩家表
@@ -60,6 +63,16 @@ bool RoundStage::HandleHeartBeat(Player& player, lgtbot::ChildMsgSenderBase::Msg
         }
     }
     return true;
+}
+
+// [浆果丛] 私信告知踩入玩家，separate 为 true 时在完整赛况中独立显示
+void RoundStage::TellBerry(Player& player, const string_view hint, const bool separate)
+{
+    Global().Tell(player.pid) << hint << "\n"
+                              << Image(Main().board.GetGridImagePath(GridType::BERRY));
+    if (hide) return;
+    if (separate) player.NewExtraPriContent("浆果丛", "berry");
+    else player.UpdateExtraPriContent("浆果丛", "berry");
 }
 
 // 处理区块效果（返回玩家回合是否结束）
@@ -159,11 +172,13 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
         // 出口是[单向传送门]则交换
         Main().board.SwapOneWayPortal(player.x, player.y);
     }
-    // [陷阱]
-    if (grid.Type() == GridType::TRAP) {
+    // [陷阱]：[十面埋伏] 浆果丛也视为陷阱
+    const bool berry_trap = grid.Type() == GridType::BERRY && GAME_OPTION(特殊事件) == SpecialEvent::AMBUSH;
+    if (grid.Type() == GridType::TRAP || berry_trap) {
         grid.TrapTrigger();
         if (grid.TrapStatus()) {
             step++; // 成就【守株待兔】：强制停止计入额外步数
+            if (berry_trap && !GAME_OPTION(静音)) TellBerry(player, "[十面埋伏] 陷阱藏在【浆果丛】中！", false);    // 强制停止不发出声响，仍私信提示浆果丛
             player.NewContentRecord("(陷阱)");
             sender << prefix << GetRandomHint(trap_hints) << "\n\n移动触发【陷阱】，本回合被强制停止行动！";
             return true;
@@ -205,15 +220,8 @@ bool RoundStage::HandleGridInteraction(Player& player, lgtbot::ChildMsgSenderBas
             SendSoundMessage(player.x, player.y, sound, false, is_first_sound);
             player.achievement.trigger_sound = true;
         }
-        // [浆果丛] 私信告知踩入玩家
-        if (grid.Type() == GridType::BERRY) {
-            Global().Tell(player.pid) << GetRandomHint(berry_hints) << "\n"
-                                      << Image(Main().board.GetGridImagePath(GridType::BERRY));
-            if (!hide) {
-                if (heart_beat) player.NewExtraPriContent("浆果丛", "berry");   // 掩盖步：浆果丛独立显示
-                else player.UpdateExtraPriContent("浆果丛", "berry");
-            }
-        }
+        // [浆果丛] 掩盖步的浆果丛独立显示
+        if (grid.Type() == GridType::BERRY) TellBerry(player, GetRandomHint(berry_hints), heart_beat);
     }
     // [热源]
     string step_info, heat_message;
@@ -278,8 +286,7 @@ bool RoundStage::PlayerCatch(Player& player, lgtbot::ChildMsgSenderBase::MsgSend
     const PlayerID t = *victim;
     turn_record.caught_player = true;   // [暴君]铁律：捕捉过玩家
 
-    active_stop = false;    // 捕捉成功不视为主动停止
-    forced_stop = false;    // [谋定后动] 捕捉方照常获得墙壁信息
+    active_stop = false;    // 捕捉成功不视为主动停止，捕捉方照常获得墙壁信息
 
     sender << GetRandomHint(catch_hints) << "\n\n";
     sender << At(t) << " 被捕捉！";
